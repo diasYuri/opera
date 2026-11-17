@@ -24,25 +24,24 @@ paradigma de composição descrito em `docs/tui-development.md`.
 
 Gates executados nesta revisão:
 
-- `rtk proxy make check`: passou, incluindo arquitetura, módulos, vet, testes,
-  consumidor público do SDK e build CGO-free.
+- `rtk proxy make check`: passou no estado final, incluindo arquitetura, módulos,
+  vet, testes, consumidor público do SDK e build CGO-free.
 - `rtk proxy make lint`: passou com 0 issues após corrigir os achados nos arquivos
   alterados e remover helpers sem uso.
-- `rtk proxy make matrix`: passou para build e compilação de testes de Linux,
+- `rtk proxy make matrix`: passou no estado final para build e compilação de testes de Linux,
   macOS e Windows em amd64/arm64; é cross-compilation, não execução nativa.
 - `rtk proxy make inventory`: passou, com 1.746 declarações públicas de Y v1.3.4.
 - `rtk proxy go mod tidy -diff` e `rtk proxy go list ./...`: passaram sem drift e
   com todos os packages resolvidos.
 - A suíte offline completa passou em `make check` e em uma execução explícita de
   `go test ./... -skip '^TestLive' -count=1` com Go 1.27.4 e tags do projeto.
+- `GOTOOLCHAIN=go1.27.4 GOWORK=off CGO_ENABLED=1 GOFLAGS='-tags=feature_lsp,feature_wasm_ext' go test -race ./... -skip '^TestLive' -count=1`: passou.
 - Smokes offline `bin/opera --help`, `bin/opera --version` e
   `bin/opera doctor --format jsonl` passaram; doctor não iniciou provider nem leu
   segredos.
-- `go test -race ./... -skip '^TestLive' -count=1` ainda precisa ser repetido: a
-  primeira execução falhou ao esgotar o espaço temporário durante a matriz
-  (`no space left on device`). A matriz deixou 1,2 GB de artefatos gerados em
-  `dist/`; a remoção desses arquivos aguarda autorização após o bloqueio da
-  revisão automática.
+- A primeira tentativa do race falhou por falta de espaço depois da matriz. Após
+  autorização, removi somente os binários/testes temporários dessa matriz em
+  `dist/`, preservei os pacotes de release existentes e repeti o race com sucesso.
 - Testes live pagos/externos não foram executados.
 
 Os diffs de usuário em `DESIGN.md`, `docs/accessibility.md`, `internal/ui/tui/chat.go`,

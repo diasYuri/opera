@@ -2,9 +2,9 @@
 
 Data da revisão: 2026-11-17.
 
-Status: implementação arquitetural concluída em 2026-11-17. O gate de race segue
-pendente de espaço temporário para repetir; os resultados estão registrados em
-`docs/refactoring-validation.md`. A estrutura abaixo descreve os packages atuais.
+Status: implementação arquitetural e validação concluídas em 2026-11-17. Os
+resultados e limites estão registrados em `docs/refactoring-validation.md`. A
+estrutura abaixo descreve os packages atuais.
 
 Este plano substitui o arranjo genérico `app`/`harness` e a aplicação excessiva de
 ports and adapters a código interno. A arquitetura do Opera usa o runtime público
@@ -160,7 +160,7 @@ adapters externos e `ui/cli` + `ui/tui`.
 7. [x] Ampliar os checks arquiteturais para bloquear imports de providers fora de
    adapters/composição, imports de core por módulos, ciclos, dependências de UI em
    infraestrutura e restos dos pacotes antigos.
-8. [ ] Revisar o grafo completo, documentação e diffs; validar os gates abaixo e
+8. [x] Revisar o grafo completo, documentação e diffs; validar os gates abaixo e
    registrar evidências em `docs/refactoring-validation.md`.
 
 Cada etapa é completa e compilável antes da próxima. Mudanças estruturais devem
