@@ -200,7 +200,7 @@ func Chat(ctx context.Context, service Executor, input io.Reader, output io.Writ
 	return finished.code, nil
 }
 func (m model) Init() tea.Cmd {
-	commands := []tea.Cmd{tea.RequestBackgroundColor, tea.Println(m.banner())}
+	commands := []tea.Cmd{tea.RequestBackgroundColor}
 	var background []tea.Cmd
 	if cmd := m.loadVisualContributions(); cmd != nil {
 		background = append(background, cmd)
@@ -238,7 +238,18 @@ func (m model) assistantTextForCurrentRun(runID string) string {
 	return text.String()
 }
 
+// Update settles dimensions after every transition, including paste, completions
+// and asynchronous status changes, before Bubble Tea renders the next frame.
 func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(message)
+	settled := next.(model)
+	if _, animation := message.(frameMsg); !animation {
+		settled.resize()
+	}
+	return settled, cmd
+}
+
+func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
 	case completionsMsg:
 		m.receiveCompletions(msg)
@@ -693,6 +704,20 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.approvalForm.WithTheme(approvalTheme(m.dark))
 		}
 		m.refreshConversation()
+		return m, nil
+	case tea.MouseWheelMsg:
+		if m.overlay.panelOpen {
+			var cmd tea.Cmd
+			m.overlay.panel, cmd = m.overlay.panel.Update(msg)
+			return m, cmd
+		}
+		top := m.historyTop()
+		if m.login == nil && !m.overlay.selecting && msg.Y >= top && msg.Y < top+m.conversation.Height() {
+			var cmd tea.Cmd
+			m.conversation.Model, cmd = m.conversation.Update(msg)
+			m.newConversationItems = !m.conversation.AtBottom()
+			return m, cmd
+		}
 		return m, nil
 	case tea.WindowSizeMsg:
 		m.width = msg.Width

@@ -13,16 +13,16 @@ import (
 	"github.com/diasYuri/opera/internal/app"
 )
 
-func TestInlineViewKeepsCompletedConversationAndStaysBounded(t *testing.T) {
+func TestFullscreenKeepsCompletedConversationAndStaysBounded(t *testing.T) {
 	streamText := strings.Repeat("é界", 50000)
 	m := model{composer: composerModel{editor: textarea.New()}, text: streamText, width: 40, height: 12}
 	view := m.View()
-	if view.AltScreen || strings.Count(view.Content, "\n") > 12 {
-		t.Fatal("inline dynamic view exceeded terminal height or entered alternate screen")
+	if !view.AltScreen || strings.Count(view.Content, "\n") > 12 {
+		t.Fatal("fullscreen view exceeded terminal height or missed alternate screen")
 	}
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 20, Height: 8})
 	m = next.(model)
-	if m.View().AltScreen || strings.Count(m.View().Content, "\n") > 10 {
+	if !m.View().AltScreen || strings.Count(m.View().Content, "\n") > 10 {
 		t.Fatal("resize reprinted unbounded content")
 	}
 	result := app.Result{ID: "run", Text: "SCROLLBACK_ONLY_MARKER", State: "completed"}

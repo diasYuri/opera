@@ -179,7 +179,10 @@ func (m *model) refreshConversation() {
 			entry.renderedNoColor = noColor
 		}
 	}
-	m.conversation.SetContent(m.renderConversation())
+	content := m.renderConversation()
+	if content != m.conversation.GetContent() {
+		m.conversation.SetContent(content)
+	}
 	if wasAtBottom {
 		m.conversation.GotoBottom()
 		m.newConversationItems = false

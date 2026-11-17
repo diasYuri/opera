@@ -44,11 +44,11 @@ func TestLayoutFitsTerminalAcrossStates(t *testing.T) {
 					m = updated.(model)
 				}
 				view := m.View()
-				if view.AltScreen {
-					t.Fatal("alternate screen breaks scrollback")
+				if !view.AltScreen {
+					t.Fatal("fullscreen must use alternate screen")
 				}
 				lines := strings.Split(view.Content, "\n")
-				if len(lines) > max(1, size[1]-1) {
+				if len(lines) != max(1, size[1]) {
 					t.Fatalf("%d rows exceed terminal", len(lines))
 				}
 				for _, line := range lines {
@@ -245,5 +245,67 @@ func TestExternalControlCharactersCannotMoveTerminalCursor(t *testing.T) {
 	got := safeText("safe\x1b[2J\r\x00\b\a\ttext\nnext")
 	if got != "safe text\nnext" {
 		t.Fatalf("unsafe terminal content: %q", got)
+	}
+}
+
+func TestHistoryResizeAndStreamingPreserveReadingPosition(t *testing.T) {
+	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
+	for i := 0; i < 40; i++ {
+		m.appendUser(fmt.Sprintf("history %d", i), "You")
+	}
+	m.resize()
+	if !m.conversation.AtBottom() {
+		t.Fatal("new history should follow latest")
+	}
+	next, _ := m.Update(tea.MouseWheelMsg{X: 3, Y: m.historyTop(), Button: tea.MouseWheelUp})
+	m = next.(model)
+	offset := m.conversation.YOffset()
+	if m.conversation.AtBottom() {
+		t.Fatal("wheel did not scroll history")
+	}
+	before := m.conversation.View()
+	m.updateConversationEvent(&app.Event{Type: "message_delta", RunID: "run", Text: strings.Repeat("stream 界🙂\n", 100)})
+	if m.conversation.YOffset() != offset || m.conversation.View() != before {
+		t.Fatal("stream moved reading position")
+	}
+	next, _ = m.Update(tea.PasteMsg{Content: "one\ntwo\nthree"})
+	m = next.(model)
+	if m.conversation.YOffset() != offset || m.composer.editor.Height() != 3 || !m.composer.editor.Focused() {
+		t.Fatal("editing changed history or focus")
+	}
+	if m.historyTop()+m.conversation.Height()+blockRows(m.defaultFixedParts()) != m.height {
+		t.Fatal("regions do not fill viewport")
+	}
+	next, _ = m.Update(tea.MouseWheelMsg{Y: m.height - 1, Button: tea.MouseWheelDown})
+	m = next.(model)
+	if m.conversation.YOffset() != offset {
+		t.Fatal("wheel over footer scrolled history")
+	}
+	next, _ = m.Update(tea.WindowSizeMsg{Width: 40, Height: 30})
+	m = next.(model)
+	if m.conversation.YOffset() != offset || m.composer.editor.Value() != "one\ntwo\nthree" {
+		t.Fatal("resize lost navigation or draft")
+	}
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd, Mod: tea.ModCtrl})
+	m = next.(model)
+	m.updateConversationEvent(&app.Event{Type: "message_delta", RunID: "run", Text: "latest"})
+	if !m.conversation.AtBottom() {
+		t.Fatal("latest mode did not follow stream")
+	}
+}
+
+func TestComposerScrollsInternallyAndYieldsHistoryRows(t *testing.T) {
+	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
+	initial := m.conversation.Height()
+	next, _ := m.Update(tea.PasteMsg{Content: strings.Repeat("line 界🙂\n", 20) + "LAST_INPUT"})
+	m = next.(model)
+	if m.composer.editor.Height() != 5 || m.conversation.Height() != initial-4 {
+		t.Fatal("composer growth did not consume history rows")
+	}
+	if !strings.Contains(m.composer.editor.View(), "LAST_INPUT") {
+		t.Fatal("editor did not scroll to cursor")
+	}
+	if strings.Count(m.View().Content, "\n")+1 != m.height {
+		t.Fatal("growth moved screen bounds")
 	}
 }

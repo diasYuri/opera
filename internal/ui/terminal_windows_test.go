@@ -40,7 +40,7 @@ func TestConPTYChild(t *testing.T) {
 	_, _ = fmt.Fprintln(os.Stdout, "CONPTY_RESTORED")
 	os.Exit(0)
 }
-func TestWindowsConPTYRestoresConsoleAndAvoidsAlternateScreen(t *testing.T) {
+func TestWindowsConPTYRestoresConsoleAndAlternateScreen(t *testing.T) {
 	t.Setenv("OPERA_CONPTY_CHILD", "1")
 	t.Setenv("NO_COLOR", "")
 	inputRead, inputWrite, err := os.Pipe()
@@ -133,7 +133,7 @@ func TestWindowsConPTYRestoresConsoleAndAvoidsAlternateScreen(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if strings.Contains(captured.String(), "\x1b[?1049h") || strings.Contains(captured.String(), "\x1b[?1047h") {
-		t.Fatal("alternate screen was used")
+	if !strings.Contains(captured.String(), "\x1b[?1049h") || !strings.Contains(captured.String(), "\x1b[?1049l") {
+		t.Fatal("alternate screen was not entered and restored")
 	}
 }

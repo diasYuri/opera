@@ -138,7 +138,8 @@ func (m model) updateLogin(event loginEvent) (tea.Model, tea.Cmd) {
 		}
 		m.status = event.notice.Message
 		if event.notice.URL != "" {
-			return m, tea.Batch(tea.Println("\n  Continue with "+safeText(event.flow.name)+"\n"+safeText(event.notice.URL)+"\n"), awaitLogin(event.flow))
+			m.status += "\n" + safeText(event.notice.URL)
+			return m, awaitLogin(event.flow)
 		}
 		return m, awaitLogin(event.flow)
 	}
@@ -154,7 +155,8 @@ func (m model) updateLogin(event loginEvent) (tea.Model, tea.Cmd) {
 		}
 		m.status = "Login failed · /login to try again"
 		m.lastError = event.err.Error()
-		return m, tea.Batch(m.composer.editor.Focus(), tea.Println(m.errorBlock(event.err.Error())))
+		m.appendEntry(conversationEntry{id: m.conversation.nextIdentity("login-error"), kind: conversationError, text: event.err.Error()})
+		return m, m.composer.editor.Focus()
 	}
 	m.refreshContext()
 	m.code = 0

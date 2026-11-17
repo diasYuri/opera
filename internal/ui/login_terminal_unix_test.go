@@ -94,7 +94,7 @@ func TestTerminalLoginSubmenuAndCancellation(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if strings.Contains(captured.String(), "\x1b[?1049h") {
-		t.Fatal("login replaced native terminal scrollback")
+	if !strings.Contains(captured.String(), "\x1b[?1049h") || !strings.Contains(captured.String(), "\x1b[?1049l") {
+		t.Fatal("alternate screen was not entered and restored")
 	}
 }

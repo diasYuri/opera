@@ -58,6 +58,8 @@ func (m *model) refreshContext() {
 func (m model) contentWidth() int { return max(1, m.width-4) }
 func (m model) viewerHeight() int { return max(1, min(12, m.height-8)) }
 func (m *model) resize() {
+	following := m.conversation.AtBottom()
+	offset := m.conversation.YOffset()
 	m.composer.editor.SetWidth(max(1, m.contentWidth()))
 	m.sizeEditor()
 	m.conversation.SetWidth(max(1, m.conversationWidth()))
@@ -88,21 +90,23 @@ func (m *model) resize() {
 		m.approvalForm.WithWidth(max(1, m.contentWidth()-4)).WithHeight(height)
 	}
 	if !m.overlay.panelOpen && m.login == nil {
-		fixedLines := 0
-		for _, part := range m.defaultFixedParts() {
-			fixedLines += strings.Count(part, "\n") + 1
-		}
-		m.conversation.SetHeight(max(1, m.height-1-fixedLines))
+		m.conversation.SetHeight(max(0, m.height-m.historyTop()-blockRows(m.defaultFixedParts())))
 	} else {
-		m.conversation.SetHeight(max(1, m.height-m.composer.editor.Height()-8-m.queuedStackHeight()-m.attachmentStackHeight()-m.extensionReservedHeight()-m.todoListHeight()-m.subagentListHeight()-menuHeight))
+		m.conversation.SetHeight(max(0, m.height-m.composer.editor.Height()-8-m.queuedStackHeight()-m.attachmentStackHeight()-m.extensionReservedHeight()-m.todoListHeight()-m.subagentListHeight()-menuHeight))
 	}
+
 	m.refreshConversation()
+	if following {
+		m.conversation.GotoBottom()
+	} else {
+		m.conversation.SetYOffset(offset)
+	}
 }
 
 func (m *model) sizeEditor() {
 	width := max(1, m.contentWidth()-2)
 	lines := strings.Count(ansi.Hardwrap(m.composer.editor.Value(), width, true), "\n") + 1
-	m.composer.editor.SetHeight(min(5, max(1, m.height-8), lines))
+	m.composer.editor.SetHeight(min(5, max(1, m.height-4), lines))
 }
 
 func (m model) sessionLine() string {
@@ -349,9 +353,6 @@ func (m model) defaultFixedParts() []string {
 	t := m.theme()
 	width := m.contentWidth()
 	var parts []string
-	if header := m.extensionHeader(); header != "" {
-		parts = append(parts, header)
-	}
 	if todos := m.todoListView(); todos != "" {
 		parts = append(parts, todos)
 	}
@@ -371,6 +372,7 @@ func (m model) defaultFixedParts() []string {
 		parts = append(parts, question)
 	}
 	composer := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, false, true, false).BorderForeground(t.border.GetForeground())
+	composerIndex := len(parts)
 	parts = append(parts, composer.Render(m.composer.editor.View()))
 	if subagents := m.subagentListView(); subagents != "" {
 		parts = append(parts, subagents)
@@ -391,7 +393,7 @@ func (m model) defaultFixedParts() []string {
 	if footer := m.extensionFooter(); footer != "" {
 		parts = append(parts, footer)
 	}
-	return parts
+	return fitComposerParts(parts, composerIndex, max(1, m.height-m.historyTop()))
 }
 
 func (m model) View() tea.View {
@@ -400,7 +402,7 @@ func (m model) View() tea.View {
 	var parts []string
 	if m.login != nil && m.loginPrompt == nil {
 		keys := m.keyBindings()
-		parts = []string{m.header(), t.accent.Bold(true).Render("Connect to " + safeText(m.login.name)), m.statusLine(), t.muted.Render(keyLabel(keys.cancel, "Esc") + " or " + keyLabel(keys.quit, "Ctrl+C") + " cancel · session stays open")}
+		parts = []string{m.header(), t.accent.Bold(true).Render("Connect to " + safeText(m.login.name)), ansi.Hardwrap(safeText(m.status), width, true), t.muted.Render(keyLabel(keys.cancel, "Esc") + " or " + keyLabel(keys.quit, "Ctrl+C") + " cancel · session stays open")}
 	} else if m.overlay.panelOpen && m.approvalForm != nil && m.formKind != "approval" {
 		if header := m.extensionHeader(); header != "" {
 			parts = append(parts, header)
@@ -450,27 +452,26 @@ func (m model) View() tea.View {
 			parts = append(parts, m.approvalForm.View(), t.muted.Render(formHint))
 		}
 	} else {
-		fixed := m.defaultFixedParts()
-		prefixCount := 0
-		if m.extensionHeader() != "" {
-			prefixCount++
+		if m.historyTop() > 0 {
+			parts = append(parts, m.header())
 		}
-		if m.todoListView() != "" {
-			prefixCount++
+		if m.conversation.Height() > 0 {
+			parts = append(parts, m.conversation.View())
 		}
-		parts = append(parts, fixed[:prefixCount]...)
-		parts = append(parts, m.conversation.View())
-		parts = append(parts, fixed[prefixCount:]...)
+		parts = append(parts, m.defaultFixedParts()...)
 	}
 	// A terminal can shrink below the minimum useful editor. Clip each dimension
 	// here as a final guard, including selectors, long IDs and wide Unicode.
-	limit := max(1, m.height-1)
+	limit := max(1, m.height)
 	var lines []string
 	for _, part := range parts {
 		lines = append(lines, strings.Split(part, "\n")...)
 	}
 	if len(lines) > limit {
 		lines = lines[len(lines)-limit:]
+	}
+	for len(lines) < limit {
+		lines = append(lines, "")
 	}
 	margin := ""
 	if m.width > 4 {
@@ -484,7 +485,8 @@ func (m model) View() tea.View {
 		content = stripColorKeepGraphics(content)
 	}
 	view := tea.NewView(content)
-	view.AltScreen = false
+	view.AltScreen = true
+	view.MouseMode = tea.MouseModeCellMotion
 	return view
 }
 
@@ -518,4 +520,56 @@ func safeText(text string) string {
 
 func (m model) errorBlock(raw string) string {
 	return m.messageBlock("Opera · error", summarizeError(raw))
+}
+
+// The header yields its row to editing on very small terminals.
+func (m model) historyTop() int {
+	if m.height < 6 {
+		return 0
+	}
+	return strings.Count(m.header(), "\n") + 1
+}
+
+func blockRows(parts []string) int {
+	rows := 0
+	for _, part := range parts {
+		rows += strings.Count(part, "\n") + 1
+	}
+	return rows
+}
+
+// Reserve the editor first, then its footer, then auxiliary content. Preserve
+// visual order; constrained terminals discard auxiliary rows before input.
+func fitComposerParts(parts []string, editor, budget int) []string {
+	if blockRows(parts) <= budget {
+		return parts
+	}
+	selected := make([][]string, len(parts))
+	input := strings.Split(parts[editor], "\n")
+	if len(input) > budget {
+		// Drop decorative rules before hiding editable rows.
+		input = input[1 : len(input)-1]
+		input = input[max(0, len(input)-budget):]
+	}
+	selected[editor] = input
+	budget -= len(input)
+	for i := editor + 1; i < len(parts) && budget > 0; i++ {
+		rows := strings.Split(parts[i], "\n")
+		rows = rows[:min(len(rows), budget)]
+		selected[i] = rows
+		budget -= len(rows)
+	}
+	for i := 0; i < editor && budget > 0; i++ {
+		rows := strings.Split(parts[i], "\n")
+		rows = rows[:min(len(rows), budget)]
+		selected[i] = rows
+		budget -= len(rows)
+	}
+	var result []string
+	for _, rows := range selected {
+		if len(rows) > 0 {
+			result = append(result, strings.Join(rows, "\n"))
+		}
+	}
+	return result
 }

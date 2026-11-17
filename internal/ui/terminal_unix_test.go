@@ -16,7 +16,7 @@ import (
 	"golang.org/x/term"
 )
 
-func TestTerminalRestoredWithoutAlternateScreen(t *testing.T) {
+func TestTerminalRestoredWithAlternateScreen(t *testing.T) {
 	master, slave, err := pty.Open()
 	if err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestTerminalRestoredWithoutAlternateScreen(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if strings.Contains(captured.String(), "\x1b[?1049h") || strings.Contains(captured.String(), "\x1b[?1047h") {
-		t.Fatal("chat entered alternate screen")
+	if !strings.Contains(captured.String(), "\x1b[?1049h") || !strings.Contains(captured.String(), "\x1b[?1049l") {
+		t.Fatal("alternate screen was not entered and restored")
 	}
 }
