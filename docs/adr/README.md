@@ -11,3 +11,5 @@ mean its future execution capability is already implemented.
 6. [Credentials and local trust](006-credentials.md)
 
 7. [Ports and open component composition](007-ports-components.md)
+
+8. [Fullscreen chat regions](008-fullscreen-chat.md)

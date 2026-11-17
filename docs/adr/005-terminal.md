@@ -1,6 +1,7 @@
 # ADR 005 — Scrollback and terminal ownership
 
-Status: accepted in F0; Bubble Tea terminal implementation is F1/F2.
+Status: superseded for interactive layout by [ADR 008](008-fullscreen-chat.md).
+The append-only accessible and headless contracts remain in force.
 
 The primary experience never enters alternate screen. Completed blocks commit
 to scrollback exactly once by identity/sequence. Streaming response, editor and

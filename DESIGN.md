@@ -23,10 +23,10 @@ components:
 
 Opera is a quiet terminal conversation: authored text carries the work, a thin ruled composer marks the next action, and session context stays close to the input. Codex and pi are the confirmed visual references; minimalism is the chosen direction.
 
-The terminal owns the font, foreground and background. Hierarchy comes from whitespace, author labels, restrained foreground accents and explicit state words. Completed messages remain in native scrollback; temporary viewers borrow focus and return it to the composer.
+The terminal owns the font, foreground and background. Hierarchy comes from whitespace, author labels, restrained foreground accents and explicit state words. Messages remain in an independently scrollable viewport; temporary viewers borrow focus and return it to the composer.
 
 **Key Characteristics:**
-- Native terminal surface and scrollback
+- Fullscreen alternate terminal surface with independent history
 - One column, thin rules and a growing composer
 - Keyboard-first controls and textual states
 - Motion only during active execution
@@ -58,7 +58,7 @@ Authored messages wrap at at most 100 terminal columns, reduced to fit the curre
 
 Use one column with a two-column content inset where space permits. The live content width is terminal width minus four columns, clamped to at least one. Composer rules span the available composer width; completed message bodies use the narrower reading measure.
 
-Print the compact Opera banner once per chat session, with provider/model, workspace and command hints. Keep finished authored blocks in terminal scrollback. Bound the streaming preview to the available height and at most eight lines. Chat never enters alternate screen.
+Use the alternate screen for interactive chat and restore the prior terminal surface on exit. A compact header identifies Opera. The message viewport fills all rows between the header and the fixed composer region, including during streaming. Mouse wheel over history and PageUp/PageDown scroll only that viewport. Ctrl+End follows the latest output; new output preserves a reader’s position when scrolled up. Resize preserves the draft and navigation. On very small terminals, reduce history and auxiliary rows before hiding editable input.
 
 The composer grows from one to five rows, further constrained by terminal height. Put provider/model and workspace immediately below it, followed by shortcuts for the current state. At widths below 76 and 48 columns, shorten hints rather than forcing horizontal overflow. Clip long context and constrained views to the available dimensions.
 
@@ -72,9 +72,9 @@ The composer has thin horizontal rules above and below, without side borders or 
 
 ## Components
 
-- **Session banner:** compact, once per session; identifies Opera and current context without a persistent hero.
+- **Session banner:** compact persistent header; identifies Opera and current context without a persistent hero.
 - **Composer:** Bubbles textarea with the `›` prompt, one-to-five-row growth and a steady virtual cursor. Enter sends; Alt+Enter or Ctrl+J inserts a newline. Alt+Up/Down recalls input. Bracketed paste inserts without submitting.
-- **Authored message:** bold `You` or accented `Opera` label, indented body and blank-line separation. Commit completed content once per checkpoint to scrollback.
+- **Authored message:** bold `You` or accented `Opera` label, indented body and blank-line separation. Retain completed content once per checkpoint in the history viewport.
 - **Context footer:** current provider/model and workspace, then state-specific keyboard hints. Truncate context when needed.
 - **Activity status:** words identify running/tool/approval/failure states. During execution only, a spinner and Harmonica spring drive an indeterminate trace at 20 frames per second. `--no-motion` removes both; idle chat has no activity timer or blinking cursor. Never add simulated typing delays.
 - **Model selector and detail viewer:** Bubbles list/viewport, keyboard focus, bounded height of at most 12 rows. Arrows navigate or scroll; Esc restores the composer. Review approval arguments and changes before closing details and using `/approve` or `/deny`.
@@ -86,7 +86,7 @@ Bubble Tea v2 owns presentation updates, Bubbles provides interaction primitives
 ## Do's and Don'ts
 
 ### Do:
-- **Do** preserve the terminal background and native scrollback.
+- **Do** preserve the terminal background and restore the previous screen on exit.
 - **Do** label authors and states in words, including without color.
 - **Do** keep full diagnostics and run metadata available through `/details`.
 - **Do** return focus to the composer when a temporary viewer closes.

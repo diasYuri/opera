@@ -102,13 +102,15 @@ process; all writes within it share a cancellable queue.
 
 Chat uses a minimal Codex/pi-inspired layout with a growing composer, model and
 workspace footer, and concise errors (`/details` opens full diagnostics). Finished
-messages stay in terminal scrollback. Enter sends, Alt+Enter/Ctrl+J inserts a line,
+messages stay in an independent scrollable history above the fixed composer.
+Interactive chat fills the alternate screen and restores the previous screen on exit. Enter sends, Alt+Enter/Ctrl+J inserts a line,
 Ctrl+C cancels active work and leaves chat open, and empty Ctrl+D exits. During
 execution, ordinary messages become follow-ups; `/steer` is explicit. `/approve`
 and `/deny` resolve the displayed operation. `--accessible` uses append-only text.
 `/mode` lists the available agent modes, and `/mode <name>` selects one for
 future requests. `/plan` or Shift+Tab is a shortcut for Plan mode.
-The complete response is committed once; streaming is a bounded dynamic preview.
+PageUp/PageDown scroll history; Ctrl+End follows the latest messages. Streaming
+respects the current reading position.
 
 See [F1 validation](docs/f1-validation.md) for acceptance evidence and scope, and
 [OAuth configuration](docs/oauth.md) for registered clients and URL/device flows.

@@ -42,8 +42,9 @@ informativo durante atividade. Avalie estas APIs antes de implementar um control
 Exceções precisam de limitação concreta documentada.
 
 DESIGN.md prevalece para identidade visual: terminal fornece fonte, foreground e
-background; coluna única, composer com regras finas, mensagens concluídas em
-scrollback nativo, sem alternate screen no chat. Não copiar cartões ou navegação por
+background; coluna única, composer com regras finas, histórico em viewport independente e composer fixo no
+rodapé, usando alternate screen no chat interativo. O caminho acessível continua
+append-only. Não copiar cartões ou navegação por
 toque do iPhone. Preservar teclado e restaurar foco ao fechar temporários.
 
 ## Efeitos, concorrência e acessibilidade

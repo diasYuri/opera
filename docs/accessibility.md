@@ -1,7 +1,8 @@
 # Keyboard and accessible terminal behavior
 
-The main chat uses terminal scrollback, never alternate screen. Finished blocks
-commit once; streaming and temporary viewers are height bounded. Resize, Unicode,
+Interactive chat fills the alternate screen with an independent message viewport
+and a fixed composer. Exit restores the prior screen. Finished blocks are retained
+once; streaming follows the bottom only when already viewing the latest output. Resize, Unicode,
 multiline paste and history are covered by deterministic/PTY fixtures.
 
 The chat follows a minimal, single-column layout inspired by Codex and pi. A
@@ -14,7 +15,9 @@ Temporary viewers take keyboard focus; Esc returns it to the composer.
 | --- | --- |
 | Send | Enter |
 | New line | Alt+Enter or Ctrl+J |
-| History | Alt+Up / Alt+Down |
+| Recall input | Alt+Up / Alt+Down |
+| Scroll message history | PageUp / PageDown or mouse wheel over history |
+| Latest messages | Ctrl+End |
 | Select a model | `/model`, arrows, Enter; Esc closes |
 | Inspect/help | `/help`, `/details`, `/context`, `/usage`, `/tasks`, `/agents` |
 | Error diagnostics / run metadata | `/details` after a failed or completed run |
