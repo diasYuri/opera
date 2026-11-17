@@ -39,7 +39,38 @@ func NewQuestionBroker() *QuestionBroker {
 }
 
 func (b *QuestionBroker) Register(registry *tools.Registry) error {
-	schema := json.RawMessage(`{"type":"object","properties":{"questions":{"type":"array","minItems":1,"items":{"type":"object","properties":{"id":{"type":"string"},"question":{"type":"string"},"options":{"type":"array","items":{"type":"object","properties":{"label":{"type":"string"},"description":{"type":"string"}},"required":["label"],"additionalProperties":false}}},"required":["question"],"additionalProperties":false}}},"required":["questions"],"additionalProperties":false}`)
+	// Keep this schema strict-compatible for the ChatGPT subscription validator.
+	schema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"questions": {
+				"type": "array",
+				"items": {
+					"type": "object",
+					"properties": {
+						"id": {"type": "string"},
+						"question": {"type": "string"},
+						"options": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"properties": {
+									"label": {"type": "string"},
+									"description": {"type": "string"}
+								},
+								"required": ["label", "description"],
+								"additionalProperties": false
+							}
+						}
+					},
+					"required": ["id", "question", "options"],
+					"additionalProperties": false
+				}
+			}
+		},
+		"required": ["questions"],
+		"additionalProperties": false
+	}`)
 	desc := tools.ToolDescriptor{Name: "user_question", Description: "Ask the user one or more questions. Offer concise recommended options when useful; the user can choose an option, add notes, or provide an open text answer.", InputSchema: schema}
 	return registry.Add(desc, tools.ToolHandlerFunc(func(ctx context.Context, req tools.ToolRequest) (tools.ToolResponse, error) {
 		var input struct {
