@@ -358,3 +358,17 @@ func TestContextPathSourceTracksRuntimeUpdates(t *testing.T) {
 		t.Fatalf("runtime context paths = %v", got)
 	}
 }
+
+func TestProviderFactoryErrorClosesPartialProvider(t *testing.T) {
+	cfg := configuration(t)
+	providerClosed := 0
+	provider := &observedCloseProvider{FakeProvider: providertest.NewFakeProvider(), closed: &providerClosed, order: &[]string{}}
+	failure := errors.New("provider setup failed")
+	_, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, failure }})
+	if !errors.Is(err, failure) {
+		t.Fatalf("Open error = %v, want factory error", err)
+	}
+	if providerClosed != 1 {
+		t.Fatalf("partial provider close count = %d, want 1", providerClosed)
+	}
+}

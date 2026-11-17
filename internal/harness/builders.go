@@ -163,6 +163,9 @@ func (b *compositionBuilder) provider() component.Definition {
 		}
 		provider, err := factory(ctx, cfg)
 		if err != nil {
+			if provider != nil {
+				_ = provider.Close()
+			}
 			return err
 		}
 		if provider == nil {
