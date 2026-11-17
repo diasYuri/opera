@@ -49,7 +49,7 @@ func (p compatibleProvider) Models(ctx context.Context) ([]ai.Model, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list %s models: %w", p.id, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("list %s models: provider returned HTTP %d", p.id, resp.StatusCode)
 	}

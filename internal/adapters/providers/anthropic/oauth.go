@@ -62,32 +62,32 @@ func ParseAuthorizationInput(input, expectedState string) (string, error) {
 	if parsed, err := url.Parse(value); err == nil && parsed.Scheme != "" {
 		code, state := parsed.Query().Get("code"), parsed.Query().Get("state")
 		if code == "" || state != expectedState {
-			return "", errors.New("Anthropic authorization response is incomplete or has invalid state")
+			return "", errors.New("anthropic authorization response is incomplete or has invalid state")
 		}
 		return code, nil
 	}
 	if strings.Contains(value, "#") {
 		parts := strings.SplitN(value, "#", 2)
 		if parts[1] != expectedState || parts[0] == "" {
-			return "", errors.New("Anthropic authorization response has invalid state")
+			return "", errors.New("anthropic authorization response has invalid state")
 		}
 		return parts[0], nil
 	}
 	if strings.Contains(value, "code=") {
 		parsed, err := url.ParseQuery(value)
 		if err != nil || parsed.Get("code") == "" || parsed.Get("state") != expectedState {
-			return "", errors.New("Anthropic authorization response is incomplete or has invalid state")
+			return "", errors.New("anthropic authorization response is incomplete or has invalid state")
 		}
 		return parsed.Get("code"), nil
 	}
-	return "", errors.New("Anthropic authorization code must include its state")
+	return "", errors.New("anthropic authorization code must include its state")
 }
 
 func Exchange(ctx context.Context, code, verifier, redirectURI string) (OAuthToken, error) {
 	body := map[string]string{"grant_type": "authorization_code", "client_id": oauthClientID, "code": code, "state": verifier, "redirect_uri": redirectURI, "code_verifier": verifier}
 	var token tokenResponse
 	if err := postOAuthJSON(ctx, body, &token); err != nil {
-		return OAuthToken{}, fmt.Errorf("Anthropic token exchange failed: %w", err)
+		return OAuthToken{}, fmt.Errorf("anthropic token exchange failed: %w", err)
 	}
 	return normalizeToken(token, "authorization response", true)
 }
@@ -95,7 +95,7 @@ func Exchange(ctx context.Context, code, verifier, redirectURI string) (OAuthTok
 func Refresh(ctx context.Context, refreshToken string) (OAuthToken, error) {
 	var token tokenResponse
 	if err := postOAuthJSON(ctx, map[string]string{"grant_type": "refresh_token", "client_id": oauthClientID, "refresh_token": refreshToken}, &token); err != nil {
-		return OAuthToken{}, fmt.Errorf("Anthropic token refresh failed: %w", err)
+		return OAuthToken{}, fmt.Errorf("anthropic token refresh failed: %w", err)
 	}
 	result, err := normalizeToken(token, "refresh response", false)
 	if err == nil && result.RefreshToken == "" {
@@ -106,7 +106,7 @@ func Refresh(ctx context.Context, refreshToken string) (OAuthToken, error) {
 
 func normalizeToken(token tokenResponse, source string, requireRefresh bool) (OAuthToken, error) {
 	if token.AccessToken == "" || requireRefresh && token.RefreshToken == "" || token.ExpiresIn <= 0 {
-		return OAuthToken{}, fmt.Errorf("Anthropic %s omitted required token fields", source)
+		return OAuthToken{}, fmt.Errorf("anthropic %s omitted required token fields", source)
 	}
 	expiresAt := time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
 	if token.ExpiresIn > 300 {
@@ -139,7 +139,7 @@ func postOAuthJSON(ctx context.Context, body any, result any) error {
 		}
 		return errors.New("provider authentication endpoint is unavailable")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	limited := http.MaxBytesReader(nil, resp.Body, maxAuthBody)
 	if err := json.NewDecoder(limited).Decode(result); err != nil {
 		return errors.New("provider authentication response is invalid")

@@ -90,7 +90,7 @@ func postOAuthJSON(ctx context.Context, body any, result any) error {
 		}
 		return errors.New("provider authentication endpoint is unavailable")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("provider authentication endpoint returned HTTP %d", resp.StatusCode)
 	}

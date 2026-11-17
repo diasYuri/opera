@@ -85,7 +85,7 @@ func LoadCustomProviders(path, configDir string) ([]CustomProvider, error) {
 	defer func() { _ = file.Close() }()
 	if configDir != "" {
 		if err := platform.Check(configDir, true); err != nil {
-			return nil, fmt.Errorf("Opera config directory permissions: %w", err)
+			return nil, fmt.Errorf("opera config directory permissions: %w", err)
 		}
 	}
 	if err := platform.Check(path, false); err != nil {

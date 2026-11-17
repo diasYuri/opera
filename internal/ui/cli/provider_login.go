@@ -17,10 +17,6 @@ import (
 	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
-const (
-	providerLoginTimeout = 5 * time.Minute
-)
-
 func (s *chatSession) apiKeyLogin(ctx context.Context, cfg config.Resolved, provider string, notify func(execution.LoginNotice) error) error {
 	environmentKey, err := s.environmentAPIKey(ctx, provider)
 	if err != nil {
@@ -81,25 +77,6 @@ func promptLoginValue(ctx context.Context, notify func(execution.LoginNotice) er
 			return "", errors.New("sign-in value is empty")
 		}
 		return value, nil
-	case <-ctx.Done():
-		return "", ctx.Err()
-	}
-}
-
-func promptLoginChoice(ctx context.Context, notify func(execution.LoginNotice) error, title, message string, options []execution.LoginOption) (string, error) {
-	response := make(chan string, 1)
-	prompt := execution.LoginPrompt{Kind: "select", Title: title, Message: message, Options: options, Response: response}
-	if err := notify(execution.LoginNotice{Message: message, Prompt: &prompt}); err != nil {
-		return "", err
-	}
-	select {
-	case value := <-response:
-		for _, option := range options {
-			if option.ID == value {
-				return value, nil
-			}
-		}
-		return "", errors.New("invalid sign-in choice")
 	case <-ctx.Done():
 		return "", ctx.Err()
 	}
