@@ -113,4 +113,38 @@ dependências concretas ao app.
 
 `make check` passou após a correção, incluindo regressões de fingerprint,
 capacidade ausente, cancelamento, confinamento do workspace e tamanho do preview.
-O trabalho restante descrito acima continua necessário.
+As lacunas então identificadas foram concluídas na segunda implementação e na revisão final abaixo.
+
+## Revisão final independente e correções
+
+O agente principal revisou os contratos, builders, propagação do catálogo, owners
+TUI e testes de falha, além de executar os gates após a segunda entrega do LUNA.
+A revisão corrigiu três falhas adicionais:
+
+- `/context` e a restauração de caminhos no resume agora atualizam a mesma fonte
+  consultada pelo request hook. Regressão cobre comando, checkpoint e reabertura.
+- O catálogo fecha providers devolvidos com erro e preserva erros de factory e
+  cleanup. O catálogo injetado na CLI agora segue também para execução/compactação
+  e chat, com teste headless usando provider próprio.
+- Descoberta de arquivos/skills do autocomplete saiu da UI para adapter CLI por
+  `ComposerCompleter`. `tea.Cmd` executa a descoberta; Update recebe resultados
+  identificados por geração e posição/texto, cancela pesquisas substituídas e
+  descarta respostas obsoletas. O adapter confina leitura com `os.OpenRoot`.
+
+Os builders foram separados em `component_{storage,provider,tools,runner,
+application,inspection}.go`, sem o helper que retornava oito dependências em tupla.
+O commit `9e6505e` reúne as correções de catálogo/contexto e a organização dos builders.
+
+A validação do conteúdo preparado para commit em um diretório temporário separado
+revelou JSON inválido no schema `user_question` original: os testes do workspace
+passavam usando a correção local preexistente do usuário. Foi preparada apenas a
+correção sintática mínima (uma chave de fechamento) e um teste de schema válido.
+A alteração local mais ampla de compatibilidade strict permanece sem commit.
+Após isso, `make check` passou também sobre o snapshot preparado, sem depender de
+nenhuma alteração prévia do usuário. Nenhum arquivo do workspace foi substituído
+para executar essa verificação.
+
+Gates repetidos pelo agente principal: `make check` no workspace e no snapshot de
+commit; `make lint`; `make matrix`; `make inventory` sem drift; `go mod tidy -diff`
+sem drift; e `go test -race ./...` com toolchain/tags fixadas e CGO habilitado.
+As limitações de cross-compilation e ausência de testes live permanecem as mesmas.

@@ -171,7 +171,7 @@ func validateImport(path, name string) error {
 		}
 	}
 	if strings.HasPrefix(path, "internal/ui/") {
-		for _, blocked := range []string{"github.com/diasYuri/y/pkg/providers", "github.com/diasYuri/y/pkg/agent", "github.com/diasYuri/y/pkg/tools", "os/exec"} {
+		for _, blocked := range []string{"github.com/diasYuri/opera/internal/skills", "github.com/diasYuri/opera/internal/persistence", "github.com/diasYuri/opera/internal/harness", "github.com/diasYuri/opera/internal/cli", "github.com/diasYuri/y/pkg/providers", "github.com/diasYuri/y/pkg/agent", "github.com/diasYuri/y/pkg/tools", "os/exec"} {
 			if strings.HasPrefix(name, blocked) {
 				return fmt.Errorf("UI must depend on application actions/events, not %s (%s)", name, path)
 			}

@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
@@ -20,7 +19,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/skills"
 )
 
 type Executor interface {
@@ -86,8 +84,7 @@ type model struct {
 	selectedCheckpoint                uint64
 	treeSelection                     bool
 	completions                       []completionItem
-	skillCatalogCache                 skills.Catalog
-	skillCatalogAt                    time.Time
+	completionGeneration              uint64
 	extensionContributions            []ExtensionContribution
 	completionIndex                   int
 	actionPending, quitting, followUp bool
@@ -231,6 +228,10 @@ func next(execution *app.Execution) tea.Cmd {
 
 func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := message.(type) {
+	case completionsMsg:
+		m.receiveCompletions(msg)
+		m.resize()
+		return m, nil
 	case sessionsMsg:
 		m.actionPending = false
 		if msg.err != nil {
@@ -381,9 +382,9 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.extensionContributions = normalizeExtensionContributions(msg.items)
-		m.refreshCompletions()
+		command := m.refreshCompletions()
 		m.resize()
-		return m, nil
+		return m, command
 	case attachmentPreviewsMsg:
 		if msg.err != nil {
 			m.attachments = nil
@@ -1119,11 +1120,12 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	var command tea.Cmd
 	m.composer.editor, command = m.composer.editor.Update(message)
 	m.sizeEditor()
-	m.refreshCompletions()
-	return m, command
+	completionCommand := m.refreshCompletions()
+	return m, tea.Batch(command, completionCommand)
 }
 
 func (m *model) acceptCompletion() {
+	m.completionGeneration++
 	if len(m.completions) == 0 {
 		return
 	}

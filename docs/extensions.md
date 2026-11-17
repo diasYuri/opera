@@ -54,7 +54,11 @@ ID, selection metadata and factory. The same catalog supplies execution and the
 chat provider/model selectors. Generic configuration accepts provider IDs and
 composition reports an unregistered ID with context. The default native
 implementations live in `internal/provideradapters`; applications may pass a
-different `ProviderCatalog` to `harness.Open` without adding a provider switch.
+different `ProviderCatalog` to `harness.Open` or `cli.App` without adding a provider switch.
+`TestCustomProviderCatalogExecutesOwnImplementation` in
+`internal/harness/integration_test.go` demonstrates an offline scripted provider
+executing through the real application service.
+`TestHeadlessRunUsesInjectedProviderCatalog` checks the same boundary through CLI.
 
 Native tool packs are selected by ID in the harness. Pass `DisabledToolPacks` to
 remove a default pack, or `ToolPacks` to contribute a separately owned pack. The

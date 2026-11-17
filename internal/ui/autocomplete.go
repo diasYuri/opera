@@ -1,22 +1,16 @@
 package ui
 
 import (
-	"errors"
-	"io"
-	"os"
-	"path/filepath"
-	"sort"
+	"context"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/skills"
 )
 
 const maxCompletions = 6
-const maxFileCompletionScan = 512
 
 type completionItem struct {
 	start, end  int
@@ -25,12 +19,34 @@ type completionItem struct {
 	detail      string
 }
 
-func (m *model) refreshCompletions() {
+// CompletionCandidate is a presentation-safe workspace suggestion.
+type CompletionCandidate struct{ Value, Label, Detail string }
+
+// ComposerCompleter is an optional delivery capability; discovery runs in Cmd.
+type ComposerCompleter interface {
+	CompleteComposer(context.Context, string) ([]CompletionCandidate, error)
+}
+
+type completionsMsg struct {
+	generation   uint64
+	input        string
+	line, column int
+	start, end   int
+	items        []CompletionCandidate
+	err          error
+}
+
+func (m *model) refreshCompletions() tea.Cmd {
+	if m.composer.completionCancel != nil {
+		m.composer.completionCancel()
+		m.composer.completionCancel = nil
+	}
 	_, start, end, token := editorToken(m.composer.editor.Value(), m.composer.editor.Line(), m.composer.editor.Column())
+	m.completionGeneration++
 	m.completions = nil
 	m.completionIndex = 0
 	if token == "" || m.composer.editor.HasSelection() {
-		return
+		return nil
 	}
 	if strings.HasPrefix(token, "/") && start == 0 {
 		for _, command := range app.Commands {
@@ -38,24 +54,37 @@ func (m *model) refreshCompletions() {
 				m.completions = append(m.completions, completionItem{start: start, end: end, replacement: command.Name + " ", label: command.Usage, detail: command.Description})
 			}
 		}
-	} else if strings.HasPrefix(token, "$") {
-		query := strings.TrimPrefix(token, "$")
-		for _, skill := range m.skillsCatalog().Skills {
-			if strings.HasPrefix(strings.ToLower(skill.Name), strings.ToLower(query)) {
-				m.completions = append(m.completions, completionItem{start: start, end: end, replacement: "$" + skill.Name + " ", label: "$" + skill.Name, detail: skill.Description})
-			}
-		}
-	} else if strings.HasPrefix(token, "@") {
-		m.completions = m.fileCompletions(token, start, end)
 	}
 	for _, contribution := range m.extensionContributions {
 		if contribution.Kind != string(ExtensionAutocomplete) || !strings.HasPrefix(token, contribution.Trigger) {
 			continue
 		}
-		m.completions = append(m.completions, completionItem{
-			start: start, end: end, replacement: contribution.Value,
-			label: contribution.Text, detail: contribution.Detail,
-		})
+		m.completions = append(m.completions, completionItem{start: start, end: end, replacement: contribution.Value, label: contribution.Text, detail: contribution.Detail})
+	}
+	if len(m.completions) > maxCompletions {
+		m.completions = m.completions[:maxCompletions]
+	}
+	service, ok := m.service.(ComposerCompleter)
+	if !ok || !strings.HasPrefix(token, "$") && !strings.HasPrefix(token, "@") {
+		return nil
+	}
+	generation := m.completionGeneration
+	input, line, column := m.composer.editor.Value(), m.composer.editor.Line(), m.composer.editor.Column()
+	ctx, cancel := context.WithCancel(m.ctx)
+	m.composer.completionCancel = cancel
+	return func() tea.Msg {
+		defer cancel()
+		items, err := service.CompleteComposer(ctx, token)
+		return completionsMsg{generation: generation, input: input, line: line, column: column, start: start, end: end, items: items, err: err}
+	}
+}
+
+func (m *model) receiveCompletions(msg completionsMsg) {
+	if msg.generation != m.completionGeneration || msg.err != nil || msg.input != m.composer.editor.Value() || msg.line != m.composer.editor.Line() || msg.column != m.composer.editor.Column() {
+		return
+	}
+	for _, item := range msg.items {
+		m.completions = append(m.completions, completionItem{start: msg.start, end: msg.end, replacement: item.Value, label: safeText(item.Label), detail: safeText(item.Detail)})
 	}
 	if len(m.completions) > maxCompletions {
 		m.completions = m.completions[:maxCompletions]
@@ -83,78 +112,6 @@ func editorToken(value string, lineIndex, column int) (string, int, int, string)
 	start := lineOffset + len(string(runes[:startColumn]))
 	end := lineOffset + len(string(runes[:endColumn]))
 	return line, start, end, string(runes[startColumn:column])
-}
-
-func (m *model) skillsCatalog() skills.Catalog {
-	if !m.skillCatalogAt.IsZero() && time.Since(m.skillCatalogAt) < 5*time.Second {
-		return m.skillCatalogCache
-	}
-	root := m.workspaceRoot
-	if root == "" {
-		root, _ = os.Getwd()
-	}
-	home, _ := os.UserHomeDir()
-	m.skillCatalogCache = skills.Discover(root, home)
-	m.skillCatalogAt = time.Now()
-	return m.skillCatalogCache
-}
-
-func (m *model) fileCompletions(token string, start, end int) []completionItem {
-	root := m.workspaceRoot
-	if root == "" {
-		root, _ = os.Getwd()
-	}
-	query := strings.TrimPrefix(token, "@")
-	dirPart, base := filepath.Split(query)
-	dir := filepath.Clean(filepath.Join(root, dirPart))
-	rel, err := filepath.Rel(root, dir)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return nil
-	}
-	parent, err := os.Open(dir)
-	if err != nil {
-		return nil
-	}
-	defer func() { _ = parent.Close() }()
-	entries, err := parent.ReadDir(maxFileCompletionScan + 1)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil
-	}
-	scanLimited := len(entries) > maxFileCompletionScan
-	if scanLimited {
-		entries = entries[:maxFileCompletionScan]
-	}
-	var items []completionItem
-	for _, entry := range entries {
-		name := entry.Name()
-		if strings.HasPrefix(name, ".") && !strings.HasPrefix(base, ".") || name == ".git" || name == ".opera" || name == "node_modules" || name == "vendor" {
-			continue
-		}
-		if !strings.HasPrefix(strings.ToLower(name), strings.ToLower(base)) || entry.Type()&os.ModeSymlink != 0 {
-			continue
-		}
-		path := filepath.ToSlash(filepath.Join(dirPart, name))
-		detail := "file"
-		if entry.IsDir() {
-			detail = "directory"
-		}
-		if scanLimited {
-			detail += " · large directory scan capped"
-		}
-		if entry.IsDir() {
-			path += "/"
-			items = append(items, completionItem{start: start, end: end, replacement: "@" + path, label: "@" + path, detail: detail})
-		} else {
-			items = append(items, completionItem{start: start, end: end, replacement: "@" + path + " ", label: "@" + path, detail: detail})
-		}
-	}
-	sort.SliceStable(items, func(i, j int) bool {
-		if items[i].detail != items[j].detail {
-			return strings.HasPrefix(items[i].detail, "directory")
-		}
-		return strings.ToLower(items[i].label) < strings.ToLower(items[j].label)
-	})
-	return items
 }
 
 func applyCompletion(editor *textarea.Model, completion completionItem) {

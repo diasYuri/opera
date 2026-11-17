@@ -33,13 +33,14 @@ type loginMethod struct {
 // chatSession can show commands and sign-in before an execution runtime exists.
 // UI actions are serialized; auth notices never write directly to the terminal.
 type chatSession struct {
-	mu          sync.Mutex
-	app         App
-	cfg         config.Resolved
-	opts        harness.Options
-	runtime     *harness.Runtime
-	methods     []loginMethod
-	openBrowser func(context.Context, string) error
+	completionDiscovery composerDiscovery
+	mu                  sync.Mutex
+	app                 App
+	cfg                 config.Resolved
+	opts                harness.Options
+	runtime             *harness.Runtime
+	methods             []loginMethod
+	openBrowser         func(context.Context, string) error
 }
 
 func newChatSession(a App, cfg config.Resolved, opts harness.Options, r *harness.Runtime) *chatSession {

@@ -1,14 +1,18 @@
 package ui
 
-import "charm.land/bubbles/v2/textarea"
+import (
+	"charm.land/bubbles/v2/textarea"
+	"context"
+)
 
 // composerModel owns the prompt editor and its submitted-prompt navigation.
 // Other chat flows request focus or values through the editor control; history
 // transitions stay here so the shell does not duplicate composer state.
 type composerModel struct {
-	editor       textarea.Model
-	history      []string
-	historyIndex int
+	completionCancel context.CancelFunc
+	editor           textarea.Model
+	history          []string
+	historyIndex     int
 }
 
 func (c *composerModel) remember(text string) {
