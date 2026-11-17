@@ -9,3 +9,5 @@ mean its future execution capability is already implemented.
 4. [Policy and workspace coordination](004-policy-coordination.md)
 5. [Scrollback and terminal ownership](005-terminal.md)
 6. [Credentials and local trust](006-credentials.md)
+
+7. [Ports and open component composition](007-ports-components.md)
