@@ -9,7 +9,11 @@ import (
 
 func TestToolPackSelectionAllowsCustomPackAndRejectsInvalidSelection(t *testing.T) {
 	registry := tools.NewRegistry()
-	defer registry.Close(context.Background())
+	t.Cleanup(func() {
+		if err := registry.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	})
 	var registered int
 	custom := ToolPack{ID: "custom", Register: func(context.Context, *tools.Registry, ToolPackContext) error { registered++; return nil }}
 	disabled := []string{"filesystem", "shell", "git", "code-search", "lsp", "skills", "work", "user-question"}

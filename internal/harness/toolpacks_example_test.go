@@ -9,7 +9,7 @@ import (
 
 func Example_customToolPack() {
 	registry := tools.NewRegistry()
-	defer registry.Close(context.Background())
+	defer func() { _ = registry.Close(context.Background()) }()
 	disabled := []string{"filesystem", "shell", "git", "code-search", "lsp", "skills", "work", "user-question"}
 	pack := ToolPack{ID: "greeting", Register: func(_ context.Context, registry *tools.Registry, _ ToolPackContext) error {
 		return registry.Add(tools.ToolDescriptor{Name: "greet", Description: "Return a greeting", InputSchema: []byte(`{"type":"object","properties":{},"additionalProperties":false}`)}, tools.ToolHandlerFunc(func(context.Context, tools.ToolRequest) (tools.ToolResponse, error) {
