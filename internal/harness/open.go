@@ -65,7 +65,6 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 	}
 	recordsKey := component.NewKey[*persistence.Store]("opera.records", "1.0.0")
 	storeKey := component.NewKey[*sqlite.Store]("opera.store", "1.0.0")
-	lockKey := component.NewKey[bool]("opera.workspace", "1.0.0")
 	runnerKey := component.NewKey[*agent.AgentRunner]("opera.runner", "1.0.0")
 	serviceKey := component.NewKey[*app.Service]("opera.execution", "1.0.0")
 	guard := &app.Guard{Workspace: cfg.Paths.Workspace, Mode: cfg.String("policy"), Queue: workspace.NewQueue()}
@@ -83,19 +82,9 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 	var application *app.Service
 	var work *app.Work
 	var extensions *operaext.Manager
+	questions := app.NewQuestionBroker()
 	definitions := []component.Definition{
-		definition("workspace", []component.ServiceRef{component.Reference(lockKey)}, nil, func(_ context.Context, scope *component.Scope) error {
-			close, err := workspace.Lock(filepath.Join(cfg.Paths.Data, "locks"), cfg.Paths.Workspace)
-			if err != nil {
-				return err
-			}
-			if err := scope.Track(func(context.Context) error { return close() }); err != nil {
-				_ = close()
-				return err
-			}
-			return component.Provide(scope, lockKey, true)
-		}),
-		definition("storage", []component.ServiceRef{component.Reference(storeKey), component.Reference(recordsKey)}, []component.ServiceRef{component.Reference(lockKey)}, func(ctx context.Context, scope *component.Scope) error {
+		definition("storage", []component.ServiceRef{component.Reference(storeKey), component.Reference(recordsKey)}, nil, func(ctx context.Context, scope *component.Scope) error {
 			store, err := sqlite.Open(ctx, filepath.Join(cfg.Paths.Data, "opera.db"))
 			if err != nil {
 				return err
@@ -209,7 +198,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 			}}
 			return component.Provide[agent.Provider](scope, yruntime.ProviderKey, tracked)
 		}),
-		definition("tools", []component.ServiceRef{component.Reference(yruntime.ToolRegistryKey)}, []component.ServiceRef{component.Reference(lockKey), component.Reference(recordsKey)}, func(ctx context.Context, scope *component.Scope) error {
+		definition("tools", []component.ServiceRef{component.Reference(yruntime.ToolRegistryKey)}, []component.ServiceRef{component.Reference(recordsKey)}, func(ctx context.Context, scope *component.Scope) error {
 			records, err := component.Require(scope, recordsKey)
 			if err != nil {
 				return err
@@ -230,6 +219,9 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 				return err
 			}
 			if err := registry.AddExecutionMiddleware(guard.Middleware); err != nil {
+				return err
+			}
+			if err := questions.Register(registry); err != nil {
 				return err
 			}
 			limits := tools.ToolLimits{MaxOutputBytes: int64(cfg.Int("limits.output_bytes"))}
@@ -387,7 +379,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 				return err
 			}
 			visionProvider := provider.(providers.Provider)
-			service := &app.Service{ResponseFormat: opts.ResponseFormat, Records: records, Work: work, ContextBudget: min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024), ContextPaths: opts.ContextPaths, Skills: skillManager, Runner: runner, Store: store, Guard: guard, Workspace: cfg.Paths.Workspace, Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy"), MaxTokens: cfg.Int("limits.context_tokens"), LoadImages: func(ctx context.Context, paths []string) ([]ai.ContentBlock, error) {
+			service := &app.Service{ResponseFormat: opts.ResponseFormat, Records: records, Work: work, QuestionBroker: questions, ContextBudget: min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024), ContextPaths: opts.ContextPaths, Skills: skillManager, Runner: runner, Store: store, Guard: guard, Workspace: cfg.Paths.Workspace, Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy"), MaxTokens: cfg.Int("limits.context_tokens"), LoadImages: func(ctx context.Context, paths []string) ([]ai.ContentBlock, error) {
 				images, err := contextfiles.Images(ctx, cfg.Paths.Workspace, paths, visionProvider.Capabilities(cfg.String("model")).Vision, min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024))
 				if err == nil && len(images) != len(paths) {
 					return nil, errors.New("each /image path must reference a supported image")

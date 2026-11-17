@@ -29,6 +29,7 @@ type Service struct {
 	contexts                         map[string]context.Context
 	Records                          *persistence.Store
 	Work                             *Work
+	QuestionBroker                   *QuestionBroker
 	Summarizer                       compaction.Summarizer
 	ContextBudget                    int
 	activeMu                         sync.Mutex
@@ -269,7 +270,7 @@ func (s *Service) Execute(ctx context.Context, request Request, emit func(Event)
 		result.ExitCode = 2
 		return result, contextErr
 	}
-	systemPrompt := "Workspace root: " + s.Workspace + ". Tool paths should be relative to this root. You are Opera, a local coding assistant. Use tools to inspect and edit the workspace. Respect the workspace policy and user approvals. Reply in the user's language. Never claim work that tools have not performed."
+	systemPrompt := "Workspace root: " + s.Workspace + ". Tool paths should be relative to this root. You are Opera, a local coding assistant. Use tools to inspect and edit the workspace. Ask the user with user_question when a decision or missing preference blocks useful progress; offer a few concise recommendations and accept open text. Respect the workspace policy and user approvals. Reply in the user's language. Never claim work that tools have not performed."
 	if mode.PromptInstructions != "" {
 		systemPrompt += " " + mode.PromptInstructions
 	}

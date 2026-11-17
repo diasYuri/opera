@@ -695,6 +695,15 @@ func (s *chatSession) Start(ctx context.Context, request app.Request) *app.Execu
 	return s.runtime.Start(ctx, request)
 }
 
+func (s *chatSession) AnswerQuestion(runID, toolCallID string, answers []app.UserQuestionAnswer) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.runtime == nil || s.runtime.Service.QuestionBroker == nil {
+		return errors.New("no active user question")
+	}
+	return s.runtime.Service.QuestionBroker.Answer(runID, toolCallID, answers)
+}
+
 func failedExecution(err error) *app.Execution {
 	updates := make(chan app.Update, 1)
 	updates <- app.Update{Result: &app.Result{State: "failed", ExitCode: 1}, Error: err}
