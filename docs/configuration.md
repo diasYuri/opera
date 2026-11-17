@@ -1,0 +1,106 @@
+# Configuration and local paths
+
+`opera config` shows every effective value and its source. `config get <key>`
+inspects one key, `config schema` lists the schema and environment keys, and
+`config paths` reports locations. These commands never read the keyring.
+`--help`, `--version` and `config schema` also work with invalid configuration or
+an unavailable workspace. Headless commands never open an interactive form; `onboarding` is TTY-only.
+
+## Locations
+
+| Platform | User configuration | Data | Cache |
+| --- | --- | --- | --- |
+| Linux | `$XDG_CONFIG_HOME/opera/config.toml`, otherwise `~/.config/opera/config.toml` | `$XDG_DATA_HOME/opera`, otherwise `~/.local/share/opera` | `$XDG_CACHE_HOME/opera`, otherwise `~/.cache/opera` |
+| macOS | `~/Library/Application Support/opera/config.toml` | `~/Library/Application Support/opera` | `~/Library/Caches/opera` |
+| Windows | `%APPDATA%/opera/config.toml` | `%LOCALAPPDATA%/opera` | `%LOCALAPPDATA%/Cache/opera` |
+
+If Windows application-data variables are unset, use `~/AppData/Roaming` and
+`~/AppData/Local`. `OPERA_CONFIG_DIR`, `OPERA_DATA_DIR` and `OPERA_CACHE_DIR`
+override their respective application directories and must be absolute.
+Discovery is read-only: paths need not exist until explicitly storing data.
+
+The workspace is the current directory by default. `--workspace` overrides
+`OPERA_WORKSPACE`; canonicalization resolves symlinks and requires an existing
+directory. Project configuration is `<canonical-workspace>/.opera/config.toml`.
+There is no parent-directory config search in F0. `--user-config` and
+`--project-config` select explicit files and require them to exist. Missing
+default files are optional. Configuration files are limited to 1 MiB.
+
+## Precedence, types and trust
+
+Apply defaults, global user TOML, private per-workspace user settings, project TOML, environment, then flags. Onboarding writes the workspace-specific part of the user layer under `<data>/workspaces/<workspace-hash>.toml` with user-only permissions; its provenance is `user-workspace`. It never writes trust into version-controlled project configuration. Empty strings
+and `false` are explicit values. Each key retains `default`, `user`, `project`,
+`environment` or `flag` provenance. Invalid values in any layer are errors even
+when a later layer would override them. Unknown keys/tables and incorrect TOML
+types are errors. Parsing errors omit input values so accidentally supplied
+secrets do not appear in diagnostics.
+
+Policy order is `read-only < ask < trusted`. Project policy cannot exceed the
+user policy (default `ask`); attempted elevation is an error, not a silent grant.
+An invalid project remains invalid even if a flag subsequently selects trusted.
+Choose elevated policy explicitly in user configuration, environment or a flag,
+and remove conflicting project elevation. Project `credentials.store` and `base_url` are always
+rejected; its selection is user-controlled. This is policy configuration, not
+an operating-system sandbox.
+
+Environment names are `OPERA_` plus the uppercase dotted key with dots replaced
+by underscores. For example, `agents.max_depth` becomes `OPERA_AGENTS_MAX_DEPTH`.
+Only documented environment keys are read. Secrets do not have config keys.
+
+```sh
+opera config get policy --policy read-only
+opera config get ui.no_motion --no-motion=false
+opera config --set agents.max_concurrent=2
+opera config --provider openai --model your-model-id --format jsonl
+```
+
+`NO_COLOR` is honored by its presence, including an empty value.
+`--accessible --no-motion` selects append-only screen-reader input; see [keyboard behavior](accessibility.md).
+The interactive `/setting` (also `/settings`) menu lets you choose the terminal
+palette. Built-in choices are `system`, `midnight`, `ocean`, `forest`, `sunset`,
+`mono`, `dark` and `light`; the five curated palettes are Midnight, Ocean,
+Forest, Sunset and Mono. The choice is stored in private per-workspace user
+settings and does not change the terminal background. `NO_COLOR` still disables
+all color output.
+
+## Resource budgets
+
+| Key | Default | Accepted range / meaning |
+| --- | --- | --- |
+| `agents.max_concurrent` | 4 | 1–32 children at once; bounded shared capacity |
+| `agents.max_depth` | 1 | 0–8; zero disables delegation |
+| `limits.context_tokens` | 64000 | 1024–2000000; application budget, capped by model context in F1/F2 |
+| `limits.output_bytes` | 1048576 | 1024–67108864; per-tool stdout/stderr/result budget |
+| `limits.attachment_bytes` | 10485760 | 1024–104857600; per-attachment size, also subject to provider limits |
+| `limits.process_timeout` | `2m` | Positive Go duration, at most 24 hours |
+| `limits.shutdown_timeout` | `10s` | Positive Go duration, at most 24 hours; separate cleanup context |
+
+Limits are validated when loading configuration. F1 enforces process/tool timeout, filesystem output bounds, bounded run turns and an estimated context budget before provider calls. Responses default to at most 4096 output tokens. Attachment and child-agent limits become active with their later-phase capabilities. A requested context budget does not assert that a model
+supports that many tokens. Output truncation must be visible; tool metadata and
+operation identity must survive truncation. Diagnostic tools never install
+dependencies: missing `rg` falls back to filesystem text search in F2, missing
+`ast-grep` disables AST search, missing language servers disable semantic
+navigation, and missing Git disables Git operations. No fallback bypasses policy.
+
+The [example](../examples/config.toml) documents every supported key. Raw secrets
+belong only in the separate credential store; `credential_ref` is a lookup name.
+
+F2 adds `thinking` (`off` by default; `OPERA_THINKING`/`--thinking`) and enforces
+`limits.attachment_bytes` within the context budget. Interactive selections are
+session-local; use user TOML or flags for persistent defaults. `--attach` may
+repeat; `context`/`/context` show the loaded instruction and attachment sources.
+
+F3 enforces `agents.max_concurrent` (default 4), `agents.max_depth` (default 1)
+and `limits.worker_tokens` (default 256000). The latter is a durable shared
+reservation ledger across a parent and descendants: each provider request reserves
+estimated input plus its 4096-token output cap, including compaction. It is a
+conservative work budget, not billing/accounting. Exhaustion requires an explicit
+configuration increase. Child queues are bounded to 16 times concurrency and 64
+children per parent. Cancellation releases queued work and all held slots.
+
+F4/F5 add the user-only `extensions.file` and `accounting.prices_file` paths.
+Projects cannot choose them. The former stores external capability consent outside
+the workspace; the latter selects an explicitly sourced/dated optional price table.
+See [extensions](extensions.md) and [accounting](usage.md). Neither file may contain
+literal API credentials. Response schema flags are execution contracts, independent
+of `output.format`'s event transport.

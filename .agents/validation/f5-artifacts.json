@@ -1,0 +1,91 @@
+{
+  "native_smoke": "darwin/arm64",
+  "other_native_execution": "pending CI",
+  "artifacts": [
+    {
+      "archive": "opera_0.1.0-local_darwin_amd64.tar.gz",
+      "sha256": "3dcf0d0c00ca88889d255f8d05681095a3c6dbe64cfd5904f996a40e6dd68767",
+      "bytes": 30159385,
+      "metadata": {
+        "Version": "0.1.0-local",
+        "GOOS": "darwin",
+        "GOARCH": "amd64",
+        "Go": "go1.27.4",
+        "SDK": "v1.3.4",
+        "Source": "local source; unpublished",
+        "CGO": "0"
+      }
+    },
+    {
+      "archive": "opera_0.1.0-local_darwin_arm64.tar.gz",
+      "sha256": "9a4d1a2b30f26ef348ab10d6362d66c204be98e0f3f180b8a173c31ad9f95642",
+      "bytes": 29091562,
+      "metadata": {
+        "Version": "0.1.0-local",
+        "GOOS": "darwin",
+        "GOARCH": "arm64",
+        "Go": "go1.27.4",
+        "SDK": "v1.3.4",
+        "Source": "local source; unpublished",
+        "CGO": "0"
+      }
+    },
+    {
+      "archive": "opera_0.1.0-local_linux_amd64.tar.gz",
+      "sha256": "06e1879ae73c1d0e2ddeee81e86e571e8b1a98302a2381bdd2839fdf8c8511ce",
+      "bytes": 29086883,
+      "metadata": {
+        "Version": "0.1.0-local",
+        "GOOS": "linux",
+        "GOARCH": "amd64",
+        "Go": "go1.27.4",
+        "SDK": "v1.3.4",
+        "Source": "local source; unpublished",
+        "CGO": "0"
+      }
+    },
+    {
+      "archive": "opera_0.1.0-local_linux_arm64.tar.gz",
+      "sha256": "b6bf556c282eb7a2d499bb21d7f6bf7b5df7b2d582faaf2e4bd31bfea34028bc",
+      "bytes": 27285774,
+      "metadata": {
+        "Version": "0.1.0-local",
+        "GOOS": "linux",
+        "GOARCH": "arm64",
+        "Go": "go1.27.4",
+        "SDK": "v1.3.4",
+        "Source": "local source; unpublished",
+        "CGO": "0"
+      }
+    },
+    {
+      "archive": "opera_0.1.0-local_windows_amd64.zip",
+      "sha256": "1218f21caed4c5f795977ac7286d687478f5dde61b994e31ad27c60a035d5d78",
+      "bytes": 29594079,
+      "metadata": {
+        "Version": "0.1.0-local",
+        "GOOS": "windows",
+        "GOARCH": "amd64",
+        "Go": "go1.27.4",
+        "SDK": "v1.3.4",
+        "Source": "local source; unpublished",
+        "CGO": "0"
+      }
+    },
+    {
+      "archive": "opera_0.1.0-local_windows_arm64.zip",
+      "sha256": "e959d18515f63d9c32fc9acf1d7a32c328b7b3dbd33f0a5c99988241b42d6326",
+      "bytes": 27534286,
+      "metadata": {
+        "Version": "0.1.0-local",
+        "GOOS": "windows",
+        "GOARCH": "arm64",
+        "Go": "go1.27.4",
+        "SDK": "v1.3.4",
+        "Source": "local source; unpublished",
+        "CGO": "0"
+      }
+    }
+  ],
+  "sdk_merge_commit": "aa1c4b1c01734898d1b28ca6b6cc884dde5bdcde"
+}

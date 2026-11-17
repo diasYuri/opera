@@ -1,0 +1,39 @@
+# Non-secret configuration. Copy to the user path shown by `opera config paths`.
+# Project overrides live in <workspace>/.opera/config.toml.
+# Never put API keys, OAuth tokens or passwords in either file.
+provider = "openai"
+model = "" # Choose a model you can access; inspect `opera models`.
+thinking = "off"
+policy = "ask"
+credential_ref = "default"
+
+# User configuration only. Remove this table from project configuration.
+[credentials]
+store = "keyring" # "file" explicitly selects unencrypted user-only storage.
+
+[output]
+format = "text" # or "jsonl"
+
+[ui]
+no_motion = false
+accessible = false
+theme = "system" # system, midnight, ocean, forest, sunset, mono, dark or light
+
+[agents]
+max_concurrent = 4
+max_depth = 1
+
+[limits]
+worker_tokens = 256000
+context_tokens = 64000
+output_bytes = 1048576
+attachment_bytes = 10485760
+process_timeout = "2m"
+shutdown_timeout = "10s"
+
+# User-only paths. Project configuration cannot choose these files.
+[extensions]
+file = "" # Optional absolute private TOML path outside the workspace.
+
+[accounting]
+prices_file = "" # Optional sourced/dated JSON price table; no built-in billing rates.

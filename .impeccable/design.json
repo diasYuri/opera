@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-16T16:37:27.277790+00:00",
+  "title": "Design System: Opera",
+  "extensions": {
+    "motion": [
+      {
+        "name": "active-frame",
+        "value": "50ms",
+        "purpose": "Execution-only spinner and spring trace; disabled by --no-motion."
+      },
+      {
+        "name": "activity-spring",
+        "value": "harmonica.NewSpring(1.0/20, 8, 1)",
+        "purpose": "Indeterminate activity position; never a completion estimate."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-hints",
+        "value": "76ch"
+      },
+      {
+        "name": "minimal-hints",
+        "value": "48ch"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Composer",
+      "kind": "custom",
+      "description": "Monochrome terminal grammar preview; actual input, focus and cursor behavior are provided by Bubbles.",
+      "html": "<pre class=\"ds-terminal\">\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\u203a Message Opera\u2026\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</pre>",
+      "css": ".ds-terminal { color: inherit; background: transparent; font-family: monospace; white-space: pre-wrap; margin: 0; }",
+      "refersTo": "composer"
+    },
+    {
+      "name": "Authored message",
+      "kind": "custom",
+      "description": "Completed author/body block in native scrollback.",
+      "html": "<pre class=\"ds-terminal\">Opera\n  The requested change is ready.</pre>",
+      "css": ".ds-terminal { color: inherit; background: transparent; font-family: monospace; white-space: pre-wrap; margin: 0; }",
+      "refersTo": "authored-message"
+    },
+    {
+      "name": "Context footer",
+      "kind": "custom",
+      "description": "Context and state-specific hints below the composer.",
+      "html": "<pre class=\"ds-terminal\">openai/model \u00b7 workspace\nEnter send \u00b7 Alt+Enter newline \u00b7 /help</pre>",
+      "css": ".ds-terminal { color: inherit; background: transparent; font-family: monospace; white-space: pre-wrap; margin: 0; }"
+    },
+    {
+      "name": "Activity status",
+      "kind": "custom",
+      "description": "Textual state; the running trace is indeterminate and only animates in the terminal while active.",
+      "html": "<pre class=\"ds-terminal\">Running  \u2500\u2500\u2501\u2500\u2500\u2500</pre>",
+      "css": ".ds-terminal { color: inherit; background: transparent; font-family: monospace; white-space: pre-wrap; margin: 0; }"
+    },
+    {
+      "name": "Detail viewer",
+      "kind": "custom",
+      "description": "Temporary bounded viewport; Esc returns keyboard focus to the composer.",
+      "html": "<pre class=\"ds-terminal\">Run details\nRun: example\nState: completed\nCheckpoint: 1\n\n\u2191\u2193 scroll \u00b7 Esc back</pre>",
+      "css": ".ds-terminal { color: inherit; background: transparent; font-family: monospace; white-space: pre-wrap; margin: 0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Quiet terminal conversation",
+    "overview": "Opera is a quiet terminal conversation: authored text carries the work, a thin ruled composer marks the next action, and session context stays close to the input. Codex and pi are the confirmed visual references; minimalism is the chosen direction.\n\nThe terminal owns the font, foreground and background. Hierarchy comes from whitespace, author labels, restrained foreground accents and explicit state words. Completed messages remain in native scrollback; temporary viewers borrow focus and return it to the composer.",
+    "keyCharacteristics": [
+      "Native terminal surface and scrollback",
+      "One column, thin rules and a growing composer",
+      "Keyboard-first controls and textual states",
+      "Motion only during active execution"
+    ],
+    "rules": [
+      {
+        "name": "Terminal Ownership",
+        "body": "Use inherited terminal background and foreground; do not paint an application background.",
+        "section": "colors"
+      },
+      {
+        "name": "Text Before Color",
+        "body": "Every meaningful state has a readable text label when color is disabled.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do preserve the terminal background and native scrollback.",
+      "Do label authors and states in words, including without color.",
+      "Do keep full diagnostics and run metadata available through `/details`.",
+      "Do return focus to the composer when a temporary viewer closes."
+    ],
+    "donts": [
+      "Don't add side borders, filled cards or a permanent dashboard around chat.",
+      "Don't animate idle chat or imply a completion percentage.",
+      "Don't require color, animation or raw-mode interaction for the accessible path."
+    ]
+  }
+}

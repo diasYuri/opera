@@ -1,0 +1,7 @@
+Packaged smoke passed: --version
+Packaged smoke passed: --help
+Packaged smoke passed: doctor --format=jsonl
+Packaged smoke passed: demo chat --format=jsonl
+Packaged smoke passed: demo run --format=jsonl
+Packaged smoke passed: demo worker --format=jsonl
+Packaged smoke passed: demo headless --format=jsonl

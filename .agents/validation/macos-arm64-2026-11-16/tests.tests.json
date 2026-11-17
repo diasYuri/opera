@@ -1,0 +1,487 @@
+[
+  {
+    "package": "github.com/diasYuri/opera/internal/accounting",
+    "test": "TestCumulativeSamplesAreOneDurableRequestWithPriceProvenance",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/accounting",
+    "test": "TestMissingUsageIsEstimatedAndCostUnavailable",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/app",
+    "test": "TestOutputBudgetPreservesCompletedEffectAndBoundsEscapedUnicode",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/config",
+    "test": "TestPrecedenceAndProvenance",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/config",
+    "test": "TestEmptyAndFalseAreExplicit",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/config",
+    "test": "TestProjectCannotElevateOrSelectStore",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/config",
+    "test": "TestInvalidConfigurationNeverEchoesValues",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/config",
+    "test": "TestMissingOptionalFilesAndLimits",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/config",
+    "test": "TestWorkspaceOnboardingIsScopedAndUserOwned",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/foundation",
+    "test": "TestPublishedDependencies",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/foundation",
+    "test": "TestPublicToolCatalog",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/foundation",
+    "test": "TestNoLocalReplacements",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/demo",
+    "test": "TestFinalCodingAcceptanceAcrossSharedModes/chat",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/demo",
+    "test": "TestFinalCodingAcceptanceAcrossSharedModes/run",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestHelpVersionAndSchemaNeedNoWorkspaceOrSecrets",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestDoctorHeadlessWithMissingDependencies",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestConfigFlagsAndMalformedProject",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestAuthNeverPrintsSecretsAndPersists",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestAuthDoesNotFallBackOrReadTerminal",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestAuthStripsOnlyOneConventionalLineEnding",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestJSONLErrorsAndExplicitFalse",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestInvalidCommandsAndOutputFailure",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestHeadlessHTTPProviderApprovalAndResume",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestMemoryManagementApprovalPersistenceAndForget",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/demo",
+    "test": "TestFinalCodingAcceptanceAcrossSharedModes/worker",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/demo",
+    "test": "TestFinalCodingAcceptanceAcrossSharedModes",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestMCPHTTPActivationToolsResourcesPromptsAndNoSecretLeak",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestMCPStdioServerProcess",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestMCPStdioConsentAndCleanup",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/extensions",
+    "test": "TestSettingsConsentIsolationAndUnsupportedGrants",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/extensions",
+    "test": "TestReloadRollbackAndSafePoint",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/extensions",
+    "test": "TestReadBridgeUsesDurableCapturedRegistry",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/extensions",
+    "test": "TestConsentStoreRejectsParentSymlinkIntoWorkspace",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/extensions",
+    "test": "TestMemoryFailOpenDoesNotHideWriteOrReadinessFailure/false",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/extensions",
+    "test": "TestMemoryFailOpenDoesNotHideWriteOrReadinessFailure/true",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/extensions",
+    "test": "TestMemoryFailOpenDoesNotHideWriteOrReadinessFailure",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/extensions",
+    "test": "TestWASMReloadPinsOldGenerationAndRollsBackInvalidCandidate",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/credentials",
+    "test": "TestFileStoreLifecycle",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/credentials",
+    "test": "TestInvalidReferencesAndSecrets",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/credentials",
+    "test": "TestConcurrentDistinctReferences",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/credentials",
+    "test": "TestFileStoreRejectsUnsafePermissionsAndSymlinks",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/credentials",
+    "test": "TestKeyringErrorsDoNotExposeNativeOutput",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestMCPActivationTimeoutLeavesDisabledConfiguration",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/diagnostics",
+    "test": "TestDoctorDistinguishesCompiledHostWithoutStartingIt",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestOAuthDeviceNotificationAndSeparateSecretStore",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestSessionsInspectionDoesNotLoadProviderOrCredentials",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/contextfiles",
+    "test": "TestScopedContextBudgetIgnoreAndRedaction",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/contextfiles",
+    "test": "TestImageIsTransientAndRequiresVision",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestWASMLoadCallUnloadAndCapabilityRefusal",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/cli",
+    "test": "TestWASMTrapIsFailureAndMissingModuleCanBeUnloaded",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestUsageSurvivesReplayBranchAndCompaction",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestCodingEditApprovalAndShell",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestCodingShellRequiresApproval",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestContextCommandsAndSafeModelSwitch",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestSemanticFallbackAndGitInspection",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestReadOnlyRejectsShellWithoutEffect",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestPatchApprovalIncludesNestedFilePrecondition",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestLargeToolOutputIsInspectableAfterVisualTruncation",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestCancellationPersistsAndExplicitResumeContinues",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestCloseCancelsAndDrainsApplicationBeforeStores",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestUncertainEffectBlocksUntilExplicitReconciliation",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestVerticalApprovalCheckpointAndResume",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestDenialAndChangedDiffRequireReview",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestStartupFailureReleasesScopeAndWorkspace",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestLiveVerticalProof",
+    "status": "skip"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/persistence",
+    "test": "TestMigrationBackupVersionAndCAS",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/persistence",
+    "test": "TestCorruptDatabaseFailsBeforeUse",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestNativeProviderFixturesUseOperaToolsAndAccounting/anthropic",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestNativeProviderFixturesUseOperaToolsAndAccounting/google",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestNativeProviderFixturesUseOperaToolsAndAccounting",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestApprovalHandoffRepairsOtherUnresolvedToolResults",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestSessionCatalogBranchCompactionAndExport",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestStructuredOutputCapabilitySchemaAndInvalidResponse/valid",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestStructuredOutputCapabilitySchemaAndInvalidResponse/tool_then_JSON",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestStructuredOutputCapabilitySchemaAndInvalidResponse/wrong_type",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestStructuredOutputCapabilitySchemaAndInvalidResponse/invalid_JSON",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestStructuredOutputCapabilitySchemaAndInvalidResponse/unsupported",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestStructuredOutputCapabilitySchemaAndInvalidResponse",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/platform",
+    "test": "TestPlatformPaths",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/platform",
+    "test": "TestOverridesAndCanonicalWorkspace",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestWorkerChildrenApprovalRecoveryAndTaskIdentity",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestWorkerParallelReadsAndSerializedWrites",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestWorkerCancellationPropagatesAndInspectionDoesNotRestart",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestActiveControlsAreOrderedAndPersisted",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestNestedChildrenYieldSingleWorkerSlot",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestSharedBudgetFailsBeforeInference",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestControlJournalRecoversMissingQueueExactlyOnce",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/harness",
+    "test": "TestWorkerDenialDoesNotAuthorizeAnotherChild",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/ui",
+    "test": "TestModelSelectorWorksEntirelyFromKeyboard",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/ui",
+    "test": "TestNoMotionAndColorlessStatusCarryTextualMeaning",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/ui",
+    "test": "TestInlineViewStaysBoundedDuringLongUnicodeStreamAndResize",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/ui",
+    "test": "TestPasteHistoryAndCheckpointCommitIdentity",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/ui",
+    "test": "TestTerminalRestoredWithoutAlternateScreen",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/workspace",
+    "test": "TestQueueSerializesAndCancelsWaiter",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/workspace",
+    "test": "TestQueueFIFOWithCanceledMiddleWaiter",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/workspace",
+    "test": "TestOwnershipLockRejectsSymlinkAlias",
+    "status": "pass"
+  },
+  {
+    "package": "github.com/diasYuri/opera/internal/workspace",
+    "test": "TestOwnershipCannotBeBypassedWithDifferentDataDirectory",
+    "status": "pass"
+  }
+]

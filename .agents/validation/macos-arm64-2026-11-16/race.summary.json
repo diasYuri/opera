@@ -1,0 +1,104 @@
+{
+  "mode": "race",
+  "command": [
+    "go",
+    "test",
+    "-race",
+    "-count=1",
+    "-json",
+    "./..."
+  ],
+  "started_utc": "2026-11-16T16:06:44.703425+00:00",
+  "seconds": 28.48,
+  "exit_code": 0,
+  "platform": "Darwin/arm64",
+  "toolchain": "go1.27.4",
+  "cgo": "1",
+  "tags": "-tags=feature_lsp,feature_wasm_ext",
+  "test_counts": {
+    "pass": 96,
+    "skip": 1
+  },
+  "packages": [
+    {
+      "package": "github.com/diasYuri/opera/cmd/opera",
+      "status": "skip"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/accounting",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/app",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/credentials",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/config",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/output",
+      "status": "skip"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/diagnostics",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/foundation",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/privatefs",
+      "status": "skip"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/contextfiles",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/extensions",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/scripts",
+      "status": "skip"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/cli",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/persistence",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/platform",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/demo",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/workspace",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/ui",
+      "status": "pass"
+    },
+    {
+      "package": "github.com/diasYuri/opera/internal/harness",
+      "status": "pass"
+    }
+  ],
+  "failed": [],
+  "skipped": [
+    "TestLiveVerticalProof"
+  ]
+}

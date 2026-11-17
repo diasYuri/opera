@@ -1,0 +1,26 @@
+go mod verify
+all modules verified
+go vet ./...
+go test ./...
+?   	github.com/diasYuri/opera/cmd/opera	[no test files]
+ok  	github.com/diasYuri/opera/internal/accounting	(cached)
+ok  	github.com/diasYuri/opera/internal/app	(cached)
+ok  	github.com/diasYuri/opera/internal/cli	4.511s
+ok  	github.com/diasYuri/opera/internal/config	(cached)
+ok  	github.com/diasYuri/opera/internal/contextfiles	(cached)
+ok  	github.com/diasYuri/opera/internal/credentials	(cached)
+ok  	github.com/diasYuri/opera/internal/demo	(cached)
+ok  	github.com/diasYuri/opera/internal/diagnostics	(cached)
+ok  	github.com/diasYuri/opera/internal/extensions	(cached)
+ok  	github.com/diasYuri/opera/internal/foundation	(cached)
+ok  	github.com/diasYuri/opera/internal/harness	3.971s
+?   	github.com/diasYuri/opera/internal/output	[no test files]
+ok  	github.com/diasYuri/opera/internal/persistence	(cached)
+ok  	github.com/diasYuri/opera/internal/platform	(cached)
+?   	github.com/diasYuri/opera/internal/privatefs	[no test files]
+ok  	github.com/diasYuri/opera/internal/ui	(cached)
+ok  	github.com/diasYuri/opera/internal/workspace	(cached)
+?   	github.com/diasYuri/opera/scripts	[no test files]
+go -C testdata/sdk-consumer test -mod=readonly ./...
+ok  	opera-sdk-consumer	(cached)
+go build -trimpath -o bin/opera ./cmd/opera

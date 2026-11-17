@@ -1,0 +1,31 @@
+{
+  "mode": "consumer",
+  "command": [
+    "go",
+    "-C",
+    "testdata/sdk-consumer",
+    "test",
+    "-count=1",
+    "-mod=readonly",
+    "-json",
+    "./..."
+  ],
+  "started_utc": "2026-11-16T16:08:33.345742+00:00",
+  "seconds": 2.47,
+  "exit_code": 0,
+  "platform": "Darwin/arm64",
+  "toolchain": "go1.27.4",
+  "cgo": "0",
+  "tags": "-tags=feature_lsp,feature_wasm_ext",
+  "test_counts": {
+    "pass": 1
+  },
+  "packages": [
+    {
+      "package": "opera-sdk-consumer",
+      "status": "pass"
+    }
+  ],
+  "failed": [],
+  "skipped": []
+}

@@ -1,0 +1,89 @@
+name: CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+env:
+  GOTOOLCHAIN: go1.27.4
+  GOWORK: "off"
+  GOFLAGS: "-tags=feature_lsp,feature_wasm_ext"
+  CGO_ENABLED: "0"
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: .go-version
+          check-latest: false
+      - name: Format, architecture, vet, tests and CGO-free build
+        run: go run ./scripts check
+      - name: Lint (pinned v2.15.0, built with the selected Go)
+        run: go run ./scripts lint
+      - name: Check tidy module graph
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - name: CLI smoke without credentials or a TTY
+        shell: bash
+        run: |
+          go run ./cmd/opera --help
+          go run ./cmd/opera --version
+          go run ./cmd/opera doctor --format jsonl
+      - name: Reproducible public SDK inventory
+        run: |
+          go run ./scripts inventory
+          git diff --exit-code -- docs/y-public-api.json
+  cross-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: .go-version
+      - run: go run ./scripts matrix
+  race:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: .go-version
+      - run: go test -race ./...
+
+  native-packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15-intel, macos-15, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: .go-version
+      - name: Build local packages with licenses and checksums
+        run: go run ./scripts package
+      - name: Extract and run the native packaged binary offline
+        run: go run ./scripts package-smoke
+      - name: Native PTY or Windows ConPTY and keyboard checks
+        run: go test -count=1 ./internal/ui
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: opera-local-${{ matrix.runner }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/SHA256SUMS
+          retention-days: 7

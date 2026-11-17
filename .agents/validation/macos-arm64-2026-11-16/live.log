@@ -1,0 +1,9 @@
+{"Time":"2026-11-16T13:06:51.233722-03:00","Action":"start","Package":"github.com/diasYuri/opera/internal/harness"}
+{"Time":"2026-11-16T13:06:51.908624-03:00","Action":"run","Package":"github.com/diasYuri/opera/internal/harness","Test":"TestLiveVerticalProof"}
+{"Time":"2026-11-16T13:06:51.908728-03:00","Action":"output","Package":"github.com/diasYuri/opera/internal/harness","Test":"TestLiveVerticalProof","Output":"=== RUN   TestLiveVerticalProof\n","OutputType":"frame"}
+{"Time":"2026-11-16T13:06:57.559989-03:00","Action":"output","Package":"github.com/diasYuri/opera/internal/harness","Test":"TestLiveVerticalProof","Output":"    live_test.go:97: Live proof passed: provider=openai model=gpt-5-mini run=3ENBTKGLFAH252SUDXFSNVVO22 checkpoint=7 operations=2\n"}
+{"Time":"2026-11-16T13:06:57.565086-03:00","Action":"output","Package":"github.com/diasYuri/opera/internal/harness","Test":"TestLiveVerticalProof","Output":"--- PASS: TestLiveVerticalProof (5.66s)\n","OutputType":"frame"}
+{"Time":"2026-11-16T13:06:57.565102-03:00","Action":"pass","Package":"github.com/diasYuri/opera/internal/harness","Test":"TestLiveVerticalProof","Elapsed":5.66}
+{"Time":"2026-11-16T13:06:57.565138-03:00","Action":"output","Package":"github.com/diasYuri/opera/internal/harness","Output":"PASS\n","OutputType":"frame"}
+{"Time":"2026-11-16T13:06:57.567066-03:00","Action":"output","Package":"github.com/diasYuri/opera/internal/harness","Output":"ok  \tgithub.com/diasYuri/opera/internal/harness\t6.333s\n"}
+{"Time":"2026-11-16T13:06:57.567088-03:00","Action":"pass","Package":"github.com/diasYuri/opera/internal/harness","Elapsed":6.333}

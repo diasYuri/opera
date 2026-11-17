@@ -1,0 +1,12 @@
+[
+  {
+    "provider": "example-provider",
+    "model": "example-model",
+    "source": "Illustrative fixture only; replace with your verified source",
+    "date": "2026-11-16",
+    "input_usd_per_million": 1,
+    "output_usd_per_million": 2,
+    "cache_read_usd_per_million": 0.1,
+    "cache_write_usd_per_million": 1.2
+  }
+]

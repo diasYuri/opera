@@ -1,0 +1,30 @@
+{
+  "mode": "live",
+  "command": [
+    "go",
+    "test",
+    "-count=1",
+    "-json",
+    "-run",
+    "^TestLiveVerticalProof$",
+    "./internal/harness"
+  ],
+  "started_utc": "2026-11-16T16:06:44.703373+00:00",
+  "seconds": 12.996,
+  "exit_code": 0,
+  "platform": "Darwin/arm64",
+  "toolchain": "go1.27.4",
+  "cgo": "0",
+  "tags": "-tags=feature_lsp,feature_wasm_ext",
+  "test_counts": {
+    "pass": 1
+  },
+  "packages": [
+    {
+      "package": "github.com/diasYuri/opera/internal/harness",
+      "status": "pass"
+    }
+  ],
+  "failed": [],
+  "skipped": []
+}

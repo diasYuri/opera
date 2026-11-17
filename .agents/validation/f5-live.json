@@ -1,0 +1,11 @@
+{
+  "sdk": "v1.3.4",
+  "provider": "openai",
+  "model": "gpt-5-mini",
+  "run_id": "QCFACEOPR33E3RFS4PPLXIQMPW",
+  "checkpoint": 7,
+  "durable_operations": 2,
+  "test": "TestLiveVerticalProof",
+  "passed": true,
+  "credentials_recorded": false
+}
