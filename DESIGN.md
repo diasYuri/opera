@@ -33,7 +33,7 @@ The terminal owns the font, foreground and background. Hierarchy comes from whit
 
 ## Colors
 
-Color is a sparse foreground aid. `internal/ui/theme.go` is authoritative for ANSI palette indexes; these are terminal colors, not CSS colors, so the frontmatter deliberately has no invented hex palette.
+Color is a sparse foreground aid. `internal/ui/tui/theme.go` is authoritative for ANSI palette indexes; these are terminal colors, not CSS colors, so the frontmatter deliberately has no invented hex palette.
 
 - **Primary — muted blue:** accent foreground, Opera author labels, composer rules, shortcuts and selection. ANSI 67 for light terminals; ANSI 110 for dark terminals.
 - **Model — soft gold:** the active provider/model in session context. ANSI 137 for light terminals; ANSI 222 for dark terminals.
@@ -81,7 +81,7 @@ The composer has thin horizontal rules above and below, without side borders or 
 - **Error summary:** short recovery text in the conversation; `/details` retains full diagnostics and available run/state/checkpoint metadata. Prefer useful provider messages over transport noise.
 - **Accessible chat:** append-only canonical input without raw-mode cursor movement or periodic redraw. Use `--accessible --no-motion`; preserve the documented command alternatives in [accessibility.md](docs/accessibility.md).
 
-Bubble Tea v2 owns presentation updates, Bubbles provides interaction primitives, Lip Gloss renders terminal styling, and Harmonica supplies active spring motion. The visual source is `internal/ui/{layout,theme,chat,errors}.go`.
+Bubble Tea v2 owns presentation updates, Bubbles provides interaction primitives, Lip Gloss renders terminal styling, and Harmonica supplies active spring motion. The visual source is `internal/ui/tui/{layout,theme,chat,errors}.go`.
 
 ## Do's and Don'ts
 

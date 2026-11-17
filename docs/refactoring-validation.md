@@ -90,11 +90,12 @@ as garantias consumidas são as APIs públicas compiladas dessa versão.
 - Smoke offline passou para `bin/opera --help`, `bin/opera --version` e
   `bin/opera doctor --format jsonl`; doctor não iniciou providers nem leu segredos.
 - Nenhum teste live pago/externo foi executado.
-- `go test ./internal/ui` passou também para o índice de UI preparado isoladamente,
+- `go test ./internal/ui/tui` passou também para o índice de UI preparado isoladamente,
   usando os arquivos `HEAD` como base para separar alterações prévias. Os gates
   completos foram executados no repositório após a composição final. Mudanças locais
-  prévias em `DESIGN.md`, `app/user_question.go`, `chat.go`, `conversation.go`,
-  `layout.go`, `layout_test.go`, `theme.go` e `openai_serialization_test.go` ficaram
+  prévias em `DESIGN.md`, `internal/modules/execution/user_question.go`,
+  `internal/ui/tui/{chat,conversation,layout,layout_test,theme}.go` e
+  `internal/core/openai_serialization_test.go` ficaram
   fora dos commits desta tarefa.
 
 A implementação usa somente o SDK público Y v1.3.4 fixado em `go.mod`; não adiciona
@@ -105,9 +106,9 @@ credenciais e autorização e não fazem parte desta validação.
 
 Após a primeira entrega parcial, a revisão encontrou leitura direta do filesystem
 na preparação de aprovações e dependência dos casos de uso no pacote de I/O de
-contexto. A leitura passou à porta `app.ApprovalFileReader`, implementada em
-`internal/approvalfiles` e injetada no Service e Guard pela composição. Dados e
-projeções puras de contexto passaram para `internal/contextdata`; o adapter mantém
+contexto. A leitura passou à porta `execution.ApprovalFileReader`, implementada em
+`internal/adapters/approvals/filesystem` e injetada no módulo execution pela composição. Dados e
+projeções puras de contexto passaram para `internal/modules/context`; o adapter mantém
 aliases compatíveis. Regras de arquitetura agora impedem o retorno dessas
 dependências concretas ao app.
 

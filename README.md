@@ -119,7 +119,7 @@ respects the current reading position.
 See [F1 validation](docs/f1-validation.md) for acceptance evidence and scope, and
 [OAuth configuration](docs/oauth.md) for registered clients and URL/device flows.
 Live validation is opt-in: `OPERA_LIVE_TEST=1 GOTOOLCHAIN=go1.27.4 go test -run
-TestLiveVerticalProof -v ./internal/harness` (requires OPENAI_API_KEY; uses a
+TestLiveVerticalProof -v ./internal/core` (requires OPENAI_API_KEY; uses a
 throwaway workspace). Default tests use fake providers and HTTP/PTY fixtures.
 
 ## Interactive coding

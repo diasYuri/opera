@@ -9,8 +9,8 @@ F4 is closed; F5 remains the next planned phase.
 
 ## Implementation
 
-`internal/extensions` owns private consent settings, MCP, filesystem memory,
-WASM grants/lifecycle and generation inspection. `internal/harness` composes
+`internal/modules/extensions` owns private consent settings, MCP, filesystem memory,
+WASM grants/lifecycle and generation inspection. `internal/core` composes
 public SDK components; CLI and slash commands share its application boundary.
 The deterministic management provider feeds tools through the same AgentRunner
 and SQLite operation journal as chat/run/worker. SDK v1.3.2 checkpoints the logical

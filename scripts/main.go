@@ -160,7 +160,7 @@ func validateImport(path, name string) error {
 		return fmt.Errorf("accounting must write usage through its module contract (%s)", path)
 	}
 	if strings.HasPrefix(path, "internal/modules/") {
-		for _, blocked := range []string{"github.com/diasYuri/opera/internal/core", "github.com/diasYuri/opera/internal/ui", "github.com/diasYuri/opera/internal/cli", "github.com/diasYuri/opera/internal/adapters/providers/"} {
+		for _, blocked := range []string{"github.com/diasYuri/opera/internal/core", "github.com/diasYuri/opera/internal/ui", "github.com/diasYuri/opera/internal/ui/cli", "github.com/diasYuri/opera/internal/adapters/providers/"} {
 			if strings.HasPrefix(name, blocked) {
 				return fmt.Errorf("modules must not depend on composition, UI, CLI, or concrete providers: %s (%s)", name, path)
 			}
@@ -172,10 +172,17 @@ func validateImport(path, name string) error {
 	if strings.HasPrefix(name, "github.com/diasYuri/opera/internal/adapters/providers/") && !strings.HasPrefix(path, "internal/core/") && !strings.HasPrefix(path, "internal/adapters/providers/") {
 		return fmt.Errorf("providers may be imported only by core composition and their own modules, not %s (%s)", name, path)
 	}
-	if strings.HasPrefix(path, "internal/ui/") {
-		for _, blocked := range []string{"github.com/diasYuri/opera/internal/adapters/", "github.com/diasYuri/opera/internal/core", "github.com/diasYuri/opera/internal/cli", "github.com/diasYuri/y/pkg/providers", "github.com/diasYuri/y/pkg/agent", "github.com/diasYuri/y/pkg/tools", "os/exec"} {
+	if strings.HasPrefix(path, "internal/ui/tui/") {
+		for _, blocked := range []string{"github.com/diasYuri/opera/internal/adapters/", "github.com/diasYuri/opera/internal/core", "github.com/diasYuri/opera/internal/ui/cli", "github.com/diasYuri/y/pkg/providers", "github.com/diasYuri/y/pkg/agent", "github.com/diasYuri/y/pkg/tools", "os/exec"} {
 			if strings.HasPrefix(name, blocked) {
-				return fmt.Errorf("UI must depend on product actions/events, not %s (%s)", name, path)
+				return fmt.Errorf("TUI must depend on product actions/events, not %s (%s)", name, path)
+			}
+		}
+	}
+	if strings.HasPrefix(path, "internal/ui/cli/") {
+		for _, blocked := range []string{"github.com/diasYuri/opera/internal/adapters/providers/", "github.com/diasYuri/y/pkg/agent", "github.com/diasYuri/y/pkg/tools"} {
+			if strings.HasPrefix(name, blocked) {
+				return fmt.Errorf("CLI must use core composition and product modules, not %s (%s)", name, path)
 			}
 		}
 	}

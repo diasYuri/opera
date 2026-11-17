@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/diasYuri/opera/internal/cli"
+	"github.com/diasYuri/opera/internal/ui/cli"
 )
 
 var version = "0.0.0-dev"

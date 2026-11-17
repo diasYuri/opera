@@ -50,7 +50,7 @@ this document or test output.
 
 ## Real-provider proof
 
-`OPERA_LIVE_TEST=1 GOTOOLCHAIN=go1.27.4 go test -run TestLiveVerticalProof -v ./internal/harness`
+`OPERA_LIVE_TEST=1 GOTOOLCHAIN=go1.27.4 go test -run TestLiveVerticalProof -v ./internal/core`
 passed against **OpenAI gpt-5-mini** using the published SDK v1.3.1:
 
 - Run `UQTB4E35CSPWYSCXOHIZMTMDW2` reached pending approval before mutation.

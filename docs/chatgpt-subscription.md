@@ -132,7 +132,7 @@ The optional live regression checks use the selected subscription account with
 short text prompts; the harness check uses an empty temporary workspace:
 
 ```sh
-OPERA_SUBSCRIPTION_LIVE_TEST=1 OPERA_SUBSCRIPTION_WORKSPACE="$PWD" go test ./internal/cli -run 'TestLiveSubscription(ConversationHistory|HarnessConversation)' -v
+OPERA_SUBSCRIPTION_LIVE_TEST=1 OPERA_SUBSCRIPTION_WORKSPACE="$PWD" go test ./internal/ui/cli -run 'TestLiveSubscription(ConversationHistory|HarnessConversation)' -v
 ```
 
 These checks consume a small amount of subscription usage. Default tests stay

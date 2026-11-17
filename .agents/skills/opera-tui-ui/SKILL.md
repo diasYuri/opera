@@ -7,20 +7,20 @@ metadata:
 
 # UI TUI do Opera
 
-Use esta skill ao criar, alterar, revisar ou reorganizar telas, componentes, fluxos de interação, layout e temas em `internal/ui`.
+Use esta skill ao criar, alterar, revisar ou reorganizar telas, componentes, fluxos de interação, layout e temas em `internal/ui/tui`.
 
 ## Direção
 
 Adote da interface SwiftUI/iPhone os princípios de composição declarativa, hierarquia clara, estado explícito, componentes focados e design tokens consistentes. Traduza esses princípios para uma interface de terminal com prioridade para teclado, texto, scrollback nativo, adaptação a dimensões variáveis e acessibilidade. Não imite controles, cartões, navegação por toque ou animações móveis quando não se encaixarem no terminal.
 
-Antes de decidir o desenho, consulte `DESIGN.md` e os componentes já existentes em `internal/ui`. `DESIGN.md` define a direção visual do Opera e prevalece sobre referências genéricas; a implementação em Go e as bibliotecas Charm determinam como compor a interface.
+Antes de decidir o desenho, consulte `DESIGN.md` e os componentes já existentes em `internal/ui/tui`. `DESIGN.md` define a direção visual do Opera e prevalece sobre referências genéricas; a implementação em Go e as bibliotecas Charm determinam como compor a interface.
 
 ## Modelo mental
 
 - **Tela é composição:** organize cada superfície como uma composição de áreas e componentes com funções nomeadas. Reaproveite elementos visuais e comportamentos quando houver mais de um consumidor ou uma responsabilidade realmente comum; evite abstrações genéricas sem uso concreto.
 - **Estado tem proprietário:** mantenha estado de interação no `model`/submodelo responsável. Atualize estado e trate eventos em `Update`; represente efeitos externos como comandos Bubble Tea (`tea.Cmd`) e devolva seus resultados como mensagens.
 - **Renderização descreve o estado atual:** `View` e helpers de renderização devem derivar saída do estado e das dimensões disponíveis. Não façam I/O, não iniciem goroutines, não alterem o modelo nem agendem trabalho recorrente.
-- **Tema é semântico:** consuma a paleta central de `internal/ui/theme.go` para texto, contexto secundário, acento, informação, aviso, erro, sucesso e borda. Um componente deve expressar intenção sem escolher sua própria paleta. Mantenha texto compreensível sem cor.
+- **Tema é semântico:** consuma a paleta central de `internal/ui/tui/theme.go` para texto, contexto secundário, acento, informação, aviso, erro, sucesso e borda. Um componente deve expressar intenção sem escolher sua própria paleta. Mantenha texto compreensível sem cor.
 - **Adaptação é parte do componente:** passe ou derive largura e altura disponíveis; limite conteúdo, preserve wrap e clipping Unicode/ANSI apropriados e simplifique hints em larguras estreitas. Não suponha tamanho fixo de terminal.
 
 ## Organização e componentização
@@ -58,7 +58,7 @@ Antes de decidir o desenho, consulte `DESIGN.md` e os componentes já existentes
 ## Referências do repositório
 
 - `DESIGN.md`: identidade visual, layout, componentes, acessibilidade e limites de movimento.
-- `internal/ui/theme.go`: paletas semânticas e estilos de controles reutilizados.
-- `internal/ui/layout.go`: ciclo de layout, dimensões, status e movimento.
-- `internal/ui/chat.go`: estado principal, transições, comandos e composição dos fluxos.
-- `internal/ui/conversation.go`: composição de conteúdo, Markdown e mensagens.
+- `internal/ui/tui/theme.go`: paletas semânticas e estilos de controles reutilizados.
+- `internal/ui/tui/layout.go`: ciclo de layout, dimensões, status e movimento.
+- `internal/ui/tui/chat.go`: estado principal, transições, comandos e composição dos fluxos.
+- `internal/ui/tui/conversation.go`: composição de conteúdo, Markdown e mensagens.

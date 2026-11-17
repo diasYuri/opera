@@ -24,7 +24,7 @@ The normal profile uses `GOTOOLCHAIN=go1.27.4`, `GOWORK=off`, `CGO_ENABLED=0`
 and `GOFLAGS=-tags=feature_lsp,feature_wasm_ext`. The race invocation uses
 `CGO_ENABLED=1`, as required by the detector. The feature-disabled invocation
 uses empty `GOFLAGS`. Enable the live invocation with `OPERA_LIVE_TEST=1` and
-run `go test -count=1 -json -run '^TestLiveVerticalProof$' ./internal/harness`.
+run `go test -count=1 -json -run '^TestLiveVerticalProof$' ./internal/core`.
 
 The uncached suite covered approval/denial, changed preconditions, persisted
 resume, branches, compaction, uncertain effects, steering/follow-ups,

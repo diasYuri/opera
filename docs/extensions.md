@@ -53,17 +53,19 @@ Providers are registered in an instance-scoped `providercatalog.Catalog` with an
 ID, selection metadata and factory. The same catalog supplies execution and the
 chat provider/model selectors. Generic configuration accepts provider IDs and
 composition reports an unregistered ID with context. The default native
-implementations live in `internal/provideradapters`; applications may pass a
-different `ProviderCatalog` to `harness.Open` or `cli.App` without adding a provider switch.
+implementations live in `internal/adapters/providers/<provider>`; the core
+aggregates the selected entries and applications may pass a
+different `ProviderCatalog` to `core.Open` or `ui/cli.App` without adding a provider switch.
 `TestCustomProviderCatalogExecutesOwnImplementation` in
-`internal/harness/integration_test.go` demonstrates an offline scripted provider
+`internal/core/integration_test.go` demonstrates an offline scripted provider
 executing through the real application service.
 `TestHeadlessRunUsesInjectedProviderCatalog` checks the same boundary through CLI.
 
-Native tool packs are selected by ID in the harness. Pass `DisabledToolPacks` to
+Native tool packs are selected by ID in core composition. Pass
+`DisabledToolPacks` to
 remove a default pack, or `ToolPacks` to contribute a separately owned pack. The
 executable example `Example_customToolPack` in
-`internal/harness/toolpacks_example_test.go` removes the default packs and
+`internal/core/toolpacks_example_test.go` removes the default packs and
 registers a custom tool using the same public Y registry consumed by the runner.
 Pack registration occurs during the tools component's `Start`; the component
 owns the registry and closes every registration together. Extensions continue to

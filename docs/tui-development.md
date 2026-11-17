@@ -41,7 +41,7 @@ Glamour: Markdown com renderizador reutilizado por largura/tema. Harmonica: movi
 informativo durante atividade. Avalie estas APIs antes de implementar um controle.
 Exceções precisam de limitação concreta documentada.
 
-DESIGN.md prevalece para identidade visual: terminal fornece fonte, foreground e
+As fontes de TUI ficam em `internal/ui/tui`. DESIGN.md prevalece para identidade visual: terminal fornece fonte, foreground e
 background; coluna única, composer com regras finas, histórico em viewport independente e composer fixo no
 rodapé, usando alternate screen no chat interativo. O caminho acessível continua
 append-only. Não copiar cartões ou navegação por
@@ -55,7 +55,7 @@ Descarte resultados antigos em Update. Ticks existem somente durante atividade;
 no-motion e estado idle não podem manter redesenho periódico ou cursor piscando.
 
 Layout usa colunas ANSI/Unicode, não bytes. Renderize conteúdo visível, adapte hints,
-wrap e clipping em terminais pequenos. Tokens semânticos vêm de theme.go. NO_COLOR
+wrap e clipping em terminais pequenos. Tokens semânticos vêm de `internal/ui/tui/theme.go`. NO_COLOR
 é presença da variável, mesmo vazia. Estados possuem texto além de cor. O caminho
 acessível é append-only, sem raw-mode, cursor movement ou animação obrigatória.
 Contribuições de extensions são dados limitados e sanitizados, nunca renderizadores
