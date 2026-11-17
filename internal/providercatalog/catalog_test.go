@@ -7,6 +7,7 @@ import (
 
 	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/y/pkg/providers"
+	"github.com/diasYuri/y/pkg/providers/providertest"
 )
 
 func TestCatalogRejectsDuplicateAndUnknownProviders(t *testing.T) {
@@ -28,5 +29,22 @@ func TestCatalogRejectsDuplicateAndUnknownProviders(t *testing.T) {
 	}
 	if _, err := catalog.Create(context.Background(), config.Resolved{Values: map[string]config.Value{"provider": {Value: "custom"}}}, nil); err == nil || err.Error() != "create provider \"custom\": factory reached" {
 		t.Fatalf("custom provider factory error = %v", err)
+	}
+}
+
+func TestCatalogRejectsFactoryWithMismatchedProviderID(t *testing.T) {
+	provider := providertest.NewFakeProvider()
+	catalog, err := New(Entry{ID: "custom", Factory: func(context.Context, config.Resolved, func(context.Context, string) (string, error)) (providers.Provider, error) {
+		return provider, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = catalog.Create(context.Background(), config.Resolved{Values: map[string]config.Value{"provider": {Value: "custom"}}}, nil)
+	if err == nil || err.Error() != `provider "custom" factory returned provider "fake"` {
+		t.Fatalf("mismatched provider error = %v", err)
+	}
+	if !provider.IsClosed() {
+		t.Fatal("mismatched provider was not closed")
 	}
 }

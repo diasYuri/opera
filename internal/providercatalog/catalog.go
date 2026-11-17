@@ -64,6 +64,10 @@ func (c *Catalog) Create(ctx context.Context, cfg config.Resolved, lookup func(c
 	if provider == nil {
 		return nil, fmt.Errorf("provider %q factory returned nil", id)
 	}
+	if provider.ID() != id {
+		_ = provider.Close()
+		return nil, fmt.Errorf("provider %q factory returned provider %q", id, provider.ID())
+	}
 	return provider, nil
 }
 

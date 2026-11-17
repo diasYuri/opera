@@ -10,6 +10,7 @@ func TestValidateImportEnforcesArchitectureBoundaries(t *testing.T) {
 		{"internal/app/service.go", "github.com/diasYuri/y/pkg/agent", false},
 		{"internal/app/service.go", "github.com/diasYuri/y/pkg/storage/sqlite", true},
 		{"internal/app/ports.go", "github.com/diasYuri/opera/internal/persistence", true},
+		{"internal/app/service.go", "github.com/diasYuri/opera/internal/skills", true},
 		{"internal/harness/open.go", "github.com/diasYuri/y/pkg/providers", false},
 		{"internal/harness/open.go", "github.com/diasYuri/y/pkg/providers/openai", true},
 		{"internal/provideradapters/native.go", "github.com/diasYuri/y/pkg/providers/openai", false},

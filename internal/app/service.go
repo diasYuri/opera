@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/diasYuri/opera/internal/contextfiles"
-	"github.com/diasYuri/opera/internal/skills"
+	"github.com/diasYuri/opera/internal/skillcatalog"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/agent/compaction"
 	"github.com/diasYuri/y/pkg/ai"
@@ -49,11 +49,11 @@ type Service struct {
 
 // RunSkills is the application-facing skill projection and run-lifecycle port.
 type RunSkills interface {
-	Refresh() skills.Catalog
-	Catalog() skills.Catalog
-	PinRun(string) skills.Catalog
+	Refresh() skillcatalog.Catalog
+	Catalog() skillcatalog.Catalog
+	PinRun(string) skillcatalog.Catalog
 	ReleaseRun(string)
-	CatalogFor(string) skills.Catalog
+	CatalogFor(string) skillcatalog.Catalog
 	SystemPromptFor(string) string
 	ExplicitNames(string, string) []string
 	InstructionsForNames(string, []string) string
