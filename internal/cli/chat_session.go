@@ -43,6 +43,9 @@ type chatSession struct {
 }
 
 func newChatSession(a App, cfg config.Resolved, opts harness.Options, r *harness.Runtime) *chatSession {
+	if opts.ProviderCatalog == nil {
+		opts.ProviderCatalog = a.ProviderCatalog
+	}
 	values := make(map[string]config.Value, len(cfg.Values))
 	for k, v := range cfg.Values {
 		values[k] = v

@@ -72,7 +72,7 @@ func (a App) execution(command string, opts options, cfg config.Resolved, jsonl 
 	if err != nil {
 		return a.fail(2, err, jsonl)
 	}
-	harnessOpts := harness.Options{ResponseFormat: format, Management: opts.management, Offline: opts.offline, Secret: a.extensionSecret(cfg), Thinking: cfg.String("thinking"), ContextPaths: opts.attachments, ResumeID: request.ID, Credential: a.credentialLookup(cfg)}
+	harnessOpts := harness.Options{ProviderCatalog: a.ProviderCatalog, ResponseFormat: format, Management: opts.management, Offline: opts.offline, Secret: a.extensionSecret(cfg), Thinking: cfg.String("thinking"), ContextPaths: opts.attachments, ResumeID: request.ID, Credential: a.credentialLookup(cfg)}
 	if command == "chat" && !jsonl {
 		return a.interactiveChat(ctx, cfg, harnessOpts, request)
 	}

@@ -48,3 +48,30 @@ func TestCatalogRejectsFactoryWithMismatchedProviderID(t *testing.T) {
 		t.Fatal("mismatched provider was not closed")
 	}
 }
+
+func TestCatalogClosesPartialProviderAndPreservesErrors(t *testing.T) {
+	factoryFailure := errors.New("factory failure")
+	cleanupFailure := errors.New("cleanup failure")
+	provider := &failedProvider{FakeProvider: providertest.NewFakeProvider(), closeError: cleanupFailure}
+	catalog, err := New(Entry{ID: "custom", Factory: func(context.Context, config.Resolved, func(context.Context, string) (string, error)) (providers.Provider, error) {
+		return provider, factoryFailure
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = catalog.Create(context.Background(), config.Resolved{Values: map[string]config.Value{"provider": {Value: "custom"}}}, nil)
+	if !errors.Is(err, factoryFailure) || !errors.Is(err, cleanupFailure) {
+		t.Fatalf("lost factory/cleanup errors: %v", err)
+	}
+	if provider.closed != 1 {
+		t.Fatalf("partial provider closed %d times", provider.closed)
+	}
+}
+
+type failedProvider struct {
+	*providertest.FakeProvider
+	closeError error
+	closed     int
+}
+
+func (p *failedProvider) Close() error { p.closed++; return p.closeError }

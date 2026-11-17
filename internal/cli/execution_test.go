@@ -1,8 +1,14 @@
 package cli_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/credentials"
+	"github.com/diasYuri/opera/internal/providercatalog"
+	"github.com/diasYuri/y/pkg/agent/agenttest"
+	"github.com/diasYuri/y/pkg/providers"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -71,5 +77,29 @@ func TestHeadlessHTTPProviderApprovalAndResume(t *testing.T) {
 	}
 	if strings.Contains(f.out.String()+f.err.String(), "fixture-key") {
 		t.Fatal("credential leaked into output")
+	}
+}
+
+type customCLIProvider struct{ *agenttest.ScriptProvider }
+
+func (customCLIProvider) ID() string { return "custom-cli" }
+
+func TestHeadlessRunUsesInjectedProviderCatalog(t *testing.T) {
+	f := newFixture(t)
+	catalog, err := providercatalog.New(providercatalog.Entry{ID: "custom-cli", Factory: func(context.Context, config.Resolved, func(context.Context, string) (string, error)) (providers.Provider, error) {
+		return customCLIProvider{agenttest.NewScriptProvider(t, agenttest.TextTurn("custom CLI answer"))}, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.app.ProviderCatalog = catalog
+	f.app.OpenStore = func(string, string) (credentials.Store, error) {
+		return &extensionSecrets{value: "fixture-credential"}, nil
+	}
+	if code := f.app.Run([]string{"run", "hello", "--provider=custom-cli", "--model=scripted", "--policy=ask", "--format=jsonl"}); code != 0 {
+		t.Fatalf("custom catalog run code %d: %s", code, &f.err)
+	}
+	if !strings.Contains(f.out.String(), "custom CLI answer") {
+		t.Fatalf("custom provider answer missing: %s", &f.out)
 	}
 }

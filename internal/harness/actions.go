@@ -137,8 +137,7 @@ func (r *Runtime) Command(ctx context.Context, text string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		r.opts.ContextPaths = paths
-		r.Service.ContextPaths = paths
+		r.SetContextPaths(paths)
 		var out strings.Builder
 		for _, source := range bundle.Sources {
 			fmt.Fprintf(&out, "%s (%s, %d bytes)\n", source.Path, source.Kind, source.Bytes)

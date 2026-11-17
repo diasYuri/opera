@@ -9,6 +9,15 @@ import (
 	"github.com/diasYuri/y/pkg/storage/sqlite"
 )
 
+type compositionKeys struct {
+	records    component.Key[*persistence.Store]
+	store      component.Key[*sqlite.Store]
+	runner     component.Key[*agent.AgentRunner]
+	service    component.Key[*app.Service]
+	work       component.Key[*app.Work]
+	extensions component.Key[*extensions.Manager]
+}
+
 func newCompositionKeys() compositionKeys {
 	return compositionKeys{
 		records:    component.NewKey[*persistence.Store]("opera.records", "1.0.0"),

@@ -372,3 +372,35 @@ func TestProviderFactoryErrorClosesPartialProvider(t *testing.T) {
 		t.Fatalf("partial provider close count = %d, want 1", providerClosed)
 	}
 }
+
+func TestContextCommandUpdatesRequestSourceAndResume(t *testing.T) {
+	ctx := context.Background()
+	cfg := configuration(t)
+	if err := os.WriteFile(filepath.Join(cfg.Paths.Workspace, "guide.txt"), []byte("workspace guidance"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	runtime := open(t, cfg, agenttest.TextTurn("done"))
+	if _, err := runtime.Command(ctx, "/context guide.txt"); err != nil {
+		t.Fatal(err)
+	}
+	paths := runtime.Service.ContextPathSource.Current()
+	if len(paths) != 1 || paths[0] != "guide.txt" {
+		t.Fatalf("context command paths = %v", paths)
+	}
+	result, err := runtime.Service.Execute(ctx, app.Request{Prompt: "hello"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeRuntime(t, runtime)
+	resumed, err := harness.Open(ctx, cfg, harness.Options{ResumeID: result.ID, ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+		return namedProvider{agenttest.NewScriptProvider(t)}, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeRuntime(t, resumed)
+	paths = resumed.Service.ContextPathSource.Current()
+	if len(paths) != 1 || paths[0] != "guide.txt" {
+		t.Fatalf("resumed context paths = %v", paths)
+	}
+}

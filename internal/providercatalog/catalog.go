@@ -59,14 +59,17 @@ func (c *Catalog) Create(ctx context.Context, cfg config.Resolved, lookup func(c
 	}
 	provider, err := entry.Factory(ctx, cfg, lookup)
 	if err != nil {
+		if provider != nil {
+			err = errors.Join(err, provider.Close())
+		}
 		return nil, fmt.Errorf("create provider %q: %w", id, err)
 	}
 	if provider == nil {
 		return nil, fmt.Errorf("provider %q factory returned nil", id)
 	}
 	if provider.ID() != id {
-		_ = provider.Close()
-		return nil, fmt.Errorf("provider %q factory returned provider %q", id, provider.ID())
+		mismatch := fmt.Errorf("provider %q factory returned provider %q", id, provider.ID())
+		return nil, errors.Join(mismatch, provider.Close())
 	}
 	return provider, nil
 }
