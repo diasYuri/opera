@@ -69,6 +69,9 @@ as garantias consumidas são as APIs públicas compiladas dessa versão.
   `keys.go` e dependências descritas nos descriptors Y. O request hook não captura
   mais o Service por comunicação lateral. Runtime e lifecycle continuam usando
   `runtime.Harness` público de Y.
+- `9c5d78b fix(harness): close providers returned with factory errors`: se uma
+  factory retorna provider junto com erro, a composição fecha o recurso parcial; o
+  teste comprova fechamento único.
 - Um teste de harness demonstra substituição por um provider scriptado registrado em
   `providercatalog.Catalog`, sem rede, credenciais ou alteração do core. A factory
   legada continua aceitando os doubles existentes com ID `openai`.
@@ -87,9 +90,10 @@ as garantias consumidas são as APIs públicas compiladas dessa versão.
 - Smoke offline passou para `bin/opera --help`, `bin/opera --version` e
   `bin/opera doctor --format jsonl`; doctor não iniciou providers nem leu segredos.
 - Nenhum teste live pago/externo foi executado.
-- Os testes dos owners TUI, harness e CLI passaram também em execução isolada do
-  índice preparado para o commit da UI, usando os arquivos `HEAD` como base; mudanças
-  locais prévias em `DESIGN.md`, `app/user_question.go`, `chat.go`, `conversation.go`,
+- `go test ./internal/ui` passou também para o índice de UI preparado isoladamente,
+  usando os arquivos `HEAD` como base para separar alterações prévias. Os gates
+  completos foram executados no repositório após a composição final. Mudanças locais
+  prévias em `DESIGN.md`, `app/user_question.go`, `chat.go`, `conversation.go`,
   `layout.go`, `layout_test.go`, `theme.go` e `openai_serialization_test.go` ficaram
   fora dos commits desta tarefa.
 
