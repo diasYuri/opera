@@ -217,6 +217,30 @@ func TestComposerStaysPinnedWhileHistoryScrolls(t *testing.T) {
 	}
 }
 
+func TestAssistantOutputAfterToolStaysAfterTool(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
+	updated, _ := m.Update(started{execution: &app.Execution{ID: "run-1"}})
+	m = updated.(model)
+	if len(m.conversation.entries) != 0 {
+		t.Fatal("execution start inserted an empty assistant item before any output")
+	}
+	m.updateConversationEvent(&app.Event{Type: "message_delta", RunID: "run-1", Sequence: 1, Text: "before tool"})
+	m.updateConversationEvent(&app.Event{
+		Type: "tool_started", RunID: "run-1", Sequence: 2,
+		Data: []byte(`{"tool_call":{"id":"call-1","name":"read_file","arguments":{"path":"example.txt"}}}`),
+	})
+	m.updateConversationEvent(&app.Event{Type: "message_delta", RunID: "run-1", Sequence: 3, Text: "after tool"})
+
+	content := m.renderConversation()
+	before := strings.Index(content, "before tool")
+	tool := strings.Index(content, "read_file · Running")
+	after := strings.Index(content, "after tool")
+	if before < 0 || tool < 0 || after < 0 || before >= tool || tool >= after {
+		t.Fatalf("conversation entries lost event order: before=%d tool=%d after=%d\n%s", before, tool, after, content)
+	}
+}
+
 func TestExternalControlCharactersCannotMoveTerminalCursor(t *testing.T) {
 	got := safeText("safe\x1b[2J\r\x00\b\a\ttext\nnext")
 	if got != "safe text\nnext" {

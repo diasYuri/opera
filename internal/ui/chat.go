@@ -56,6 +56,7 @@ type model struct {
 	pastedImages           []string
 	activeImagePaths       []string
 	runGeneration          uint64
+	assistantSegment       uint64
 	currentAssistantID     string
 	todoTasks              []TaskItem
 	todoRunID              string
@@ -224,6 +225,17 @@ func (m model) start(request app.Request) tea.Cmd {
 }
 func next(execution *app.Execution) tea.Cmd {
 	return func() tea.Msg { value, ok := <-execution.Updates; return updateMsg{value, ok} }
+}
+
+func (m model) assistantTextForCurrentRun(runID string) string {
+	baseID := fmt.Sprintf("assistant:%s:%d", runID, m.runGeneration)
+	var text strings.Builder
+	for _, entry := range m.conversation.entries {
+		if entry.kind == conversationAssistant && (entry.id == baseID || strings.HasPrefix(entry.id, baseID+":")) {
+			text.WriteString(entry.text)
+		}
+	}
+	return text.String()
 }
 
 func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
@@ -481,8 +493,8 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastError = ""
 		m.status = "Running"
 		m.runGeneration++
+		m.assistantSegment = 0
 		m.currentAssistantID = fmt.Sprintf("assistant:%s:%d", msg.execution.ID, m.runGeneration)
-		m.appendEntry(conversationEntry{id: m.currentAssistantID, kind: conversationAssistant, state: "Opera"})
 		m.resize()
 		commands := []tea.Cmd{next(m.stream), m.animate()}
 		if cmd := m.loadTaskSnapshot(m.stream.ID); cmd != nil {
@@ -619,17 +631,28 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			if text == "" {
 				text = result.Text
 			}
+			ledgerText := m.assistantTextForCurrentRun(result.ID)
+			missingText := ""
+			if strings.HasPrefix(text, ledgerText) {
+				missingText = strings.TrimPrefix(text, ledgerText)
+			} else if ledgerText == "" {
+				missingText = text
+			}
 			m.text = ""
 			m.streamBuffer = nil
 			commands := []tea.Cmd{}
 			identity := fmt.Sprintf("%s:%d", result.ID, result.Checkpoint)
 			if m.conversation.commitCheckpoint(identity) {
-				if text != "" {
+				if missingText != "" {
 					id := m.currentAssistantID
 					if id == "" {
 						id = fmt.Sprintf("assistant:%s:%d", result.ID, result.Checkpoint)
 					}
-					m.appendEntry(conversationEntry{id: id, kind: conversationAssistant, text: text, state: "Opera"})
+					entry := m.entry(id, conversationEntry{id: id, kind: conversationAssistant, state: "Opera"})
+					entry.text += missingText
+					entry.rendered = ""
+					entry.renderedWidth = 0
+					m.appendEntry(entry)
 				}
 				if msg.update.Error != nil {
 					m.appendEntry(conversationEntry{id: fmt.Sprintf("error:%s:%d", result.ID, result.Checkpoint), kind: conversationError, text: msg.update.Error.Error()})
@@ -1217,6 +1240,7 @@ func (m *model) loadSessionView(view SessionView) {
 	m.text = ""
 	m.streamBuffer = nil
 	m.currentAssistantID = ""
+	m.assistantSegment = 0
 	for _, message := range view.Messages {
 		kind, state := conversationAssistant, "Opera"
 		if message.Role == "You" {
@@ -1259,6 +1283,7 @@ func (m *model) clearConversation() {
 	m.conversation.resetLedger()
 	m.queuedMessages = nil
 	m.currentAssistantID = ""
+	m.assistantSegment = 0
 	m.lastSequence = 0
 	m.followUp = false
 	m.todoTasks = nil

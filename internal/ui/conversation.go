@@ -211,8 +211,13 @@ func (m *model) updateConversationEvent(event *app.Event) {
 			id := m.currentAssistantID
 			if id == "" {
 				id = "assistant:" + event.RunID
+				m.currentAssistantID = id
 			}
-			m.appendEntry(conversationEntry{id: id, kind: conversationAssistant, text: m.text, state: "Opera"})
+			entry := m.entry(id, conversationEntry{id: id, kind: conversationAssistant, state: "Opera"})
+			entry.text += event.Text
+			entry.rendered = ""
+			entry.renderedWidth = 0
+			m.appendEntry(entry)
 		}
 	case "thinking_delta":
 		if payload.ThinkingDelta != "" {
@@ -256,6 +261,12 @@ func (m *model) updateConversationEvent(event *app.Event) {
 			m.appendVisualEvent("skill:"+id, visualSkill, name, body, "Active")
 		}
 		m.appendEntry(conversationEntry{id: "tool:" + id, kind: conversationTool, toolID: id, toolName: payload.ToolCall.Name, arguments: string(payload.ToolCall.Arguments), state: "Running"})
+		m.assistantSegment++
+		runID := event.RunID
+		if runID == "" && m.stream != nil {
+			runID = m.stream.ID
+		}
+		m.currentAssistantID = fmt.Sprintf("assistant:%s:%d:%d", runID, m.runGeneration, m.assistantSegment)
 		if payload.ToolCall.Name != "" {
 			m.status = "Tool: " + payload.ToolCall.Name
 		}
