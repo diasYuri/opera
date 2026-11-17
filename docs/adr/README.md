@@ -13,3 +13,4 @@ mean its future execution capability is already implemented.
 7. [Ports and open component composition](007-ports-components.md)
 
 8. [Fullscreen chat regions](008-fullscreen-chat.md)
+9. [Core based on Y, cohesive modules and external adapters](009-core-y-and-cohesive-modules.md)

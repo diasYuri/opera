@@ -22,41 +22,48 @@ quando esse arquivo/ferramenta estiver disponível; `rtk proxy` executa comandos
 sem filtragem. Use `rg` para navegação. Em repositórios com `.codegraph/`, consulte
 CodeGraph antes de procurar/ler código; não crie índice sem solicitação.
 
-## Core e direção das dependências
+## Core Y, módulos e direção das dependências
 
-O Y possui loop do agente, turns, ferramentas, estado/snapshots, protocolo de eventos,
-retomada, idempotência, runtime views e lifecycle de componentes. Não copie nem
-mantenha outro loop, registry de execução ou gerenciador de gerações no Opera.
-Opera possui configuração/defaults, casos de uso, política do produto, composição,
-adapters e apresentação. Não invoque o binário Y como backend.
+Y é fundação do Opera, não provider nem adapter. O core usa diretamente o SDK
+público Y: `runtime.Harness`, composição de componentes, lifecycle, runtime views
+e protocolos. Não copie o loop do agente, turns, registry de execução, snapshots,
+retomada ou gerenciador de gerações. Não invoque o binário Y.
 
-Use arquitetura de portas e adaptadores pragmática:
+- `cmd/opera`: entrada mínima do processo.
+- `internal/core`: integração acoplada ao runtime Y, composition root, definição
+  do grafo, keys, bindings e configuração da composição.
+- `internal/modules/<capacidade>`: regras, estado e serviços coesos do produto,
+  como execution, sessions, approvals, context, skills e extensions. Módulos podem
+  colaborar diretamente por dependências concretas acíclicas.
+- `internal/adapters`: integrações concretas externas e efeitos substituíveis.
+  Cada provider externo tem seu próprio submódulo em
+  `internal/adapters/providers/<provider>`.
+- `internal/ui/cli`: comandos, flags, stdin/stdout e fronteira do processo.
+- `internal/ui/tui`: Bubble Tea, composição de tela e estado de interação.
 
-- `cmd/opera`: entrada mínima e saída do processo.
-- `internal/cli`: adaptador de entrega e bootstrap; traduz flags/entrada/saída,
-  abre a composição e conecta UI. Não define semântica de execução.
-- `internal/ui`: apresentação, estado de interação e tradução de intenções em
-  ações. Não conhece providers, drivers, harness ou execução de ferramentas.
-- `internal/app`: casos de uso, ações/eventos, contratos/portas consumidoras e
-  regras do produto compartilhadas por chat, CLI/headless e workers.
-- `internal/harness`: composition root, factories/componentes, bindings,
-  configuração e ownership dos recursos sobre `runtime.Harness` público.
-- Adapters de providers, persistência, contexto, credenciais, skills e plataforma:
-  implementam portas; detalhes concretos não entram em app.
-- `internal/extensions`: configuração, consentimento e gestão das integrações do
-  Opera por `extensions.Host`/componentes públicos do Y.
+O core pode compor módulos e adapters; módulos não importam o core nem a UI.
+Módulos podem usar contratos públicos Y que façam parte da capacidade. O lifecycle
+de `runtime.Harness` e a montagem do grafo pertencem ao core. A UI depende de
+operações e dados de produto, não de provider, persistence, tool execution ou
+implementação concreta do runtime.
 
-Dependências apontam para contratos do consumidor e SDK público. App não importa
-CLI/UI/harness, providers concretos, driver SQL ou implementação SQLite. UI não
-importa agent/providers/tools, persistence ou os/exec. Não crie dependência entre
-extensions; use serviços/contratos compartilhados. CLI pode compor adapters no
-bootstrap; regras comuns continuam em app. Testes externos de integração podem
-compor concretos para verificar a fronteira; o core de produção não pode.
+Não aplique ports and adapters a toda chamada interna. Crie interface pequena
+quando delimitar efeito externo, substituição real ou consumidor isolado. Não
+introduza interfaces apenas para esconder dependência interna coerente; não
+repita tipos públicos Y em wrappers. Se dois módulos precisarem depender um do
+outro reciprocamente, mantenha a lógica junta até existir um corte acíclico real.
 
-Portas são pequenas e coesas, definidas onde são consumidas. Reutilize interfaces
-públicas Y em vez de espelhá-las. Não envolva cada método do SDK em wrapper sem
-variação real. Tipos de dados compartilhados devem ser independentes de I/O.
-SQLite pode ser o default; não pode ser requisito oculto dos casos de uso.
+Providers, drivers SQL, OAuth/transporte, keyring, filesystem, clipboard e
+processos ficam nos adapters responsáveis. Um provider possui cliente,
+autenticação, metadados e factory próprios. O core agrega as factories em uma
+instância de catálogo; não existe registro por `init`, estado global mutável,
+switch de providers em módulos/UI ou fallback silencioso. Configuração,
+descoberta, autenticação e execução usam a mesma fonte de composição.
+
+Mantenha um `go.mod`. Não crie `domain/application/infrastructure` repetidos para
+cada capability nem diretórios vazios para antecipar abstrações. Organização
+acompanha ownership e fluxo de mudança. Tipos de dados compartilhados não fazem
+I/O; helpers internos não viram plugins sem necessidade concreta.
 
 ## Componentes, providers e extensibilidade
 
@@ -131,7 +138,8 @@ nas fronteiras, incluindo texto/ANSI e contribuições de UI.
 
 ## Paradigma TUI inspirado em SwiftUI
 
-Para qualquer mudança em `internal/ui`, aplique a skill local
+Para qualquer mudança em `internal/ui/tui` (ou em TUI ainda localizada sob
+`internal/ui` durante a migração), aplique a skill local
 [opera-tui-ui](.agents/skills/opera-tui-ui/SKILL.md) e leia DESIGN.md. A inspiração
 SwiftUI orienta composição, identidade estável e estado explícito; Go/Charm é a
 implementação. Não crie DSL de Views, bindings por ponteiros mutáveis ou framework
@@ -173,9 +181,10 @@ cartões ou navegação móvel que prejudiquem o terminal.
 
 1. Inspecione git status e mudanças locais; preserve trabalho prévio. Leia contratos,
    testes e ADRs da área. Diagnostique o caminho atual antes de adicionar subsistema.
-2. Defina owner, porta, efeitos, lifecycle, erros e critério observável da mudança.
+2. Defina owner, módulo, efeitos externos, lifecycle, erros e critério observável.
    Prefira composição explícita, funções/tipos pequenos, responsabilidades coesas e
-   dependências acíclicas. Aplique SOLID/DRY sem abstração antecipada.
+   dependências acíclicas. Módulos internos podem colaborar diretamente; use SOLID/
+   DRY sem abstração antecipada ou interfaces só para atravessar packages.
 3. Implemente uma etapa completa, preservando comportamento público. Adicione testes
    de contrato/regressão para mudança relevante, limites e falhas; não testes que
    apenas espelham código. Evite novos pacotes/camadas sem consumidor concreto.
@@ -200,7 +209,7 @@ Build normal: GOWORK=off, CGO_ENABLED=0 e tags feature_lsp,feature_wasm_ext.
   incidental. `go mod tidy` também não deve alterar módulos incidentalmente.
 - Race: use CGO_ENABLED=1 com a toolchain/tags fixadas e `go test -race ./...`.
 - CLI smoke offline: --help, --version e doctor --format jsonl, sem credencial/TTY.
-- Para TUI, teste estado/transições, foco, cancelamento, geração obsoleta,
+- Para TUI em `internal/ui/tui`, teste estado/transições, foco, cancelamento, geração obsoleta,
   resize, Unicode/ANSI, NO_COLOR vazio, no-motion, acessibilidade e PTY/ConPTY.
 - Para componentes, teste grafo inválido, falha parcial, cleanup inverso/idempotente,
   cancelamento, ausência de opcionais e substituição por doubles/factories.

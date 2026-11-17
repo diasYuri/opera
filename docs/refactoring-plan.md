@@ -1,156 +1,184 @@
-# Plano de refatoração do Opera — Corvis/Y e TUI por composição
+# Refatoração do Opera: core Y, módulos e UI
 
-Data: 2026-11-16. Este documento define uma migração executável; a conclusão de cada
-etapa deve ser registrada em `docs/refactoring-validation.md` com commit e evidência.
+Data da revisão: 2026-11-17.
 
-## Fundamento e fontes
+Este plano substitui o arranjo genérico `app`/`harness` e a aplicação excessiva de
+ports and adapters a código interno. A arquitetura do Opera usa o runtime público
+Y como fundação acoplada ao core; módulos internos são coesos e podem colaborar
+diretamente; adapters isolam integrações externas e efeitos substituíveis.
 
-Opera é um produto composto sobre o SDK público Y. O modelo chamado Corvis neste
-projeto segue o core controlado e composição aberta descritos em
-`y/docs/philosophy.md`, `runtime-composition.md`, `component-contract.md`,
-`effects-and-durable-state.md` e `runtime-protocol.md` no repositório irmão Y.
-As referências locais explicam a direção; somente APIs presentes na versão
-publicada em `go.mod` podem ser usadas. Não se presume paridade entre o checkout
-local e Y v1.3.4.
+## Fundamento
 
-A unidade extensível é uma capacidade com granularidade útil de substituição:
-provider, ferramenta/tool pack, contexto, persistência, política, integração ou
-contribuição de apresentação. Funções auxiliares e invariantes não são plugins.
-O Y possui o loop, execução e protocolo do agente; Opera possui casos de uso,
-configuração, defaults e composição do produto.
+Y é parte da arquitetura do produto, não um provider nem um adapter. O core usa
+diretamente o `runtime.Harness` público, o modelo de componentes, o lifecycle, as
+views e os protocolos publicados pelo SDK. Não manter um segundo loop, registry de
+execução ou gerenciador de gerações no Opera. Não invocar o binário Y.
 
-## Diagnóstico do estado inicial
+O core controla composição e políticas do produto. Os módulos de capacidade mantêm
+regras e estado coesos. Adapters implementam integrações externas concretas, com
+um submódulo próprio por provider. A UI traduz interação em operações do produto.
+O limite de um pacote deve seguir ownership e direção das dependências, não uma
+meta abstrata de desacoplamento.
 
-- `internal/harness/open.go` já compõe `runtime.Harness`, mas mistura abertura de
-  stores, providers, ferramentas, hooks, runners e serviço em uma função extensa.
-  Dependências como Work e Extensions atravessam closures e ordem implícita.
-- `internal/harness/providers.go` importa implementações concretas e seleciona
-  providers por switch. A enumeração também aparece na configuração e CLI.
-- `app.Service` depende de `*sqlite.Store`, `*persistence.Store`, `*skills.Manager`
-  e chama `contextfiles.Load` diretamente. `Work` também recebe store concreto.
-- `internal/extensions` já adapta o Host do Y para MCP, memória e WASM; deve ser
-  aproveitado e não substituído por outro runtime de plugins.
-- `internal/ui/chat.go` concentra editor, seleção, formulários, navegação,
-  conversação e atividade. Existem portas de apresentação úteis, como Executor.
-- `make check` falha inicialmente: import de `os/exec` em
-  `internal/ui/attachments.go` viola a fronteira de UI já verificada pelo projeto.
-- Há alterações locais prévias em AGENTS, DESIGN, app/user_question e arquivos de
-  UI, além de teste de serialização não rastreado. Preservá-las e não incorporá-las
-  silenciosamente aos commits da migração. Snapshot inicial: `/tmp/opera-pre-refactor.patch`.
-
-## Arquitetura alvo
+## Estrutura alvo
 
 ```text
-cmd/opera -> cli (bootstrap/adaptador de entrada) -> app (casos de uso e portas)
-                  |                               ^
-                  +-> ui (ações/eventos) -----------+
-                  +-> harness (composition root) --+-> adapters / components
-                                                       |
-                                                  Y público
+cmd/opera/
+internal/
+  core/
+    runtime/                 # integração/lifecycle do Harness público Y
+    composition/             # definitions, keys, bindings e grafo Y
+    configuration/           # defaults e política de composição do produto
+  modules/
+    execution/               # execução, Work e estado que hoje é mutuamente ligado
+    sessions/                # somente quando possuir fluxo e estado independentes
+    approvals/               # política/decisão do produto, não o leitor de arquivos
+    context/                 # dados e regras de contexto independentes de I/O
+    skills/                  # catálogo/regras do produto para skills
+    extensions/              # gestão do produto sobre APIs públicas de extensões Y
+    workspace/               # identidade/regras de workspace
+  adapters/
+    providers/
+      anthropic/
+      google/
+      openai/
+        subscription/
+      openai_compatible/
+      openrouter/
+      custom/
+    persistence/sqlite/
+    credentials/{file,keyring}/
+    context/filesystem/
+    skills/filesystem/
+    workspace/{filesystem,locks}/
+    platform/
+  ui/
+    cli/                      # comandos, flags, stdin/stdout e bootstrap de entrega
+    tui/
+      chat/
+      composer/
+      conversation/
+      navigation/
+      approvals/
+      authentication/
+      theme/
 ```
 
-`cli` é hoje também o bootstrap: pode chamar o harness para abrir um runtime,
-mas não transfere regras de execução para a entrega. `app` não importa harness,
-CLI, UI, drivers SQL ou providers concretos. Portas são definidas pelo consumidor,
-usando contratos públicos do Y quando estes já resolvem o problema. Tipos de
-registros podem ser compartilhados em um pacote sem I/O; interfaces com uma
-única implementação ainda são úteis quando delimitam efeitos concretos.
+É um mapa de ownership, não uma obrigação de criar diretórios vazios. Criar ou
+dividir pacote quando existir comportamento, dono e benefício de navegação claros.
+O projeto continua com um único `go.mod`; os submódulos são packages Go, não módulos
+Go independentes.
 
-Providers concretos e metadados ficam em adapters/componentes nativos. Um catálogo
-explícito e imutável por instância recebe registros; não há registry global,
-registro por `init` nem fallback silencioso. Adicionar um provider exige seu
-adapter e registro na composição padrão, sem switch no core, UI ou validação
-estática por nome. Catálogo, configuração e seletor devem concordar. Autenticação
-específica permanece no adapter/fluxo de login, nunca no loop do agente.
+`core/composition` é o composition root: conhece o Y, os módulos e os adapters
+concretos necessários para montar a configuração selecionada. `core/runtime`
+controla o Harness Y e seu lifecycle. `cmd/opera` permanece mínimo. `ui/cli` chama
+o core para iniciar e interagir com o produto. `ui/tui` apresenta dados e envia
+intenções; não importa adapters, providers ou implementação do Harness.
 
-`internal/extensions` continua gerindo integrações e configuração do Opera sobre
-os contratos do Y. O catálogo de factories não substitui `component.Runtime`,
-`component.Manager` ou `extensions.Host`: lifecycle e gerações pertencem ao Y.
-Persistência padrão pode continuar SQLite, mas é injetada por portas. Ferramentas
-nativas são contribuições selecionadas explicitamente na composição.
+## Regras de dependência
 
-## Etapas e critérios de aceite
+- `core` pode importar módulos e adapters para compor o produto. Módulos não
+  importam `core` nem a composição.
+- Módulos podem colaborar por chamadas diretas a funções/serviços concretos quando
+  a dependência for coerente e acíclica. Não criar interface só para evitar uma
+  dependência interna legítima.
+- Dividir um módulo apenas quando cada lado tiver dono, estado e direção de
+  dependência explícitos. Se `A` e `B` precisarem chamar-se reciprocamente,
+  mantê-los juntos até existir um corte real que elimine a reciprocidade.
+- Módulos podem usar contratos públicos do Y que façam parte de sua lógica. O
+  lifecycle `runtime.Harness`, a montagem do grafo e o ownership de componentes
+  pertencem ao core; não abstraí-los como “provider Y”.
+- Providers, drivers SQL, OAuth/transporte, keyring, filesystem, clipboard e
+  processos ficam em `adapters/` no submódulo que os possui. Cada provider reúne
+  seu cliente, autenticação, metadados e factory. A composição agrega factories;
+  os adapters não importam o composition root.
+- A UI depende de operações/dados de produto. Providers não conhecem UI e a UI
+  não escolhe providers por switch ou por nome concreto.
+- Portas pequenas são reservadas a limites de efeito/substituição reais, como
+  persistência, credenciais, leitura de contexto ou transporte. Não replicar
+  interfaces do SDK Y nem criar uma camada `domain/application/infrastructure`
+  para cada capability.
+- Catálogos são instâncias explícitas sem registro por `init`, estado global
+  mutável, fallback silencioso ou segunda autoridade de lifecycle.
 
-### 0. Contratos e decisões
+## Padrões de projeto
 
-Escrever este plano, ADR de portas/composição, paradigma de TUI e AGENTS completo.
-Registrar baseline e preservar alterações locais. Commit apenas dos documentos
-autorizados; revisão do plano antes da implementação.
+| Padrão | Uso no Opera |
+|---|---|
+| Composition root / Builder | Core compõe o grafo Y e monta somente capabilities selecionadas. |
+| Adapter | Fronteira para API externa, banco, credencial, filesystem ou processo. |
+| Strategy | Provider ou política realmente intercambiável sob o mesmo contrato. |
+| Factory / catálogo explícito | Criar e descobrir instâncias por configuração, sem switches distribuídos. |
+| State machine | Lifecycle, aprovação, retomada e fluxos TUI com transições observáveis. |
+| Command / message | Bubble Tea: efeitos são comandos; resultados retornam como mensagens identificadas. |
+| Repository | Só quando encapsula semântica durável de leitura/escrita, não como wrapper de SQL. |
+| Decorator | Cross-cutting concreto como accounting/telemetria sem alterar o provider base. |
 
-### 1. Providers como capacidades registradas
+Composição simples tem preferência sobre padrões decorativos. SOLID, coesão,
+responsabilidade única, dependências explícitas, erros com contexto, ausência de
+estado global e cancelamento com ownership são critérios de revisão, não objetivos
+para multiplicar packages e interfaces. DRY vale quando uma abstração deixa o
+comportamento mais claro; duplicação pequena e local pode ser mais simples.
 
-Extrair factories, descritores e catálogo para uma fronteira de adapters própria.
-Manter APIs de compatibilidade só quando houver consumidor real; catálogo usado
-na execução e descoberta deve ser o mesmo. Preservar lookup explícito de credenciais,
-base_url e semântica de assinatura. Remover listas fechadas de providers das
-fronteiras genéricas; validar disponibilidade na composição.
+## TUI
 
-Aceite: provider fake/customizado registrado funciona sem alterar seleção central;
-IDs duplicados/desconhecidos falham claramente; catálogos não expõem mutação global;
-nenhum provider concreto é importado no app ou harness genérico. Tests de regressão
-de providers existentes continuam passando.
+Aplicar a filosofia documentada em `docs/tui-development.md` e na skill
+`.agents/skills/opera-tui-ui/SKILL.md`: composição declarativa idiomática em Go,
+estado com dono único, identidade estável e `View` determinística. O shell coordena
+foco/mensagens; submodelos possuem interações coesas. `Update` aplica transições e
+emite comandos; efeitos voltam como mensagens e respostas obsoletas são descartadas.
+Não criar DSL, bindings mutáveis nem framework UI paralelo. DESIGN.md determina a
+identidade visual terminal.
 
-### 2. Portas da aplicação e efeitos
+## Sequência de migração
 
-Introduzir contratos pequenos para runner, checkpoints/eventos/operações/transcript,
-registros, skills e carregamento de contexto onde consumidos. Evitar uma interface
-universal de infraestrutura e evitar copiar tipos do SDK. Migrar Service e Work;
-abrir e fechar concretos somente no owner da composição. Extrair efeitos de clipboard
-/processo da TUI para adaptador injetado através da entrega. Revisar leitura de
-arquivos para aprovação: a coleta do preview é um efeito por porta; a comparação,
-política e decisão continuam em app.
+1. Atualizar decisões e `AGENTS.md` para registrar core Y, módulos colaborativos,
+adapters externos e `ui/cli` + `ui/tui`.
+2. Fechar a migração dos providers em `internal/adapters/providers/<provider>`;
+   resolver imports antigos, autenticação específica e catálogo padrão. Catálogo,
+   login, descoberta e execução devem usar a mesma composição explícita.
+3. Mover a composição atual de `internal/harness` para `internal/core`, preservando
+   chaves, grafo declarado, startup, rollback, fechamento inverso e runtime Y
+   público. Separar arquivos por builder apenas quando ownership ficar claro.
+4. Migrar `internal/app` para `internal/modules/execution` junto com `Service` e
+   `Work`, que colaboram diretamente. Atualizar consumidores na mesma etapa. Extrair
+   sessions, approvals, context ou outras capabilities apenas quando o corte ficar
+   acíclico sem interfaces artificiais.
+5. Agrupar adapters externos em submódulos coerentes e colocar regras/catálogos
+   internos no módulo que os possui. Remover caminhos e agregadores antigos quando
+   não houver mais consumidores.
+6. Mover CLI e TUI para `internal/ui/cli` e `internal/ui/tui`; manter CLI como
+   fronteira de processo e TUI como apresentação. Preservar comandos e contrato.
+7. Ampliar os checks arquiteturais para bloquear imports de providers fora de
+   adapters/composição, imports de core por módulos, ciclos, dependências de UI em
+   infraestrutura e restos dos pacotes antigos.
+8. Revisar o grafo completo, documentação e diffs; validar os gates abaixo e
+   registrar evidências em `docs/refactoring-validation.md`.
 
-Aceite: app não importa drivers SQLite nem adapters concretos; testes usam doubles
-pelas portas sem construir providers reais; UI não executa processos diretamente;
-continuação, aprovação, imagens e recuperação mantêm contratos e formatos duráveis.
+Cada etapa é completa e compilável antes da próxima. Mudanças estruturais devem
+preservar flags, UX, formatos JSON/JSONL, esquema SQLite, IDs, retomada, erros,
+autorização e lifecycle. Não usar replace/go.work/import privado do SDK Y como
+solução. Se contrato público necessário estiver ausente, registrar o bloqueio e
+parar essa integração até publicação compatível.
 
-### 3. Composição por componentes coesos
+## Critérios de validação
 
-Dividir Open por responsabilidades (storage, provider, tools, runner, application,
-inspection) e centralizar keys compartilhadas. Expressar dependências de cada
-componente nos descritores; substituir comunicação lateral relevante por serviços
-declarados. Permitir seleção/injeção de componentes/tool packs sem alterar o fluxo
-central. Configuração padrão continua funcional sem MCP, WASM ou memória opcional.
-Factories sem efeitos; Start adquire e registra cleanup imediatamente.
+- `go list ./...` resolve todo o grafo e as dependências têm direção acíclica.
+- `make check`, `make lint`, `make matrix`, `make inventory`, `go mod tidy -diff`,
+  testes com race e build CGO-free passam sem drift incidental.
+- CLI smoke offline: `--help`, `--version`, `doctor --format jsonl`.
+- Testes do core cobrem grafo inválido, falha parcial, cancelamento e cleanup
+  idempotente em ordem inversa; testes de módulos cobrem transições e persistência
+  durável; testes de adapters cobrem contrato/substituição.
+- TUI preserva foco, cancelamento, descarte de geração obsoleta, resize, Unicode/
+  ANSI, NO_COLOR vazio, no-motion, acessibilidade e scrollback.
+- `make matrix` demonstra cross-compilation Linux/macOS/Windows amd64/arm64, não
+  execução nativa nesses sistemas. Testes live pagos/externos ficam fora sem
+  autorização e credenciais.
 
-Aceite: Harness público permanece dono do grafo; rollback e fechamento inverso
-são testados, inclusive falha parcial; ferramentas anunciadas e handlers mantêm a
-mesma geração do Host; nenhuma mudança de schema ou identidade durável gratuita.
-Nenhum recurso inicia fora de owner conhecido.
+## Commits e trabalho preexistente
 
-### 4. TUI por composição inspirada em SwiftUI
-
-Aplicar `docs/tui-development.md`, DESIGN e a skill local. Extrair submodelos por
-responsabilidade real (composer, seleção/painel, atividade e conversação), começando
-por fluxos existentes. O shell Bubble Tea coordena mensagens e efeitos; componentes
-recebem estado/dados e devolvem intenção. Não criar DSL SwiftUI nem framework de
-renderização sobre Charm. Evitar mover campos sem transferir sua responsabilidade.
-
-Aceite: View determinística, sem I/O/mutação; Update possui estado; efeitos retornam
-mensagens, com geração para descartar resultados obsoletos; teclado, foco, resize,
-Unicode, NO_COLOR vazio, no-motion, acessibilidade e scrollback preservados. Extrair
-componentes testáveis e realmente usados, mantendo identidade visual existente.
-
-### 5. Regras automatizadas e fechamento
-
-Ampliar checks de arquitetura para impedir dependências inversas, providers concretos
-no core e efeitos proibidos em UI. Testar o próprio verificador com fixtures válidas
-e inválidas. Atualizar documentação de extensões e exemplo executável que demonstre
-substituição sem modificar core. Revisar o diff integrado e corrigir achados.
-
-Aceite final: `make check`, `make lint`, `make matrix`, `make inventory` sem drift,
-`go mod tidy` sem drift e testes race no host com CGO habilitado. CLI smoke offline
-(help/version/doctor), regressões TUI e SDK consumer. Não alegar execução nativa em
-outros sistemas a partir de cross-compilation. Testes live só com autorização e
-credenciais existentes; indicar claramente skips e limites.
-
-## Estratégia de commits e compatibilidade
-
-Cada etapa recebe commit coeso após testes relevantes. Não commitar segredos,
-binários, caches, snapshots temporários ou mudanças prévias fora do escopo. Quando
-um arquivo já estiver modificado, stage apenas hunks novos e mantenha o baseline
-local no working tree. Não usar reset/checkout destrutivo ou stash das mudanças do
-usuário. Registrar revisão, comandos, resultados e limitações no relatório final.
-Sem alterar UX, comandos, formatos JSONL, persistência ou defaults incidentalmente.
-Se uma capacidade faltar no Y público, registrar o bloqueio; alteração no SDK deve
-ser publicada antes de integrar, sem replace/go.work ou imports privados.
+Registrar cada etapa com commit coeso após validação relevante, stageando somente
+os hunks da migração. Alterações prévias do usuário em DESIGN, acessibilidade, UI
+ou outros arquivos continuam no working tree e não entram nesses commits. Não usar
+reset, checkout destrutivo ou stash para descartá-las; não fazer push forçado.

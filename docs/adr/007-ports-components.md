@@ -1,6 +1,8 @@
 # ADR 007 — Portas da aplicação e composição aberta
 
-Status: aceita; execução rastreada no plano de refatoração.
+Status: aceita historicamente; organização interna substituída parcialmente por
+ADR 009. A composição aberta sobre Y e as portas nas fronteiras de efeitos seguem
+vigentes; não aplicar ports/adapters entre todas as capabilities internas.
 
 ## Contexto
 
