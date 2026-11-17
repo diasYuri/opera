@@ -182,6 +182,41 @@ func TestCompletionsAppearBelowComposer(t *testing.T) {
 	}
 }
 
+func TestComposerStaysPinnedWhileHistoryScrolls(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(model)
+	for i := 0; i < 30; i++ {
+		m.appendUser(fmt.Sprintf("history message %02d", i), "You")
+	}
+	m.resize()
+	lines := strings.Split(m.View().Content, "\n")
+	composerLine := -1
+	for i, line := range lines {
+		if strings.Contains(line, "› ") {
+			composerLine = i
+			break
+		}
+	}
+	if composerLine < 0 || composerLine < len(lines)-8 {
+		t.Fatalf("composer was not anchored near the terminal bottom: line=%d total=%d", composerLine, len(lines))
+	}
+	bottom := strings.Join(lines[composerLine:], "\n")
+	m.conversation.ScrollUp(5)
+	afterScroll := strings.Split(m.View().Content, "\n")
+	newComposerLine := -1
+	for i, line := range afterScroll {
+		if strings.Contains(line, "› ") {
+			newComposerLine = i
+			break
+		}
+	}
+	if newComposerLine != composerLine || strings.Join(afterScroll[newComposerLine:], "\n") != bottom {
+		t.Fatal("scrolling history moved or changed the composer/footer block")
+	}
+}
+
 func TestExternalControlCharactersCannotMoveTerminalCursor(t *testing.T) {
 	got := safeText("safe\x1b[2J\r\x00\b\a\ttext\nnext")
 	if got != "safe text\nnext" {

@@ -56,8 +56,8 @@ opera config --provider openai --model your-model-id --format jsonl
 
 `NO_COLOR` is honored by its presence, including an empty value.
 `--accessible --no-motion` selects append-only screen-reader input; see [keyboard behavior](accessibility.md).
-The interactive `/setting` (also `/settings`) menu lets you choose the terminal
-palette. Built-in choices are `system`, `midnight`, `ocean`, `forest`, `sunset`,
+The interactive `/settings` menu lets you choose the terminal palette. Built-in
+choices are `system`, `midnight`, `ocean`, `forest`, `sunset`,
 `mono`, `dark` and `light`; the five curated palettes are Midnight, Ocean,
 Forest, Sunset and Mono. The choice is stored in private per-workspace user
 settings and does not change the terminal background. `NO_COLOR` still disables

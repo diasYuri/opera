@@ -140,6 +140,20 @@ func (c settingChoice) FilterValue() string {
 	return c.Key + " " + c.Value + " " + c.SettingItem.Description + " " + c.Source
 }
 
+type themeChoice struct {
+	value, name, description string
+	current                  bool
+}
+
+func (c themeChoice) Title() string {
+	if c.current {
+		return safeText(c.name + " · current")
+	}
+	return safeText(c.name)
+}
+func (c themeChoice) Description() string { return safeText(c.description) }
+func (c themeChoice) FilterValue() string { return c.value + " " + c.name + " " + c.description }
+
 type providerChoice struct{ ProviderOption }
 
 func (c providerChoice) Title() string {
@@ -182,6 +196,7 @@ var _ list.Item = sessionChoice{}
 var _ list.Item = checkpointChoice{}
 var _ list.Item = sessionActionChoice{}
 var _ list.Item = settingChoice{}
+var _ list.Item = themeChoice{}
 var _ list.Item = providerChoice{}
 var _ list.Item = modelChoice{}
 var _ list.Item = messageChoice{}

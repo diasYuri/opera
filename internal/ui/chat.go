@@ -43,6 +43,7 @@ type model struct {
 	spinner      spinner.Model
 	keys         chatKeyMap
 	approvalForm *huh.Form
+	question     *questionFlow
 
 	workspace              string
 	workspaceRoot          string
@@ -91,6 +92,7 @@ type model struct {
 	selecting, panelOpen               bool
 	formKind, formKey                  string
 	formValue                          string
+	formHeight                         int
 	selectedProvider                   string
 	selectedSession                    *SessionSummary
 	selectedCheckpoint                 uint64
@@ -361,6 +363,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.lastError = msg.err.Error()
 			m.status = summarizeError(msg.err.Error())
+			m.resize()
 			return m, m.editor.Focus()
 		}
 		m.refreshContext()
@@ -371,6 +374,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.status = msg.message
 		m.lastError = ""
+		m.resize()
 		if msg.key == "context.add" || msg.key == "context.remove" {
 			return m, tea.Batch(m.editor.Focus(), m.loadAttachmentPreviews())
 		}
@@ -581,6 +585,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.update.Event != nil {
 			event := msg.update.Event
+			m.openUserQuestion(event)
 			if m.stream != nil && event.RunID != "" && event.RunID != m.stream.ID {
 				m.updateConversationEvent(event)
 				return m, next(m.stream)
@@ -704,12 +709,16 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if nextModel, cmd, handled := m.updateQuestionKey(msg); handled {
+			return nextModel, cmd
+		}
 		if m.selecting {
 			switch {
 			case keyMatches(msg, keys.cancel):
 				m.selecting = false
 				m.modelMenu = false
 				m.selectionKind = ""
+				m.resize()
 				return m, m.editor.Focus()
 			case keyMatches(msg, keys.quit):
 				return m, tea.Quit
@@ -726,6 +735,8 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					m.approvalForm = nil
 					m.panelOpen = false
 					m.formKind = ""
+					m.formHeight = 0
+					m.resize()
 					return m, m.editor.Focus()
 				}
 				if m.stream != nil {
@@ -740,6 +751,8 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				m.panelOpen = false
 				m.approvalForm = nil
 				m.formKind = ""
+				m.formHeight = 0
+				m.resize()
 				return m, m.editor.Focus()
 			}
 			if keyMatches(msg, keys.pageUp) {
@@ -760,6 +773,8 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					m.approvalForm = nil
 					m.panelOpen = false
 					m.formKind = ""
+					m.formHeight = 0
+					m.resize()
 					return m, m.editor.Focus()
 				}
 				return m, cmd
@@ -1021,12 +1036,12 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
-			if (commandName == "/setting" && text == "/setting") || (commandName == "/settings" && text == "/settings") || commandName == "/model" && text == "/model" || commandName == "/thinking" && text == "/thinking" || commandName == "/context" && text == "/context" {
+			if commandName == "/settings" && text == "/settings" || commandName == "/model" && text == "/model" || commandName == "/thinking" && text == "/thinking" || commandName == "/context" && text == "/context" {
 				if m.stream != nil || m.approval != nil {
 					m.status = "Resolve the active execution before changing settings"
 					return m, nil
 				}
-				if commandName == "/setting" || commandName == "/settings" {
+				if commandName == "/settings" {
 					return m, m.openSettingsPicker()
 				}
 				if commandName == "/model" {
@@ -1341,11 +1356,23 @@ func (m *model) openForm(title string, form *huh.Form, kind, keyName, value stri
 	m.panelTitle = title
 	m.panel = viewport.New(viewport.WithWidth(max(1, m.contentWidth()-4)), viewport.WithHeight(m.viewerHeight()))
 	m.panel.SetContent("")
-	m.approvalForm = form.WithWidth(max(1, m.contentWidth()-4)).WithHeight(m.viewerHeight()).WithTheme(approvalTheme(m.dark))
+	m.formHeight = m.viewerHeight()
+	switch kind {
+	case "thinking":
+		m.formHeight = min(m.formHeight, 10)
+	case "policy-select":
+		m.formHeight = min(m.formHeight, 8)
+	case "context-add":
+		m.formHeight = min(m.formHeight, 6)
+	case "branch-confirm", "policy-confirm":
+		m.formHeight = min(m.formHeight, 7)
+	}
+	m.approvalForm = form.WithWidth(max(1, m.contentWidth()-4)).WithHeight(m.formHeight).WithTheme(approvalTheme(m.dark))
 	m.formKind, m.formKey, m.formValue = kind, keyName, value
 	m.panelOpen = true
 	m.selecting = false
 	m.editor.Blur()
+	m.resize()
 	return m.approvalForm.Init()
 }
 
@@ -1364,18 +1391,23 @@ func (m *model) openSetting(setting SettingItem) tea.Cmd {
 		form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Key("value").Title("Reasoning level").Description("Some models do not support every level.").Options(options...).Value(&setting.Value).Height(8))).WithWidth(max(1, m.contentWidth()-4)).WithHeight(10).WithShowHelp(true)
 		return m.openForm("Thinking settings", form, "thinking", setting.Key, setting.Value)
 	case "ui.theme":
-		options := []huh.Option[string]{
-			huh.NewOption("System · follow terminal background", "system"),
-			huh.NewOption("Midnight · violet on deep gray", "midnight"),
-			huh.NewOption("Ocean · blue and cyan", "ocean"),
-			huh.NewOption("Forest · green and moss", "forest"),
-			huh.NewOption("Sunset · warm amber and coral", "sunset"),
-			huh.NewOption("Mono · grayscale", "mono"),
-			huh.NewOption("Dark · classic cool blue", "dark"),
-			huh.NewOption("Light · classic light-terminal colors", "light"),
+		options := []themeChoice{
+			{value: "system", name: "System", description: "Follow the terminal background", current: setting.Value == "system"},
+			{value: "midnight", name: "Midnight", description: "Violet accents on deep gray", current: setting.Value == "midnight"},
+			{value: "ocean", name: "Ocean", description: "Blue and cyan accents", current: setting.Value == "ocean"},
+			{value: "forest", name: "Forest", description: "Green and moss accents", current: setting.Value == "forest"},
+			{value: "sunset", name: "Sunset", description: "Warm amber and coral accents", current: setting.Value == "sunset"},
+			{value: "mono", name: "Mono", description: "Grayscale palette", current: setting.Value == "mono"},
+			{value: "dark", name: "Dark", description: "Classic cool blue palette", current: setting.Value == "dark"},
+			{value: "light", name: "Light", description: "Classic light-terminal palette", current: setting.Value == "light"},
 		}
-		form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Key("value").Title("Interface theme").Description("Five curated themes plus system and classic modes. NO_COLOR always disables color.").Options(options...).Value(&setting.Value).Height(8))).WithWidth(max(1, m.contentWidth()-4)).WithHeight(11).WithShowHelp(true)
-		return m.openForm("Appearance settings", form, "theme", setting.Key, setting.Value)
+		items := make([]list.Item, 0, len(options))
+		for _, option := range options {
+			items = append(items, option)
+		}
+		m.openSelector("Interface theme", items, m.modelDelegate())
+		m.selectionKind = "theme"
+		return nil
 	case "policy":
 		options := []huh.Option[string]{
 			huh.NewOption("Read only · block workspace writes", "read-only"),
@@ -1462,6 +1494,8 @@ func (m model) finishForm() (tea.Model, tea.Cmd) {
 	m.approvalForm = nil
 	m.panelOpen = false
 	m.formKind, m.formKey, m.formValue = "", "", ""
+	m.formHeight = 0
+	m.resize()
 	switch kind {
 	case "approval":
 		decision := form.GetString("decision")
@@ -1469,8 +1503,6 @@ func (m model) finishForm() (tea.Model, tea.Cmd) {
 			return m, m.resolveApproval(decision == "allow")
 		}
 	case "thinking":
-		return m, m.applySetting(keyName, form.GetString("value"))
-	case "theme":
 		return m, m.applySetting(keyName, form.GetString("value"))
 	case "policy-select":
 		selected := form.GetString("value")
@@ -1527,6 +1559,7 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 	m.selecting = false
 	m.modelMenu = false
 	m.selectionKind = ""
+	m.resize()
 	switch selected := item.(type) {
 	case loginChoice:
 		return m, m.beginLogin(selected)
@@ -1623,6 +1656,8 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 			return m, m.applySetting("context.remove", strings.TrimPrefix(selected.Key, "context.remove:"))
 		}
 		return m, m.openSetting(selected.SettingItem)
+	case themeChoice:
+		return m, m.applySetting("ui.theme", selected.value)
 	}
 	m.editor.Focus()
 	return m, nil

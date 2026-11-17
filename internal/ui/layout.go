@@ -66,11 +66,15 @@ func (m *model) resize() {
 	if m.selecting {
 		menuHeight = m.selector.Height() + 1
 	}
-	m.conversation.SetHeight(max(1, m.height-m.editor.Height()-8-m.queuedStackHeight()-m.attachmentStackHeight()-m.extensionReservedHeight()-m.todoListHeight()-m.subagentListHeight()-menuHeight))
-	m.refreshConversation()
+	if m.approvalForm != nil && m.formKind != "approval" {
+		menuHeight += m.formHeight + 2
+	}
 	if m.selecting {
-		height := m.viewerHeight()
-		height = min(height, max(1, len(m.selector.Items())), max(1, m.height-m.editor.Height()-10))
+		rowHeight := 2
+		if m.modelMenu {
+			rowHeight = 1
+		}
+		height := min(m.viewerHeight(), min(4, len(m.selector.Items()))*rowHeight+2, max(1, m.height-m.editor.Height()-10))
 		m.selector.SetSize(max(1, m.contentWidth()-4), height)
 	}
 	if m.panelOpen {
@@ -78,8 +82,22 @@ func (m *model) resize() {
 		m.panel.SetHeight(m.viewerHeight())
 	}
 	if m.approvalForm != nil {
-		m.approvalForm.WithWidth(max(1, m.contentWidth()-4)).WithHeight(5)
+		height := 5
+		if m.formKind != "approval" {
+			height = min(m.formHeight, max(1, m.height-m.editor.Height()-10))
+		}
+		m.approvalForm.WithWidth(max(1, m.contentWidth()-4)).WithHeight(height)
 	}
+	if !m.panelOpen && m.login == nil {
+		fixedLines := 0
+		for _, part := range m.defaultFixedParts() {
+			fixedLines += strings.Count(part, "\n") + 1
+		}
+		m.conversation.SetHeight(max(1, m.height-1-fixedLines))
+	} else {
+		m.conversation.SetHeight(max(1, m.height-m.editor.Height()-8-m.queuedStackHeight()-m.attachmentStackHeight()-m.extensionReservedHeight()-m.todoListHeight()-m.subagentListHeight()-menuHeight))
+	}
+	m.refreshConversation()
 }
 
 func (m *model) sizeEditor() {
@@ -310,6 +328,57 @@ func (m model) queuedStackView() string {
 	return strings.Join(lines, "\n")
 }
 
+// defaultFixedParts returns every rendered block outside the message history.
+// resize uses these same blocks to give the history the remaining terminal rows.
+func (m model) defaultFixedParts() []string {
+	t := m.theme()
+	width := m.contentWidth()
+	var parts []string
+	if header := m.extensionHeader(); header != "" {
+		parts = append(parts, header)
+	}
+	if todos := m.todoListView(); todos != "" {
+		parts = append(parts, todos)
+	}
+	if widgets := m.extensionWidgets(); widgets != "" {
+		parts = append(parts, widgets)
+	}
+	if m.stream != nil || m.actionPending || m.previous != "" || m.lastError != "" || m.status != "Ready" && m.status != "" {
+		parts = append(parts, m.statusLine())
+	}
+	if queued := m.queuedStackView(); queued != "" {
+		parts = append(parts, queued)
+	}
+	if attachments := m.attachmentPreviewView(); attachments != "" {
+		parts = append(parts, attachments)
+	}
+	if question := m.questionView(); question != "" {
+		parts = append(parts, question)
+	}
+	composer := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, false, true, false).BorderForeground(t.border.GetForeground())
+	parts = append(parts, composer.Render(m.editor.View()))
+	if subagents := m.subagentListView(); subagents != "" {
+		parts = append(parts, subagents)
+	}
+	if m.selecting {
+		if !m.modelMenu && m.selector.Title != "" {
+			parts = append(parts, t.accent.Bold(true).Render(safeText(m.selector.Title)))
+		}
+		parts = append(parts, m.selector.View(), t.muted.Render("↑↓ scroll · Enter select · Esc close"))
+	}
+	if len(m.completions) > 0 {
+		parts = append(parts, m.completionView())
+	}
+	if m.sessionLine() != "" {
+		parts = append(parts, t.muted.Render(ansi.Truncate(m.sessionLine(), width, "…")))
+	}
+	parts = append(parts, t.muted.Render(ansi.Truncate(m.helpLine(), width, "…")))
+	if footer := m.extensionFooter(); footer != "" {
+		parts = append(parts, footer)
+	}
+	return parts
+}
+
 func (m model) View() tea.View {
 	width := m.contentWidth()
 	t := m.theme()
@@ -317,6 +386,25 @@ func (m model) View() tea.View {
 	if m.login != nil && m.loginPrompt == nil {
 		keys := m.keyBindings()
 		parts = []string{m.header(), t.accent.Bold(true).Render("Connect to " + safeText(m.login.name)), m.statusLine(), t.muted.Render(keyLabel(keys.cancel, "Esc") + " or " + keyLabel(keys.quit, "Ctrl+C") + " cancel · session stays open")}
+	} else if m.panelOpen && m.approvalForm != nil && m.formKind != "approval" {
+		if header := m.extensionHeader(); header != "" {
+			parts = append(parts, header)
+		}
+		if content := m.conversation.View(); content != "" {
+			parts = append(parts, content)
+		}
+		if m.stream != nil || m.actionPending || m.previous != "" || m.lastError != "" || m.status != "Ready" && m.status != "" {
+			parts = append(parts, m.statusLine())
+		}
+		composer := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, false, true, false).BorderForeground(t.border.GetForeground())
+		parts = append(parts, composer.Render(m.editor.View()))
+		parts = append(parts, t.accent.Bold(true).Render(safeText(m.panelTitle)), m.approvalForm.View())
+		keys := m.keyBindings()
+		parts = append(parts, t.muted.Render(keyLabel(keys.submit, "Enter")+" select · "+keyLabel(keys.cancel, "Esc")+" back"))
+		if m.sessionLine() != "" {
+			parts = append(parts, t.muted.Render(ansi.Truncate(m.sessionLine(), width, "…")))
+		}
+		parts = append(parts, t.muted.Render(ansi.Truncate(m.helpLine(), width, "…")))
 	} else if m.panelOpen {
 		title, body := m.panelTitle, m.panel.View()
 		keys := m.keyBindings()
@@ -347,48 +435,17 @@ func (m model) View() tea.View {
 			parts = append(parts, m.approvalForm.View(), t.muted.Render(formHint))
 		}
 	} else {
-		if header := m.extensionHeader(); header != "" {
-			parts = append(parts, header)
+		fixed := m.defaultFixedParts()
+		prefixCount := 0
+		if m.extensionHeader() != "" {
+			prefixCount++
 		}
-		if todos := m.todoListView(); todos != "" {
-			parts = append(parts, todos)
+		if m.todoListView() != "" {
+			prefixCount++
 		}
-		if content := m.conversation.View(); content != "" {
-			parts = append(parts, content)
-		}
-		if widgets := m.extensionWidgets(); widgets != "" {
-			parts = append(parts, widgets)
-		}
-		if m.stream != nil || m.actionPending || m.previous != "" || m.lastError != "" || m.status != "Ready" && m.status != "" {
-			parts = append(parts, m.statusLine())
-		}
-		if queued := m.queuedStackView(); queued != "" {
-			parts = append(parts, queued)
-		}
-		if attachments := m.attachmentPreviewView(); attachments != "" {
-			parts = append(parts, attachments)
-		}
-		composer := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, false, true, false).BorderForeground(t.border.GetForeground())
-		parts = append(parts, composer.Render(m.editor.View()))
-		if subagents := m.subagentListView(); subagents != "" {
-			parts = append(parts, subagents)
-		}
-		if m.selecting {
-			if !m.modelMenu && m.selector.Title != "" {
-				parts = append(parts, t.accent.Bold(true).Render(safeText(m.selector.Title)))
-			}
-			parts = append(parts, m.selector.View(), t.muted.Render("↑↓ scroll · Enter select · Esc close"))
-		}
-		if len(m.completions) > 0 {
-			parts = append(parts, m.completionView())
-		}
-		if m.sessionLine() != "" {
-			parts = append(parts, t.muted.Render(ansi.Truncate(m.sessionLine(), width, "…")))
-		}
-		parts = append(parts, t.muted.Render(ansi.Truncate(m.helpLine(), width, "…")))
-		if footer := m.extensionFooter(); footer != "" {
-			parts = append(parts, footer)
-		}
+		parts = append(parts, fixed[:prefixCount]...)
+		parts = append(parts, m.conversation.View())
+		parts = append(parts, fixed[prefixCount:]...)
 	}
 	// A terminal can shrink below the minimum useful editor. Clip each dimension
 	// here as a final guard, including selectors, long IDs and wide Unicode.
