@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"github.com/diasYuri/opera/internal/accounting"
 	"github.com/diasYuri/opera/internal/contextfiles"
-	"github.com/diasYuri/opera/internal/persistence"
+	"github.com/diasYuri/opera/internal/records"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/agent/compaction"
 	"github.com/diasYuri/y/pkg/ai"
@@ -86,9 +86,9 @@ func (s *Service) Sessions(ctx context.Context, offset, limit int) ([]SessionEnt
 type Inspection struct {
 	Decisions       []policy.AuditEvent     `json:"decisions"`
 	Usage           accounting.Summary      `json:"usage"`
-	ArchivedOutputs []persistence.Document  `json:"archived_outputs"`
-	Controls        []persistence.Document  `json:"controls"`
-	Boundaries      []persistence.Document  `json:"boundaries"`
+	ArchivedOutputs []records.Document      `json:"archived_outputs"`
+	Controls        []records.Document      `json:"controls"`
+	Boundaries      []records.Document      `json:"boundaries"`
 	SchemaVersion   int                     `json:"schema_version"`
 	Metadata        Metadata                `json:"metadata"`
 	Snapshot        agent.Snapshot          `json:"checkpoint"`

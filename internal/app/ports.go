@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/diasYuri/opera/internal/persistence"
+	"github.com/diasYuri/opera/internal/records"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/tools"
 )
@@ -25,7 +25,7 @@ type ExecutionStore interface {
 // Records exposes the small document operations consumed by application use
 // cases. Persistence ownership and schema remain in the composition adapter.
 type Records interface {
-	Get(context.Context, string, string) (persistence.Document, error)
-	List(context.Context, string) ([]persistence.Document, error)
+	Get(context.Context, string, string) (records.Document, error)
+	List(context.Context, string) ([]records.Document, error)
 	Put(context.Context, string, string, any) error
 }

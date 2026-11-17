@@ -33,17 +33,19 @@ import (
 )
 
 type Options struct {
-	ResponseFormat  *ai.ResponseFormat
-	Management      bool
-	Offline         bool
-	Secret          operaext.SecretLookup
-	Inspection      bool
-	Thinking        string
-	ResumeID        string
-	ContextPaths    []string
-	Credential      func(context.Context, string) (string, error)
-	ProviderFactory func(context.Context, config.Resolved) (providers.Provider, error)
-	ProviderCatalog *providercatalog.Catalog
+	ResponseFormat    *ai.ResponseFormat
+	Management        bool
+	Offline           bool
+	Secret            operaext.SecretLookup
+	Inspection        bool
+	Thinking          string
+	ResumeID          string
+	ContextPaths      []string
+	Credential        func(context.Context, string) (string, error)
+	ProviderFactory   func(context.Context, config.Resolved) (providers.Provider, error)
+	ProviderCatalog   *providercatalog.Catalog
+	ToolPacks         []ToolPack
+	DisabledToolPacks []string
 }
 type Runtime struct {
 	Extensions *operaext.Manager
@@ -70,6 +72,8 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 	storeKey := component.NewKey[*sqlite.Store]("opera.store", "1.0.0")
 	runnerKey := component.NewKey[*agent.AgentRunner]("opera.runner", "1.0.0")
 	serviceKey := component.NewKey[*app.Service]("opera.execution", "1.0.0")
+	workKey := component.NewKey[*app.Work]("opera.work", "1.0.0")
+	extensionsKey := component.NewKey[*operaext.Manager]("opera.extensions", "1.0.0")
 	guard := &app.Guard{Workspace: cfg.Paths.Workspace, Mode: cfg.String("policy"), Queue: workspace.NewQueue()}
 	home, _ := os.UserHomeDir()
 	skillManager := skills.NewManager(cfg.Paths.Workspace, home)
@@ -83,7 +87,6 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 		return component.Define(component.Descriptor{ID: id, Version: "1.0.0", Provides: provides, Requires: requires}, func() (component.Component, error) { return component.ComponentFunc(start), nil })
 	}
 	var application *app.Service
-	var work *app.Work
 	var extensions *operaext.Manager
 	questions := app.NewQuestionBroker()
 	definitions := []component.Definition{
@@ -212,7 +215,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 			}}
 			return component.Provide[agent.Provider](scope, yruntime.ProviderKey, tracked)
 		}),
-		definition("tools", []component.ServiceRef{component.Reference(yruntime.ToolRegistryKey)}, []component.ServiceRef{component.Reference(recordsKey)}, func(ctx context.Context, scope *component.Scope) error {
+		definition("tools", []component.ServiceRef{component.Reference(yruntime.ToolRegistryKey), component.Reference(workKey), component.Reference(extensionsKey)}, []component.ServiceRef{component.Reference(recordsKey)}, func(ctx context.Context, scope *component.Scope) error {
 			records, err := component.Require(scope, recordsKey)
 			if err != nil {
 				return err
@@ -235,38 +238,10 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 			if err := registry.AddExecutionMiddleware(guard.Middleware); err != nil {
 				return err
 			}
-			if err := questions.Register(registry); err != nil {
-				return err
-			}
 			limits := tools.ToolLimits{MaxOutputBytes: int64(cfg.Int("limits.output_bytes"))}
-			registrations := []func() error{
-				func() error {
-					return tools.RegisterFilesystem(registry, tools.FilesystemOptions{WorkspaceRoot: cfg.Paths.Workspace, Policy: engine, Limits: limits})
-				},
-				func() error {
-					return tools.RegisterShell(registry, tools.ShellOptions{WorkspaceRoot: cfg.Paths.Workspace, Policy: engine, Limits: limits})
-				},
-				func() error {
-					return tools.RegisterGit(registry, tools.GitOptions{WorkspaceRoot: cfg.Paths.Workspace, Policy: engine, Limits: limits})
-				},
-				func() error {
-					return tools.RegisterCodeSearch(registry, tools.CodeSearchOptions{WorkspaceRoot: cfg.Paths.Workspace, Policy: engine, Limits: limits})
-				},
-				func() error {
-					return tools.RegisterLSP(registry, tools.LSPOptions{WorkspaceRoot: cfg.Paths.Workspace, Policy: engine, Limits: limits})
-				},
-			}
-			for _, register := range registrations {
-				if err := register(); err != nil {
-					return err
-				}
-			}
-			if err := skillManager.Register(registry); err != nil {
-				return err
-			}
-			work = app.NewWork(records, cfg.Int("agents.max_concurrent"), cfg.Int("agents.max_depth"))
+			work := app.NewWork(records, cfg.Int("agents.max_concurrent"), cfg.Int("agents.max_depth"))
 			work.MaxBudget = int64(cfg.Int("limits.worker_tokens"))
-			if err := work.Register(registry); err != nil {
+			if err := registerToolPacks(ctx, registry, ToolPackContext{Config: cfg, Policy: engine, Limits: limits, Guard: guard, Questions: questions, Skills: skillManager, Work: work}, opts.ToolPacks, opts.DisabledToolPacks); err != nil {
 				return err
 			}
 			extensions, err = operaext.New(ctx, cfg, registry, opts.Secret, opts.Offline)
@@ -277,9 +252,15 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 				_ = extensions.Close(context.Background())
 				return err
 			}
+			if err := component.Provide(scope, workKey, work); err != nil {
+				return err
+			}
+			if err := component.Provide(scope, extensionsKey, extensions); err != nil {
+				return err
+			}
 			return component.Provide(scope, yruntime.ToolRegistryKey, registry)
 		}),
-		definition("runner", []component.ServiceRef{component.Reference(runnerKey)}, []component.ServiceRef{component.Reference(yruntime.ProviderKey), component.Reference(yruntime.ToolRegistryKey), component.Reference(storeKey)}, func(_ context.Context, scope *component.Scope) error {
+		definition("runner", []component.ServiceRef{component.Reference(runnerKey)}, []component.ServiceRef{component.Reference(yruntime.ProviderKey), component.Reference(yruntime.ToolRegistryKey), component.Reference(storeKey), component.Reference(workKey), component.Reference(extensionsKey)}, func(_ context.Context, scope *component.Scope) error {
 			provider, err := component.Require(scope, yruntime.ProviderKey)
 			if err != nil {
 				return err
@@ -289,6 +270,14 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 				return err
 			}
 			store, err := component.Require(scope, storeKey)
+			if err != nil {
+				return err
+			}
+			work, err := component.Require(scope, workKey)
+			if err != nil {
+				return err
+			}
+			extensions, err := component.Require(scope, extensionsKey)
 			if err != nil {
 				return err
 			}
@@ -375,7 +364,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 			}
 			return component.Provide(scope, runnerKey, runner)
 		}),
-		definition("application", []component.ServiceRef{component.Reference(serviceKey)}, []component.ServiceRef{component.Reference(runnerKey), component.Reference(storeKey), component.Reference(recordsKey), component.Reference(yruntime.ProviderKey), component.Reference(yruntime.ToolRegistryKey)}, func(_ context.Context, scope *component.Scope) error {
+		definition("application", []component.ServiceRef{component.Reference(serviceKey)}, []component.ServiceRef{component.Reference(runnerKey), component.Reference(storeKey), component.Reference(recordsKey), component.Reference(yruntime.ProviderKey), component.Reference(yruntime.ToolRegistryKey), component.Reference(workKey), component.Reference(extensionsKey)}, func(_ context.Context, scope *component.Scope) error {
 			runner, err := component.Require(scope, runnerKey)
 			if err != nil {
 				return err
@@ -389,6 +378,14 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 				return err
 			}
 			provider, err := component.Require(scope, yruntime.ProviderKey)
+			if err != nil {
+				return err
+			}
+			work, err := component.Require(scope, workKey)
+			if err != nil {
+				return err
+			}
+			extensions, err := component.Require(scope, extensionsKey)
 			if err != nil {
 				return err
 			}

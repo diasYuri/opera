@@ -143,19 +143,41 @@ func checkSource() error {
 			if err != nil {
 				return err
 			}
-			if strings.HasPrefix(name, "github.com/diasYuri/y/") && strings.Contains(name, "/internal/") {
-				return fmt.Errorf("private Y import in %s", path)
-			}
-			if strings.HasPrefix(filepath.ToSlash(path), "internal/ui/") {
-				for _, blocked := range []string{"github.com/diasYuri/y/pkg/providers", "github.com/diasYuri/y/pkg/agent", "github.com/diasYuri/y/pkg/tools", "os/exec"} {
-					if strings.HasPrefix(name, blocked) {
-						return fmt.Errorf("UI must depend on application actions/events, not %s (%s)", name, path)
-					}
-				}
+			if err := validateImport(path, name); err != nil {
+				return err
 			}
 		}
 		return nil
 	})
+}
+
+func validateImport(path, name string) error {
+	path = filepath.ToSlash(path)
+	if strings.HasPrefix(name, "github.com/diasYuri/y/") && strings.Contains(name, "/internal/") {
+		return fmt.Errorf("private Y import in %s", path)
+	}
+	if strings.HasPrefix(path, "internal/app/") && !strings.HasSuffix(path, "_test.go") {
+		for _, blocked := range []string{"github.com/diasYuri/y/pkg/storage/sqlite", "github.com/diasYuri/opera/internal/persistence", "github.com/diasYuri/y/pkg/providers/openai", "github.com/diasYuri/y/pkg/providers/anthropic", "github.com/diasYuri/y/pkg/providers/google"} {
+			if strings.HasPrefix(name, blocked) {
+				return fmt.Errorf("application core must use ports, not %s (%s)", name, path)
+			}
+		}
+	}
+	if strings.HasPrefix(path, "internal/harness/") && !strings.HasSuffix(path, "_test.go") {
+		for _, blocked := range []string{"github.com/diasYuri/y/pkg/providers/openai", "github.com/diasYuri/y/pkg/providers/anthropic", "github.com/diasYuri/y/pkg/providers/google"} {
+			if strings.HasPrefix(name, blocked) {
+				return fmt.Errorf("provider implementations belong in adapters, not %s (%s)", name, path)
+			}
+		}
+	}
+	if strings.HasPrefix(path, "internal/ui/") {
+		for _, blocked := range []string{"github.com/diasYuri/y/pkg/providers", "github.com/diasYuri/y/pkg/agent", "github.com/diasYuri/y/pkg/tools", "os/exec"} {
+			if strings.HasPrefix(name, blocked) {
+				return fmt.Errorf("UI must depend on application actions/events, not %s (%s)", name, path)
+			}
+		}
+	}
+	return nil
 }
 
 func checkModules() error {

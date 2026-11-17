@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/diasYuri/opera/internal/records"
 	_ "modernc.org/sqlite"
 	"net/url"
 	"os"
@@ -18,11 +19,7 @@ type Store struct {
 	db        *sql.DB
 	Workspace string
 }
-type Document struct {
-	Key     string          `json:"key"`
-	Version uint64          `json:"version"`
-	Data    json.RawMessage `json:"data"`
-}
+type Document = records.Document
 
 func Open(ctx context.Context, path, workspace string) (*Store, error) {
 	uriPath := filepath.ToSlash(path)

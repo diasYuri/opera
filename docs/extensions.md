@@ -47,6 +47,38 @@ model or model credentials are needed. New activations take effect in the next
 CLI invocation or a supported idle reload. A pending approval exits 3; an uncertain
 effect exits 4 and requires explicit reconciliation before retry.
 
+## Native provider and tool-pack replacement
+
+Providers are registered in an instance-scoped `providercatalog.Catalog` with an
+ID, selection metadata and factory. The same catalog supplies execution and the
+chat provider/model selectors. Generic configuration accepts provider IDs and
+composition reports an unregistered ID with context. The default native
+implementations live in `internal/provideradapters`; applications may pass a
+different `ProviderCatalog` to `harness.Open` without adding a provider switch.
+
+Native tool packs are selected by ID in the harness. Pass `DisabledToolPacks` to
+remove a default pack, or `ToolPacks` to contribute a separately owned pack. The
+executable example `Example_customToolPack` in
+`internal/harness/toolpacks_example_test.go` removes the default packs and
+registers a custom tool using the same public Y registry consumed by the runner.
+Pack registration occurs during the tools component's `Start`; the component
+owns the registry and closes every registration together. Extensions continue to
+use the Y `extensions.Host` and its component scopes for dynamic lifecycle.
+
+```go
+opts := harness.Options{
+	ToolPacks: []harness.ToolPack{{
+		ID: "review-tools",
+		Register: registerReviewTools,
+	}},
+	DisabledToolPacks: []string{"shell"},
+}
+```
+
+Pack IDs must be unique. Unknown disabled IDs and duplicate registrations fail
+before a runtime starts. Factories only describe registration; they must not
+open resources or start workers.
+
 ## Tools, resources and prompts
 
 ```sh
