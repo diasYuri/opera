@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/diasYuri/opera/internal/persistence"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/extensions/subagents"
@@ -38,7 +37,7 @@ type childJob struct {
 type Work struct {
 	MaxBudget               int64
 	budget                  map[string]int64
-	Store                   *persistence.Store
+	Store                   Records
 	Service                 *Service
 	MaxConcurrent, MaxDepth int
 	mu                      sync.Mutex
@@ -49,7 +48,7 @@ type Work struct {
 	wg                      sync.WaitGroup
 }
 
-func NewWork(store *persistence.Store, max, depth int) *Work {
+func NewWork(store Records, max, depth int) *Work {
 	return &Work{Store: store, MaxConcurrent: max, MaxDepth: depth, jobs: map[string]*childJob{}, slots: make(chan struct{}, max)}
 }
 func (w *Work) Tasks(ctx context.Context, id string) (taskmanager.Snapshot, error) {

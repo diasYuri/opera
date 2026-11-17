@@ -696,7 +696,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		if msg.String() == "super+v" || msg.String() == "meta+v" {
-			return m, readClipboardImage()
+			return m, m.readClipboardImage()
 		}
 		keys := m.keyBindings()
 		if m.login != nil && m.loginPrompt != nil {

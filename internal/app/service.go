@@ -11,13 +11,11 @@ import (
 	"time"
 
 	"github.com/diasYuri/opera/internal/contextfiles"
-	"github.com/diasYuri/opera/internal/persistence"
 	"github.com/diasYuri/opera/internal/skills"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/agent/compaction"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/policy"
-	"github.com/diasYuri/y/pkg/storage/sqlite"
 )
 
 const HarnessVersion = "opera-f1-y1.3.1"
@@ -27,7 +25,7 @@ type Service struct {
 	controlMu                        sync.Mutex
 	ToolGeneration                   string
 	contexts                         map[string]context.Context
-	Records                          *persistence.Store
+	Records                          Records
 	Work                             *Work
 	QuestionBroker                   *QuestionBroker
 	Summarizer                       compaction.Summarizer
@@ -36,16 +34,29 @@ type Service struct {
 	active                           map[string]context.CancelFunc
 	activeWG                         sync.WaitGroup
 	closed                           bool
-	Runner                           *agent.AgentRunner
+	Runner                           Runner
 	Orchestrators                    map[OrchestrationProfile]RunOrchestrator
-	Store                            *sqlite.Store
+	Store                            ExecutionStore
 	Guard                            *Guard
 	Workspace, Provider, Model, Mode string
 	MaxTokens                        int
 	ContextPaths                     []string
 	LoadImages                       func(context.Context, []string) ([]ai.ContentBlock, error)
+	LoadContext                      func(context.Context, string, []string, int) (contextfiles.Bundle, error)
 	ContextSummary                   []contextfiles.Source
-	Skills                           *skills.Manager
+	Skills                           RunSkills
+}
+
+// RunSkills is the application-facing skill projection and run-lifecycle port.
+type RunSkills interface {
+	Refresh() skills.Catalog
+	Catalog() skills.Catalog
+	PinRun(string) skills.Catalog
+	ReleaseRun(string)
+	CatalogFor(string) skills.Catalog
+	SystemPromptFor(string) string
+	ExplicitNames(string, string) []string
+	InstructionsForNames(string, []string) string
 }
 
 func (s *Service) Metadata(ctx context.Context, id string) (Metadata, error) {
@@ -265,7 +276,10 @@ func (s *Service) Execute(ctx context.Context, request Request, emit func(Event)
 	if metadata.Worker && request.Prompt != "" {
 		request.Prompt = "Plan this task with task_create/task_refine before changing files. Use local subagents when useful; verify their results and complete the plan.\nTask: " + request.Prompt
 	}
-	bundle, contextErr := contextfiles.Load(ctx, s.Workspace, paths, s.ContextBudget)
+	if s.LoadContext == nil {
+		return result, errors.New("context loader is unavailable")
+	}
+	bundle, contextErr := s.LoadContext(ctx, s.Workspace, paths, s.ContextBudget)
 	if contextErr != nil {
 		result.ExitCode = 2
 		return result, contextErr

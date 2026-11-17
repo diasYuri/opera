@@ -80,7 +80,7 @@ func TestProjectCannotElevateOrSelectStore(t *testing.T) {
 func TestInvalidConfigurationNeverEchoesValues(t *testing.T) {
 	const secret = "private-sentinel-do-not-print"
 	for _, text := range []string{
-		"api_key='" + secret + "'", "provider='" + secret + "'", "model='" + secret,
+		"api_key='" + secret + "'", "model='" + secret,
 		"[unknown]\nvalue='" + secret + "'", "[unknown]", "[limits]\ncontext_tokens='" + secret + "'",
 		"[ui]\naccessible='true'", "[agents]\nmax_concurrent=0", "[limits]\nprocess_timeout='0s'",
 		"[limits]\nshutdown_timeout='25h'", "model=['" + secret + "']", "[ui]\naccessible=1",
@@ -90,12 +90,19 @@ func TestInvalidConfigurationNeverEchoesValues(t *testing.T) {
 			t.Errorf("expected safe validation error, got %v", err)
 		}
 	}
-	for _, flags := range []map[string]string{{"model": "bad\x1b[31m"}, {"secret": secret}, {"agents.max_depth": "-1"}, {"ui.no_motion": secret}} {
+	for _, flags := range []map[string]string{{"provider": "bad\x1b[31m"}, {"model": "bad\x1b[31m"}, {"secret": secret}, {"agents.max_depth": "-1"}, {"ui.no_motion": secret}} {
 		opts := fixture(t, "", "")
 		opts.Flags = flags
 		if _, err := config.Load(opts); err == nil || strings.Contains(err.Error(), secret) {
 			t.Errorf("expected safe flag error, got %v", err)
 		}
+	}
+}
+
+func TestProviderIDIsResolvedByCompositionCatalog(t *testing.T) {
+	cfg, err := config.Load(fixture(t, "provider='custom-provider'", ""))
+	if err != nil || cfg.String("provider") != "custom-provider" {
+		t.Fatalf("custom provider ID should pass generic config validation: cfg=%v err=%v", cfg.String("provider"), err)
 	}
 }
 

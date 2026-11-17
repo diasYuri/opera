@@ -11,11 +11,8 @@ import (
 	"image/png"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
-	"time"
 
 	"charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -33,6 +30,12 @@ type AttachmentPreview struct {
 
 type AttachmentPreviewProvider interface {
 	AttachmentPreviews(context.Context) ([]AttachmentPreview, error)
+}
+
+// ClipboardImageProvider is implemented by the delivery adapter because
+// clipboard access is an operating-system effect, not a presentation concern.
+type ClipboardImageProvider interface {
+	ReadClipboardImage(context.Context) ([]byte, error)
 }
 
 type attachmentPreviewsMsg struct {
@@ -75,29 +78,13 @@ func (m model) loadAttachmentPreviews() tea.Cmd {
 	}
 }
 
-func readClipboardImage() tea.Cmd {
+func (m model) readClipboardImage() tea.Cmd {
+	provider, ok := m.service.(ClipboardImageProvider)
+	if !ok {
+		return func() tea.Msg { return clipboardImageMsg{err: fmt.Errorf("image clipboard is unavailable")} }
+	}
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		var cmd *exec.Cmd
-		switch runtime.GOOS {
-		case "darwin":
-			const script = `import AppKit
-let board = NSPasteboard.general
-let source = board.data(forType: .png) ?? board.data(forType: .tiff) ?? board.data(forType: .jpeg)
-guard let data = source, let bitmap = NSBitmapImageRep(data: data), let png = bitmap.representation(using: .png, properties: [:]) else { exit(2) }
-try FileHandle.standardOutput.write(contentsOf: png)`
-			cmd = exec.CommandContext(ctx, "swift", "-e", script)
-		case "linux":
-			if _, err := exec.LookPath("wl-paste"); err == nil {
-				cmd = exec.CommandContext(ctx, "wl-paste", "--no-newline", "--type", "image/png")
-			} else {
-				cmd = exec.CommandContext(ctx, "xclip", "-selection", "clipboard", "-t", "image/png", "-o")
-			}
-		default:
-			return clipboardImageMsg{err: fmt.Errorf("image clipboard is unsupported on %s", runtime.GOOS)}
-		}
-		data, err := cmd.Output()
+		data, err := provider.ReadClipboardImage(m.ctx)
 		if err != nil || len(data) == 0 || len(data) > 16<<20 {
 			return clipboardImageMsg{err: fmt.Errorf("no supported image found in clipboard")}
 		}

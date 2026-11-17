@@ -3,7 +3,6 @@ package config
 
 import (
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,7 +22,7 @@ func Schema() []Field {
 	return []Field{
 		{Key: "accounting.prices_file", Kind: "string", Default: ""},
 		{Key: "extensions.file", Kind: "string", Default: ""},
-		{Key: "provider", Kind: "string", Default: "", Choices: []string{"", "openai", "openai-subscription", "anthropic", "google", "openai-compatible"}},
+		{Key: "provider", Kind: "string", Default: ""},
 		{Key: "model", Kind: "string", Default: ""},
 		{Key: "thinking", Kind: "string", Default: "off", Choices: []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}},
 		{Key: "base_url", Kind: "string", Default: ""},
@@ -67,10 +66,19 @@ func (f Field) parse(raw string) (any, error) {
 			return value.String(), nil
 		}
 	case "string":
-		if !strings.ContainsAny(raw, "\x00\r\n\x1b") && len(raw) <= 512 && (len(f.Choices) == 0 || slices.Contains(f.Choices, raw)) {
+		if !strings.ContainsAny(raw, "\x00\r\n\x1b") && len(raw) <= 512 && (len(f.Choices) == 0 || containsChoice(f.Choices, raw)) {
 			return raw, nil
 		}
 	}
 	// Values can be sensitive, even if supplied to the wrong field.
 	return nil, fmt.Errorf("invalid value for %s (expected %s)", f.Key, f.Kind)
+}
+
+func containsChoice(choices []string, value string) bool {
+	for _, choice := range choices {
+		if choice == value {
+			return true
+		}
+	}
+	return false
 }

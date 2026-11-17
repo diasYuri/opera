@@ -18,6 +18,8 @@ import (
 	"github.com/diasYuri/opera/internal/contextfiles"
 	operaext "github.com/diasYuri/opera/internal/extensions"
 	"github.com/diasYuri/opera/internal/persistence"
+	"github.com/diasYuri/opera/internal/provideradapters"
+	"github.com/diasYuri/opera/internal/providercatalog"
 	"github.com/diasYuri/opera/internal/skills"
 	"github.com/diasYuri/opera/internal/workspace"
 	"github.com/diasYuri/y/pkg/agent"
@@ -41,6 +43,7 @@ type Options struct {
 	ContextPaths    []string
 	Credential      func(context.Context, string) (string, error)
 	ProviderFactory func(context.Context, config.Resolved) (providers.Provider, error)
+	ProviderCatalog *providercatalog.Catalog
 }
 type Runtime struct {
 	Extensions *operaext.Manager
@@ -158,6 +161,9 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 				cfg.Values["model"] = config.Value{Value: "tools", Source: "management"}
 			}
 			if cfg.String("provider") == "" || cfg.String("model") == "" {
+				if opts.Inspection {
+					return component.Provide[agent.Provider](scope, yruntime.ProviderKey, actionProvider{})
+				}
 				return errors.New("choose a provider and model before execution; use opera onboarding or --provider/--model")
 			}
 			if opts.Management {
@@ -165,8 +171,16 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 			}
 			factory := opts.ProviderFactory
 			if factory == nil {
+				catalog := opts.ProviderCatalog
+				if catalog == nil {
+					var err error
+					catalog, err = provideradapters.DefaultCatalog()
+					if err != nil {
+						return err
+					}
+				}
 				factory = func(ctx context.Context, cfg config.Resolved) (providers.Provider, error) {
-					return configuredProvider(ctx, cfg, opts.Credential)
+					return catalog.Create(ctx, cfg, opts.Credential)
 				}
 			}
 			provider, err := factory(ctx, cfg)
@@ -353,7 +367,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 				return nil, nil
 			}))...)}
 			if opts.Credential != nil && !opts.Management {
-				options = append(options, agent.WithRunnerCredentialResolver(credentialResolver{opts.Credential}))
+				options = append(options, agent.WithRunnerCredentialResolver(provideradapters.CredentialResolver{Lookup: opts.Credential}))
 			}
 			runner := agent.NewAgentRunner(provider, registry, options...)
 			if err := scope.Track(runner.Close); err != nil {
@@ -379,7 +393,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 				return err
 			}
 			visionProvider := provider.(providers.Provider)
-			service := &app.Service{ResponseFormat: opts.ResponseFormat, Records: records, Work: work, QuestionBroker: questions, ContextBudget: min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024), ContextPaths: opts.ContextPaths, Skills: skillManager, Runner: runner, Store: store, Guard: guard, Workspace: cfg.Paths.Workspace, Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy"), MaxTokens: cfg.Int("limits.context_tokens"), LoadImages: func(ctx context.Context, paths []string) ([]ai.ContentBlock, error) {
+			service := &app.Service{ResponseFormat: opts.ResponseFormat, Records: records, Work: work, QuestionBroker: questions, ContextBudget: min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024), ContextPaths: opts.ContextPaths, Skills: skillManager, Runner: runner, Store: store, Guard: guard, Workspace: cfg.Paths.Workspace, Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy"), MaxTokens: cfg.Int("limits.context_tokens"), LoadContext: contextfiles.Load, LoadImages: func(ctx context.Context, paths []string) ([]ai.ContentBlock, error) {
 				images, err := contextfiles.Images(ctx, cfg.Paths.Workspace, paths, visionProvider.Capabilities(cfg.String("model")).Vision, min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024))
 				if err == nil && len(images) != len(paths) {
 					return nil, errors.New("each /image path must reference a supported image")

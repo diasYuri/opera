@@ -6,7 +6,18 @@ import (
 	"slices"
 
 	"github.com/diasYuri/y/pkg/agent"
+	"github.com/diasYuri/y/pkg/ai"
 )
+
+// Runner is the application-facing subset of Y's runner. The public SDK owns
+// execution; this port lets use cases depend on the contract rather than its
+// concrete runner implementation.
+type Runner interface {
+	Run(context.Context, agent.RunRequest) (agent.RunResponse, error)
+	Subscribe(func(agent.EventEnvelope)) func()
+	FollowUp(string, ...ai.Message) error
+	Steer(string, ...ai.Message) error
+}
 
 const (
 	ModeDefault = "default"
@@ -48,12 +59,12 @@ type Mode struct {
 // policy and prompt composition stay in Service; profiles can choose a distinct
 // loop without adding mode-specific branches to the UI or request handlers.
 type RunOrchestrator interface {
-	Run(context.Context, *agent.AgentRunner, agent.RunRequest) (agent.RunResponse, error)
+	Run(context.Context, Runner, agent.RunRequest) (agent.RunResponse, error)
 }
 
-type RunOrchestratorFunc func(context.Context, *agent.AgentRunner, agent.RunRequest) (agent.RunResponse, error)
+type RunOrchestratorFunc func(context.Context, Runner, agent.RunRequest) (agent.RunResponse, error)
 
-func (f RunOrchestratorFunc) Run(ctx context.Context, runner *agent.AgentRunner, request agent.RunRequest) (agent.RunResponse, error) {
+func (f RunOrchestratorFunc) Run(ctx context.Context, runner Runner, request agent.RunRequest) (agent.RunResponse, error) {
 	return f(ctx, runner, request)
 }
 

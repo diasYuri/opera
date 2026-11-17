@@ -18,6 +18,8 @@ import (
 	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/contextfiles"
 	"github.com/diasYuri/opera/internal/harness"
+	"github.com/diasYuri/opera/internal/provideradapters"
+	"github.com/diasYuri/opera/internal/providercatalog"
 	"github.com/diasYuri/opera/internal/ui"
 	"github.com/diasYuri/y/pkg/ai"
 )
@@ -212,24 +214,33 @@ func (s *chatSession) ModelChoices(ctx context.Context) ([]string, error) {
 	if s.cfg.String("provider") == "" {
 		return nil, errors.New("connect a provider with /login first")
 	}
-	return harness.ModelChoices(ctx, s.cfg, s.app.credentialLookup(s.cfg))
+	catalog, err := s.providerCatalog()
+	if err != nil {
+		return nil, err
+	}
+	return harness.ModelChoices(ctx, s.cfg, s.app.credentialLookup(s.cfg), catalog)
+}
+
+func (s *chatSession) providerCatalog() (*providercatalog.Catalog, error) {
+	if s.opts.ProviderCatalog != nil {
+		return s.opts.ProviderCatalog, nil
+	}
+	return provideradapters.DefaultCatalog()
 }
 
 func (s *chatSession) ModelProviders() []ui.ProviderOption {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current := s.cfg.String("provider")
-	providers := []ui.ProviderOption{
-		{ID: "openai-subscription", Name: "openai", Description: "Sign in with /login · ChatGPT subscription models"},
-		{ID: "openai", Name: "OpenAI API", Description: "Requires an OpenAI API credential"},
-		{ID: "anthropic", Name: "Anthropic API", Description: "Requires an Anthropic API credential"},
-		{ID: "google", Name: "Google API", Description: "Requires a Google API credential"},
-		{ID: "openai-compatible", Name: "OpenAI-compatible endpoint", Description: "Requires a configured base URL and API credential"},
+	catalog, err := s.providerCatalog()
+	if err != nil {
+		return nil
 	}
-	for i := range providers {
-		providers[i].Current = providers[i].ID == current
+	options := make([]ui.ProviderOption, 0, len(catalog.Entries()))
+	for _, entry := range catalog.Entries() {
+		options = append(options, ui.ProviderOption{ID: entry.ID, Name: entry.Name, Description: entry.Description, Current: entry.ID == current})
 	}
-	return providers
+	return options
 }
 
 func (s *chatSession) ModelCatalog(ctx context.Context, provider string) ([]ui.ModelOption, error) {
@@ -247,7 +258,11 @@ func (s *chatSession) ModelCatalog(ctx context.Context, provider string) ([]ui.M
 	}
 	catalogCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	catalog, err := harness.ModelCatalog(catalogCtx, cfg, s.app.credentialLookup(cfg))
+	providers, err := s.providerCatalog()
+	if err != nil {
+		return nil, err
+	}
+	catalog, err := harness.ModelCatalog(catalogCtx, cfg, s.app.credentialLookup(cfg), providers)
 	if err != nil {
 		return nil, err
 	}
