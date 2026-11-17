@@ -89,8 +89,12 @@ credentials in the prompt or flags. Onboarding saves provider/model/workspace
 policy in a private **user-owned workspace settings file**, outside project files.
 Interactive chat can start before configuration: `/login` opens the provider
 submenu, connects your account and then offers its models. Headless execution
-requires explicit provider/model/policy selection and never opens forms. The OpenAI-compatible provider also requires a
-user-controlled `--base-url` (projects cannot redirect your credentials).
+requires explicit provider/model/policy selection and never opens forms. The
+OpenAI-compatible provider requires a user-controlled `--base-url`; OpenRouter,
+Groq and DeepSeek use their published compatible endpoints by default and allow
+a user-controlled `base_url` override. Projects cannot redirect credentials.
+See the [PI provider map and Opera plan](docs/pi-provider-map.md) for supported
+protocols and limits.
 
 An approval shows the agent, tool, arguments, path and proposed content diff.
 Approval IDs bind the operation and file precondition. Changed files require a

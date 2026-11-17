@@ -2,6 +2,7 @@ package config
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,10 +14,16 @@ import (
 )
 
 func WorkspaceSettingsPath(paths platform.Paths) string {
-	if !filepath.IsAbs(paths.Data) || paths.Workspace == "" {
+	if paths.Workspace == "" {
 		return ""
 	}
-	return filepath.Join(paths.Data, "workspaces", fmt.Sprintf("%x.toml", sha256.Sum256([]byte(paths.Workspace))))
+	if filepath.IsAbs(paths.ConfigDir) {
+		return filepath.Join(paths.ConfigDir, "workspaces", fmt.Sprintf("%x.json", sha256.Sum256([]byte(paths.Workspace))))
+	}
+	if filepath.IsAbs(paths.Data) {
+		return filepath.Join(paths.Data, "workspaces", fmt.Sprintf("%x.toml", sha256.Sum256([]byte(paths.Workspace))))
+	}
+	return ""
 }
 
 // SaveWorkspaceSelection persists user decisions outside version-controlled
@@ -74,6 +81,14 @@ func saveWorkspaceSettings(paths platform.Paths, updates map[string]any) error {
 	if path == "" {
 		return fmt.Errorf("workspace settings path is unavailable")
 	}
+	if filepath.IsAbs(paths.ConfigDir) {
+		if err := os.MkdirAll(paths.ConfigDir, 0700); err != nil {
+			return err
+		}
+		if err := privatefs.Check(paths.ConfigDir, true); err != nil {
+			return err
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
@@ -88,13 +103,23 @@ func saveWorkspaceSettings(paths platform.Paths, updates map[string]any) error {
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
+	jsonSettings := filepath.Ext(path) == ".json"
 	if len(existing) > 0 {
-		if toml.Unmarshal(existing, &values) != nil {
+		if jsonSettings {
+			if json.Unmarshal(existing, &values) != nil {
+				return fmt.Errorf("invalid workspace settings; existing file was preserved")
+			}
+		} else if toml.Unmarshal(existing, &values) != nil {
 			return fmt.Errorf("invalid workspace settings; existing file was preserved")
 		}
 	}
 	mergeSettings(values, updates)
-	raw, err := toml.Marshal(values)
+	var raw []byte
+	if jsonSettings {
+		raw, err = json.MarshalIndent(values, "", "  ")
+	} else {
+		raw, err = toml.Marshal(values)
+	}
 	if err != nil {
 		return err
 	}

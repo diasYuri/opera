@@ -1,9 +1,12 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 
@@ -19,8 +22,9 @@ type Value struct {
 }
 
 type Resolved struct {
-	Values map[string]Value `json:"values"`
-	Paths  platform.Paths   `json:"paths"`
+	Values          map[string]Value `json:"values"`
+	Paths           platform.Paths   `json:"paths"`
+	CustomProviders []CustomProvider `json:"-"`
 }
 
 type Options struct {
@@ -45,7 +49,7 @@ func Load(opts Options) (Resolved, error) {
 				return Resolved{}, err
 			}
 		}
-		values, err := readTOML(layer.path, fields)
+		values, err := readConfigFile(layer.path, fields)
 		if err != nil {
 			return Resolved{}, err
 		}
@@ -87,6 +91,11 @@ func Load(opts Options) (Resolved, error) {
 	if err := result.apply(opts.Flags, "flag", fields); err != nil {
 		return Resolved{}, err
 	}
+	providers, err := LoadCustomProviders(opts.Paths.ProvidersConfig, opts.Paths.ConfigDir)
+	if err != nil {
+		return Resolved{}, err
+	}
+	result.CustomProviders = providers
 	return result, nil
 }
 
@@ -150,6 +159,46 @@ func readTOML(path string, fields map[string]Field) (map[string]string, error) {
 	return values, nil
 }
 
+func readConfigFile(path string, fields map[string]Field) (map[string]string, error) {
+	if filepath.Ext(path) != ".json" {
+		return readTOML(path, fields)
+	}
+	file, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("open settings %s: %w", path, err)
+	}
+	defer func() { _ = file.Close() }()
+	if err := privatefs.Check(filepath.Dir(path), true); err != nil {
+		return nil, fmt.Errorf("settings directory permissions: %w", err)
+	}
+	if err := privatefs.Check(path, false); err != nil {
+		return nil, fmt.Errorf("settings file permissions: %w", err)
+	}
+	const maxConfigBytes = 1 << 20
+	data, err := io.ReadAll(io.LimitReader(file, maxConfigBytes+1))
+	if err != nil || len(data) > maxConfigBytes {
+		return nil, fmt.Errorf("cannot read settings %s (limit: 1 MiB)", path)
+	}
+	var tree map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&tree); err != nil || tree == nil {
+		return nil, fmt.Errorf("invalid JSON settings in %s; values omitted", path)
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return nil, fmt.Errorf("invalid JSON settings in %s; values omitted", path)
+	}
+	values := make(map[string]string)
+	if err := flattenJSON("", tree, fields, values); err != nil {
+		return nil, fmt.Errorf("settings %s: %w", path, err)
+	}
+	return values, nil
+}
+
 func flatten(prefix string, tree map[string]any, fields map[string]Field, values map[string]string) error {
 	for key, value := range tree {
 		name := key
@@ -192,8 +241,68 @@ func flatten(prefix string, tree map[string]any, fields map[string]Field, values
 				return fmt.Errorf("wrong TOML type for %s", name)
 			}
 			values[name] = strconv.FormatInt(v, 10)
+		case json.Number:
+			if field.Kind != "int" {
+				return fmt.Errorf("wrong JSON type for %s", name)
+			}
+			if _, err := strconv.ParseInt(string(v), 10, 64); err != nil {
+				return fmt.Errorf("wrong JSON type for %s", name)
+			}
+			values[name] = string(v)
 		default:
 			return fmt.Errorf("wrong TOML type for %s", name)
+		}
+	}
+	return nil
+}
+
+func flattenJSON(prefix string, tree map[string]any, fields map[string]Field, values map[string]string) error {
+	for key, raw := range tree {
+		name := key
+		if prefix != "" {
+			name = prefix + "." + key
+		}
+		if children, ok := raw.(map[string]any); ok {
+			known := false
+			for field := range fields {
+				if len(field) > len(name) && field[:len(name)+1] == name+"." {
+					known = true
+					break
+				}
+			}
+			if !known {
+				return fmt.Errorf("unknown configuration table; see config schema")
+			}
+			if err := flattenJSON(name, children, fields, values); err != nil {
+				return err
+			}
+			continue
+		}
+		field, ok := fields[name]
+		if !ok {
+			return fmt.Errorf("unknown configuration key; see config schema (secrets belong in auth)")
+		}
+		switch value := raw.(type) {
+		case string:
+			if field.Kind != "string" && field.Kind != "duration" {
+				return fmt.Errorf("wrong JSON type for %s", name)
+			}
+			values[name] = value
+		case bool:
+			if field.Kind != "bool" {
+				return fmt.Errorf("wrong JSON type for %s", name)
+			}
+			values[name] = strconv.FormatBool(value)
+		case json.Number:
+			if field.Kind != "int" {
+				return fmt.Errorf("wrong JSON type for %s", name)
+			}
+			if _, err := strconv.ParseInt(string(value), 10, 64); err != nil {
+				return fmt.Errorf("wrong JSON type for %s", name)
+			}
+			values[name] = string(value)
+		default:
+			return fmt.Errorf("wrong JSON type for %s", name)
 		}
 	}
 	return nil

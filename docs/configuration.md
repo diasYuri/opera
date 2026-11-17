@@ -8,11 +8,18 @@ an unavailable workspace. Headless commands never open an interactive form; `onb
 
 ## Locations
 
-| Platform | User configuration | Data | Cache |
-| --- | --- | --- | --- |
-| Linux | `$XDG_CONFIG_HOME/opera/config.toml`, otherwise `~/.config/opera/config.toml` | `$XDG_DATA_HOME/opera`, otherwise `~/.local/share/opera` | `$XDG_CACHE_HOME/opera`, otherwise `~/.cache/opera` |
-| macOS | `~/Library/Application Support/opera/config.toml` | `~/Library/Application Support/opera` | `~/Library/Caches/opera` |
-| Windows | `%APPDATA%/opera/config.toml` | `%LOCALAPPDATA%/opera` | `%LOCALAPPDATA%/Cache/opera` |
+Core settings are stored in `~/.agents/opera/settings.json`; custom providers are
+stored in `~/.agents/opera/providers.json`. `opera config paths` reports both
+paths. `OPERA_CONFIG_DIR` overrides the directory. Both files must be regular
+files in an application directory private to the current user (0700 directory,
+0600 file on Unix; current-user-only ACL on Windows). `providers.json` may hold
+API keys.
+
+| Platform | Data | Cache |
+| --- | --- | --- |
+| Linux | `$XDG_DATA_HOME/opera`, otherwise `~/.local/share/opera` | `$XDG_CACHE_HOME/opera`, otherwise `~/.cache/opera` |
+| macOS | `~/Library/Application Support/opera` | `~/Library/Caches/opera` |
+| Windows | `%LOCALAPPDATA%/opera` | `%LOCALAPPDATA%/Cache/opera` |
 
 If Windows application-data variables are unset, use `~/AppData/Roaming` and
 `~/AppData/Local`. `OPERA_CONFIG_DIR`, `OPERA_DATA_DIR` and `OPERA_CACHE_DIR`
@@ -21,18 +28,26 @@ Discovery is read-only: paths need not exist until explicitly storing data.
 
 The workspace is the current directory by default. `--workspace` overrides
 `OPERA_WORKSPACE`; canonicalization resolves symlinks and requires an existing
-directory. Project configuration is `<canonical-workspace>/.opera/config.toml`.
-There is no parent-directory config search in F0. `--user-config` and
+directory. Project configuration remains `<canonical-workspace>/.opera/config.toml`.
+There is no parent-directory config search. `--user-config` and
 `--project-config` select explicit files and require them to exist. Missing
-default files are optional. Configuration files are limited to 1 MiB.
+default files are optional. Settings, providers and project files are limited to 1 MiB.
+Workspace-specific interactive preferences are stored under
+`~/.agents/opera/workspaces/`.
 
 ## Precedence, types and trust
 
-Apply defaults, global user TOML, private per-workspace user settings, project TOML, environment, then flags. Onboarding writes the workspace-specific part of the user layer under `<data>/workspaces/<workspace-hash>.toml` with user-only permissions; its provenance is `user-workspace`. It never writes trust into version-controlled project configuration. Empty strings
+Apply defaults, global user `settings.json`, private per-workspace settings,
+project TOML, environment, then flags. `settings.json` uses JSON with the same
+core keys shown by `config schema`, nested under objects such as `agents`,
+`limits` and `ui`. Onboarding writes workspace-specific choices under
+`~/.agents/opera/workspaces/<workspace-hash>.json` with private permissions; its
+provenance is `user-workspace`. It never writes trust into version-controlled
+project configuration. Empty strings
 and `false` are explicit values. Each key retains `default`, `user`, `project`,
 `environment` or `flag` provenance. Invalid values in any layer are errors even
-when a later layer would override them. Unknown keys/tables and incorrect TOML
-types are errors. Parsing errors omit input values so accidentally supplied
+when a later layer would override them. Unknown keys/tables and incorrect JSON
+or TOML types are errors. Parsing errors omit input values so accidentally supplied
 secrets do not appear in diagnostics.
 
 Policy order is `read-only < ask < trusted`. Project policy cannot exceed the
@@ -45,7 +60,8 @@ an operating-system sandbox.
 
 Environment names are `OPERA_` plus the uppercase dotted key with dots replaced
 by underscores. For example, `agents.max_depth` becomes `OPERA_AGENTS_MAX_DEPTH`.
-Only documented environment keys are read. Secrets do not have config keys.
+Only documented environment keys are read. Core settings have no API secret
+fields; custom provider credentials are defined separately in the private provider file.
 
 ```sh
 opera config get policy --policy read-only
@@ -82,12 +98,24 @@ dependencies: missing `rg` falls back to filesystem text search in F2, missing
 `ast-grep` disables AST search, missing language servers disable semantic
 navigation, and missing Git disables Git operations. No fallback bypasses policy.
 
-The [example](../examples/config.toml) documents every supported key. Raw secrets
-belong only in the separate credential store; `credential_ref` is a lookup name.
+The core JSON can select a provider defined in `providers.json`:
+
+```json
+{
+  "provider": "custom:acme",
+  "model": "acme-reasoner",
+  "policy": "ask",
+  "ui": { "theme": "system" }
+}
+```
+
+The [example](../examples/config.toml) documents project TOML keys. Custom
+provider definitions are documented in [custom providers](custom-providers.md).
+`credential_ref` continues to name credentials stored in the separate store.
 
 F2 adds `thinking` (`off` by default; `OPERA_THINKING`/`--thinking`) and enforces
 `limits.attachment_bytes` within the context budget. Interactive selections are
-session-local; use user TOML or flags for persistent defaults. `--attach` may
+session-local; use user settings or flags for persistent defaults. `--attach` may
 repeat; `context`/`/context` show the loaded instruction and attachment sources.
 
 F3 enforces `agents.max_concurrent` (default 4), `agents.max_depth` (default 1)

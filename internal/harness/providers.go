@@ -16,7 +16,9 @@ type ModelInfo struct {
 	Reasoning bool
 }
 
-func nativeCatalog() (*providercatalog.Catalog, error) { return provideradapters.DefaultCatalog() }
+func nativeCatalog(cfg config.Resolved) (*providercatalog.Catalog, error) {
+	return provideradapters.DefaultCatalog(cfg.CustomProviders...)
+}
 
 func configuredProvider(ctx context.Context, cfg config.Resolved, lookup func(context.Context, string) (string, error), catalogs ...*providercatalog.Catalog) (providers.Provider, error) {
 	var catalog *providercatalog.Catalog
@@ -25,7 +27,7 @@ func configuredProvider(ctx context.Context, cfg config.Resolved, lookup func(co
 	}
 	if catalog == nil {
 		var err error
-		catalog, err = nativeCatalog()
+		catalog, err = nativeCatalog(cfg)
 		if err != nil {
 			return nil, err
 		}

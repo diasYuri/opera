@@ -201,8 +201,8 @@ func (a App) config(args []string, cfg config.Resolved, jsonl bool) int {
 			return a.emit("config.paths", cfg.Paths)
 		}
 		paths := cfg.Paths
-		return a.writeText(fmt.Sprintf("workspace: %s\nuser config: %s\nproject config: %s\ndata: %s\ncache: %s\ncredentials: %s\n",
-			paths.Workspace, paths.UserConfig, paths.ProjectConfig, paths.Data, paths.Cache, paths.Credentials))
+		return a.writeText(fmt.Sprintf("workspace: %s\nconfig directory: %s\nsettings: %s\ncustom providers: %s\nproject config: %s\ndata: %s\ncache: %s\ncredentials: %s\n",
+			paths.Workspace, paths.ConfigDir, paths.UserConfig, paths.ProvidersConfig, paths.ProjectConfig, paths.Data, paths.Cache, paths.Credentials))
 	}
 	if len(args) == 2 && args[0] == "get" {
 		value, ok := cfg.Values[args[1]]

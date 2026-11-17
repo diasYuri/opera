@@ -67,7 +67,7 @@ func (b *compositionBuilder) provider() component.Definition {
 			catalog := opts.ProviderCatalog
 			if catalog == nil {
 				var err error
-				catalog, err = provideradapters.DefaultCatalog()
+				catalog, err = provideradapters.DefaultCatalog(cfg.CustomProviders...)
 				if err != nil {
 					return err
 				}

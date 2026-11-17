@@ -1,8 +1,10 @@
 # Models and tools
 
-`opera models --provider <id>` exposes public SDK model metadata/capabilities
-without reading credentials. Lists may be curated SDK fallbacks, not an account's
-remote entitlement. `/model` offers keyboard selection at idle; `/model <provider>
+`opera models --provider <id>` exposes public model metadata/capabilities.
+OpenRouter, Groq and DeepSeek query their `/models` endpoint using the configured
+credential; other providers may use SDK metadata without reading credentials.
+Compatible endpoint metadata does not establish model-specific capability or
+account entitlement. `/model` offers keyboard selection at idle; `/model <provider>
 <model>` is the direct/accessible form. `/thinking` accepts only advertised
 reasoning support. A capability flag cannot guarantee that an endpoint or account
 accepts a particular request. Unknown OpenAI-compatible contracts are not inferred.

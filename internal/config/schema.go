@@ -1,4 +1,4 @@
-// Package config loads non-secret configuration and records its provenance.
+// Package config loads core settings and user-owned provider definitions.
 package config
 
 import (
