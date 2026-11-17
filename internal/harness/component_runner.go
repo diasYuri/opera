@@ -48,7 +48,7 @@ func (b *compositionBuilder) runner() component.Definition {
 		if err != nil {
 			return err
 		}
-		options := []agent.RunnerOption{agent.WithRunnerStateStore(store), agent.WithRunnerEventStore(store), agent.WithRunnerTranscriptStore(store), agent.WithRunnerOperationStore(store), agent.WithRunnerAgentOptions(append(extensions.AgentOptions(), work.AgentOption(), agent.WithMaxTurns(64), agent.WithMaxRetries(0), agent.WithToolTimeout(timeout), agent.WithStreamDefaults(providers.StreamOptions{Timeout: timeout, MaxTokens: 4096, Reasoning: ai.ThinkingLevel(opts.Thinking), ResponseFormat: opts.ResponseFormat}), agent.WithBeforeRequest(func(ctx context.Context, request *providers.StreamRequest) (*agent.HookedResponse, error) {
+		options := []agent.RunnerOption{agent.WithRunnerStateStore(store), agent.WithRunnerEventStore(store), agent.WithRunnerTranscriptStore(store), agent.WithRunnerOperationStore(store), agent.WithRunnerAgentOptions(append(extensions.AgentOptions(), work.AgentOption(), agent.WithMaxTurns(64), agent.WithMaxRetries(0), agent.WithToolTimeout(timeout), agent.WithStreamDefaults(providers.StreamOptions{Timeout: timeout, MaxTokens: 4096, Reasoning: ai.ThinkingLevel(opts.Thinking), ThinkingBudgets: defaultThinkingBudgets(), ResponseFormat: opts.ResponseFormat}), agent.WithBeforeRequest(func(ctx context.Context, request *providers.StreamRequest) (*agent.HookedResponse, error) {
 			if request.Options.ResponseFormat != nil {
 				if err := providers.ValidateStructuredOutputRequest(*request, providerAdapter.ID(), providerAdapter.Capabilities(request.Model.ID)); err != nil {
 					return nil, err
@@ -125,4 +125,18 @@ func (b *compositionBuilder) runner() component.Definition {
 		}
 		return component.Provide(scope, b.keys.runner, runner)
 	})
+}
+
+// ThinkingBudgets translates Opera's ordered levels to provider-neutral token
+// budgets. Keep the largest budget below the runner's 4096-token output limit,
+// as Anthropic requires its thinking budget to be smaller than max_tokens.
+func defaultThinkingBudgets() map[ai.ThinkingLevel]int64 {
+	return map[ai.ThinkingLevel]int64{
+		ai.ThinkingMinimal: 1024,
+		ai.ThinkingLow:     1536,
+		ai.ThinkingMedium:  2048,
+		ai.ThinkingHigh:    2560,
+		ai.ThinkingXHigh:   3072,
+		ai.ThinkingMax:     3072,
+	}
 }
