@@ -1,7 +1,6 @@
 # Refactoring validation
 
-Data: 2026-11-16. Este registro separa o que foi implementado do que continua
-pendente; o plano de refatoração não está concluído.
+Atualizado em 2026-11-17. Este registro separa evidências executadas e limites; as etapas 3–5 foram concluídas nos commits desta atualização.
 
 ## Alterações e commits
 
@@ -48,23 +47,55 @@ consumidor SDK em `make check` e não usa `replace`, `go.work` ou imports privad
 As referências locais em `../y/docs` foram consultadas como direção arquitetural;
 as garantias consumidas são as APIs públicas compiladas dessa versão.
 
-## Trabalho pendente
+## Etapas 3–5 concluídas nesta atualização
 
-- Etapa 3 está parcial: Work e Extensions agora são serviços declarados e tool
-  packs são substituíveis, mas `harness.Open` ainda contém a composição principal
-  em uma função extensa. Storage, provider, tools, runner, application e inspection
-  ainda precisam ser extraídos em builders/componentes coesos. Também falta testar
-  rollback/cleanup de falha parcial com doubles focados nessa composição.
-- Etapa 4 está parcial: atividade tem submodelo próprio; composer, seleção/painel
-  e conversação continuam coordenados pelo model shell de `internal/ui/chat.go`.
-  A extração de ownership desses fluxos e os testes completos de foco, cancelamento,
-  geração obsoleta, resize e modos acessíveis continuam pendentes.
-- A etapa 5 adicionou regras e testes do verificador, documentação de tool packs e
-  exemplo executável. Ainda não há exemplo de substituição de provider com uma
-  implementação funcional própria; o exemplo atual demonstra substituição de
-  tool pack.
+- `082c1b4 refactor(harness): harden startup and provider catalog composition`:
+  fonte de caminhos de contexto atualizável e explícita, validação contra factories
+  nulas e providers incompatíveis, inspeção sem provider, e catálogo customizável
+  também no comando `models`. Testes cobrem rollback de provider e recurso de tool
+  pack, ordem inversa e fechamento único, startup cancelado, caminhos atualizados,
+  inspeção offline e provider de catálogo próprio executando pelo `app.Service`.
+- `3a3b0ed refactor(ui): give composer overlays and conversation state owners` e
+  `b9b4458 refactor(ui): move conversation transitions into owners`: shell usa os
+  owners de composer/histórico, seleção/painel e conversação. Identidade de entradas,
+  índices, reset e commit de checkpoint pertencem à conversação; transições do
+  composer e exclusividade seleção/painel pertencem aos respectivos owners. Os testes
+  de owner cobrem navegação de histórico, identidade estável, deduplicação de
+  checkpoint e troca/dismissal de painel. Regressões existentes cobrem foco após
+  Escape, cancelamento, scrollback, resize, NO_COLOR, no-motion e eventos obsoletos.
+- `81c7874 refactor(harness): split component builders by responsibility`:
+  `Open` foi reduzido a bootstrap curto; storage, provider, tools, runner,
+  application e inspection são builders separados, com keys centralizadas em
+  `keys.go` e dependências descritas nos descriptors Y. O request hook não captura
+  mais o Service por comunicação lateral. Runtime e lifecycle continuam usando
+  `runtime.Harness` público de Y.
+- Um teste de harness demonstra substituição por um provider scriptado registrado em
+  `providercatalog.Catalog`, sem rede, credenciais ou alteração do core. A factory
+  legada continua aceitando os doubles existentes com ID `openai`.
 
-Essas lacunas são concretas; portanto, este relatório não declara o plano completo.
+## Evidência final executada em 2026-11-17
+
+- `rtk proxy make check`: passou após a extração dos builders, incluindo testes,
+  verificador de arquitetura, consumidor SDK e build CGO-free.
+- `rtk proxy make lint`: passou, 0 issues.
+- `rtk proxy make matrix`: passou para Linux/macOS/Windows amd64/arm64, incluindo
+  build e compilação dos testes de plataforma. É cross-compilation, não execução
+  nativa nesses seis ambientes.
+- `rtk proxy make inventory`: passou; 1.746 declarações públicas de Y v1.3.4.
+- `rtk proxy go mod tidy -diff`: sem diferenças.
+- `rtk proxy env GOTOOLCHAIN=go1.27.4 GOWORK=off CGO_ENABLED=1 GOFLAGS='-tags=feature_lsp,feature_wasm_ext' go test -race ./...`: passou no host macOS arm64.
+- Smoke offline passou para `bin/opera --help`, `bin/opera --version` e
+  `bin/opera doctor --format jsonl`; doctor não iniciou providers nem leu segredos.
+- Nenhum teste live pago/externo foi executado.
+- Os testes dos owners TUI, harness e CLI passaram também em execução isolada do
+  índice preparado para o commit da UI, usando os arquivos `HEAD` como base; mudanças
+  locais prévias em `DESIGN.md`, `app/user_question.go`, `chat.go`, `conversation.go`,
+  `layout.go`, `layout_test.go`, `theme.go` e `openai_serialization_test.go` ficaram
+  fora dos commits desta tarefa.
+
+A implementação usa somente o SDK público Y v1.3.4 fixado em `go.mod`; não adiciona
+`replace`, `go.work` nem imports privados. Testes live continuam dependendo de
+credenciais e autorização e não fazem parte desta validação.
 
 ## Revisão integrada do agente principal
 
