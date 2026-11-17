@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/diasYuri/opera/internal/adapters/providers/openai/subscription"
+	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/opera/internal/credentials"
 )
 
@@ -47,7 +47,7 @@ func TestOAuthDeviceNotificationAndSeparateSecretStore(t *testing.T) {
 func TestSubscriptionAccountStatusAndLogout(t *testing.T) {
 	f := newFixture(t)
 	store := credentials.FileStore{Directory: filepath.Join(f.root, "data", "credentials")}
-	record := subscription.Record{ClientID: "oaiapp_work", Subject: "verified-user", Email: "work@example.test", AccessToken: "private-access", IDToken: "private-identity", ExpiresAt: time.Now().Add(time.Hour)}
+	record := core.SubscriptionRecord{ClientID: "oaiapp_work", Subject: "verified-user", Email: "work@example.test", AccessToken: "private-access", IDToken: "private-identity", ExpiresAt: time.Now().Add(time.Hour)}
 	raw, err := json.Marshal(record)
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestSubscriptionAccountStatusAndLogout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var signedOut subscription.Record
+	var signedOut core.SubscriptionRecord
 	if err := json.Unmarshal([]byte(rawRecord), &signedOut); err != nil {
 		t.Fatal(err)
 	}

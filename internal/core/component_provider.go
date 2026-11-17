@@ -1,4 +1,4 @@
-package harness
+package core
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"github.com/diasYuri/opera/internal/accounting"
 	"github.com/diasYuri/opera/internal/app"
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/provideradapters"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/component"
 	"github.com/diasYuri/y/pkg/providers"
@@ -67,7 +66,7 @@ func (b *compositionBuilder) provider() component.Definition {
 			catalog := opts.ProviderCatalog
 			if catalog == nil {
 				var err error
-				catalog, err = provideradapters.DefaultCatalog(cfg.CustomProviders...)
+				catalog, err = DefaultCatalog(cfg.CustomProviders...)
 				if err != nil {
 					return err
 				}

@@ -9,7 +9,7 @@ import (
 
 	"github.com/diasYuri/opera/internal/app"
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/harness"
+	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/opera/internal/platform"
 )
 
@@ -28,7 +28,7 @@ func TestChatLoginRegistryAndSelection(t *testing.T) {
 	cfg.Values["provider"] = config.Value{Value: "openai-compatible"}
 	cfg.Values["model"] = config.Value{Value: "old-model"}
 	cfg.Values["base_url"] = config.Value{Value: "https://old-provider.test"}
-	s := newChatSession(App{}, cfg, harness.Options{}, nil)
+	s := newChatSession(App{}, cfg, core.Options{}, nil)
 	if providers := s.LoginProviders(); len(providers) != 1 || providers[0].ID != "openai" || providers[0].Name != "OpenAI" {
 		t.Fatal("production registry must offer only OpenAI", providers)
 	}
@@ -62,7 +62,7 @@ func TestChatLoginRegistryAndSelection(t *testing.T) {
 
 func TestChatLoginFailurePreservesSelectionAndFirstRunNeedsNoRuntime(t *testing.T) {
 	cfg := sessionConfig(t)
-	s := newChatSession(App{}, cfg, harness.Options{}, nil)
+	s := newChatSession(App{}, cfg, core.Options{}, nil)
 	first := s.Start(context.Background(), app.Request{Prompt: "before login"})
 	update := <-first.Updates
 	if update.Error == nil || !strings.Contains(update.Error.Error(), "/login") || s.runtime != nil {

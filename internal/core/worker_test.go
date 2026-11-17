@@ -1,11 +1,11 @@
-package harness_test
+package core_test
 
 import (
 	"context"
 	"encoding/json"
 	"github.com/diasYuri/opera/internal/app"
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/harness"
+	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/providers"
@@ -64,9 +64,9 @@ func (p workerProvider) Stream(ctx context.Context, req providers.StreamRequest)
 	fake := providertest.NewFakeProvider(providertest.WithFakeResponses(providertest.FakeResponse{Events: events}))
 	return fake.Stream(ctx, req)
 }
-func workerRuntime(t *testing.T, cfg config.Resolved) *harness.Runtime {
+func workerRuntime(t *testing.T, cfg config.Resolved) *core.Runtime {
 	t.Helper()
-	r, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+	r, err := core.Open(context.Background(), cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
 		return workerProvider{providertest.NewFakeProvider()}, nil
 	}})
 	if err != nil {
@@ -212,7 +212,7 @@ func TestWorkerCancellationPropagatesAndInspectionDoesNotRestart(t *testing.T) {
 	entered := make(chan struct{}, 2)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	r, err := harness.Open(ctx, cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+	r, err := core.Open(ctx, cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
 		return blockingChildren{workerProvider{providertest.NewFakeProvider()}, entered}, nil
 	}})
 	if err != nil {
@@ -258,7 +258,7 @@ func TestWorkerCancellationPropagatesAndInspectionDoesNotRestart(t *testing.T) {
 		}
 	}
 	closeRuntime(t, r)
-	inspection, err := harness.Open(ctx, cfg, harness.Options{Inspection: true})
+	inspection, err := core.Open(ctx, cfg, core.Options{Inspection: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -275,7 +275,7 @@ func TestWorkerCancellationPropagatesAndInspectionDoesNotRestart(t *testing.T) {
 func TestActiveControlsAreOrderedAndPersisted(t *testing.T) {
 	cfg := configuration(t)
 	provider := &cancellableProvider{FakeProvider: providertest.NewFakeProvider(), entered: make(chan struct{}), block: true}
-	r, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }})
+	r, err := core.Open(context.Background(), cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -351,7 +351,7 @@ func TestNestedChildrenYieldSingleWorkerSlot(t *testing.T) {
 	cfg.Values["agents.max_depth"] = config.Value{Value: 2, Source: "test"}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	r, err := harness.Open(ctx, cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+	r, err := core.Open(ctx, cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
 		return nestedProvider{providertest.NewFakeProvider()}, nil
 	}})
 	if err != nil {
@@ -375,7 +375,7 @@ func TestSharedBudgetFailsBeforeInference(t *testing.T) {
 	cfg := configuration(t)
 	cfg.Values["limits.worker_tokens"] = config.Value{Value: 1024, Source: "test"}
 	provider := providertest.NewFakeProvider()
-	r, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }})
+	r, err := core.Open(context.Background(), cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +397,7 @@ func TestControlJournalRecoversMissingQueueExactlyOnce(t *testing.T) {
 	provider := &cancellableProvider{FakeProvider: providertest.NewFakeProvider(), entered: make(chan struct{}), block: true}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	r, err := harness.Open(ctx, cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }})
+	r, err := core.Open(ctx, cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,7 +419,7 @@ func TestControlJournalRecoversMissingQueueExactlyOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	closeRuntime(t, r)
-	r, err = harness.Open(ctx, cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+	r, err = core.Open(ctx, cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
 		return continuingProvider{providertest.NewFakeProvider()}, nil
 	}})
 	if err != nil {

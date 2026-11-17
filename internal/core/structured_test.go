@@ -1,4 +1,4 @@
-package harness_test
+package core_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 
 	"github.com/diasYuri/opera/internal/app"
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/harness"
+	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/y/pkg/agent/agenttest"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/providers"
@@ -30,7 +30,7 @@ func TestStructuredOutputCapabilitySchemaAndInvalidResponse(t *testing.T) {
 			}
 			p := agenttest.NewScriptProvider(t, turns...)
 			capable := capabilityProvider{Provider: namedProvider{p}, supported: tc.supported}
-			r, err := harness.Open(context.Background(), cfg, harness.Options{ResponseFormat: format, ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return capable, nil }})
+			r, err := core.Open(context.Background(), cfg, core.Options{ResponseFormat: format, ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return capable, nil }})
 			if err != nil {
 				t.Fatal(err)
 			}

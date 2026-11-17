@@ -1,5 +1,5 @@
-// Package provideradapters composes the default provider modules into one catalog.
-package provideradapters
+// Package core composes the runtime and default provider catalog.
+package core
 
 import (
 	"context"
@@ -42,4 +42,20 @@ func (r CredentialResolver) ResolveAPIKey(ctx context.Context, request auth.Reso
 		return "", nil
 	}
 	return r.Lookup(ctx, request.ProviderID)
+}
+
+// SubscriptionRecord and its factory keep CLI authentication flows behind core's
+// provider composition boundary while preserving the provider-owned protocol.
+type SubscriptionRecord = subscription.Record
+
+const SubscriptionProviderID = subscription.ProviderID
+
+func NewSubscriptionClient() *subscription.Client { return subscription.NewClient() }
+
+func NewSubscriptionProvider(lookup func(context.Context, string) (string, error)) *subscription.Provider {
+	return subscription.NewProvider(lookup)
+}
+
+func CustomAPIKey(ctx context.Context, provider config.CustomProvider) (string, error) {
+	return custom.CustomAPIKey(ctx, provider)
 }

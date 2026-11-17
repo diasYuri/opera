@@ -157,21 +157,21 @@ func validateImport(path, name string) error {
 		return fmt.Errorf("private Y import in %s", path)
 	}
 	if strings.HasPrefix(path, "internal/app/") && !strings.HasSuffix(path, "_test.go") {
-		for _, blocked := range []string{"github.com/diasYuri/opera/internal/contextfiles", "github.com/diasYuri/opera/internal/approvalfiles", "github.com/diasYuri/opera/internal/harness", "github.com/diasYuri/opera/internal/cli", "github.com/diasYuri/opera/internal/ui", "github.com/diasYuri/opera/internal/provideradapters", "os/exec", "github.com/diasYuri/y/pkg/storage/sqlite", "github.com/diasYuri/opera/internal/persistence", "github.com/diasYuri/opera/internal/skills", "github.com/diasYuri/y/pkg/providers/openai", "github.com/diasYuri/y/pkg/providers/anthropic", "github.com/diasYuri/y/pkg/providers/google"} {
+		for _, blocked := range []string{"github.com/diasYuri/opera/internal/contextfiles", "github.com/diasYuri/opera/internal/approvalfiles", "github.com/diasYuri/opera/internal/core", "github.com/diasYuri/opera/internal/cli", "github.com/diasYuri/opera/internal/ui", "os/exec", "github.com/diasYuri/y/pkg/storage/sqlite", "github.com/diasYuri/opera/internal/persistence", "github.com/diasYuri/opera/internal/skills", "github.com/diasYuri/y/pkg/providers/openai", "github.com/diasYuri/y/pkg/providers/anthropic", "github.com/diasYuri/y/pkg/providers/google"} {
 			if strings.HasPrefix(name, blocked) {
 				return fmt.Errorf("application core must use ports, not %s (%s)", name, path)
 			}
 		}
 	}
-	if strings.HasPrefix(path, "internal/harness/") && !strings.HasSuffix(path, "_test.go") {
-		for _, blocked := range []string{"github.com/diasYuri/opera/internal/adapters/providers/", "github.com/diasYuri/y/pkg/providers/openai", "github.com/diasYuri/y/pkg/providers/anthropic", "github.com/diasYuri/y/pkg/providers/google"} {
-			if strings.HasPrefix(name, blocked) {
-				return fmt.Errorf("provider implementations belong in adapters, not %s (%s)", name, path)
-			}
-		}
+	if strings.HasPrefix(path, "internal/modules/") && strings.HasPrefix(name, "github.com/diasYuri/opera/internal/core") {
+		return fmt.Errorf("modules must not depend on core composition (%s)", path)
+	}
+	if strings.HasPrefix(name, "github.com/diasYuri/opera/internal/adapters/providers/") &&
+		!strings.HasPrefix(path, "internal/core/") && !strings.HasPrefix(path, "internal/adapters/providers/") {
+		return fmt.Errorf("providers may be imported only by core composition and their own modules, not %s (%s)", name, path)
 	}
 	if strings.HasPrefix(path, "internal/ui/") {
-		for _, blocked := range []string{"github.com/diasYuri/opera/internal/skills", "github.com/diasYuri/opera/internal/persistence", "github.com/diasYuri/opera/internal/harness", "github.com/diasYuri/opera/internal/cli", "github.com/diasYuri/y/pkg/providers", "github.com/diasYuri/y/pkg/agent", "github.com/diasYuri/y/pkg/tools", "os/exec"} {
+		for _, blocked := range []string{"github.com/diasYuri/opera/internal/skills", "github.com/diasYuri/opera/internal/persistence", "github.com/diasYuri/opera/internal/core", "github.com/diasYuri/opera/internal/cli", "github.com/diasYuri/y/pkg/providers", "github.com/diasYuri/y/pkg/agent", "github.com/diasYuri/y/pkg/tools", "os/exec"} {
 			if strings.HasPrefix(name, blocked) {
 				return fmt.Errorf("UI must depend on application actions/events, not %s (%s)", name, path)
 			}

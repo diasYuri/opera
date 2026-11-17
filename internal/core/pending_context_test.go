@@ -1,4 +1,4 @@
-package harness_test
+package core_test
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 
 	"github.com/diasYuri/opera/internal/app"
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/harness"
+	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/y/pkg/agent/agenttest"
 	"github.com/diasYuri/y/pkg/providers"
 )
@@ -14,7 +14,7 @@ import (
 func TestApprovalHandoffRepairsOtherUnresolvedToolResults(t *testing.T) {
 	cfg := configuration(t)
 	p := namedProvider{agenttest.NewScriptProvider(t, agenttest.ScriptedTurn{ToolCalls: []agenttest.ScriptedToolCall{{Name: "write_file", Arguments: `{"path":"approved.txt","content":"ok"}`}, {Name: "write_file", Arguments: `{"path":"deferred.txt","content":"later"}`}}}, agenttest.TextTurn("done"))}
-	r, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return p, nil }})
+	r, err := core.Open(context.Background(), cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return p, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}

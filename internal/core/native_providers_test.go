@@ -1,4 +1,4 @@
-package harness_test
+package core_test
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 
 	"github.com/diasYuri/opera/internal/app"
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/harness"
+	"github.com/diasYuri/opera/internal/core"
 )
 
 func TestNativeProviderFixturesUseOperaToolsAndAccounting(t *testing.T) {
@@ -69,7 +69,7 @@ func TestNativeProviderFixturesUseOperaToolsAndAccounting(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(cfg.Paths.Workspace, "sample.txt"), []byte("native input"), 0600); err != nil {
 				t.Fatal(err)
 			}
-			r, err := harness.Open(context.Background(), cfg, harness.Options{Credential: func(context.Context, string) (string, error) { return "fixture-key", nil }})
+			r, err := core.Open(context.Background(), cfg, core.Options{Credential: func(context.Context, string) (string, error) { return "fixture-key", nil }})
 			if err != nil {
 				t.Fatal(err)
 			}

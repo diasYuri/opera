@@ -9,7 +9,7 @@ import (
 
 	"github.com/diasYuri/opera/internal/app"
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/harness"
+	"github.com/diasYuri/opera/internal/core"
 	taskmanager "github.com/diasYuri/y/pkg/extensions/task-manager"
 	"github.com/diasYuri/y/pkg/providers"
 )
@@ -36,8 +36,8 @@ func Run(ctx context.Context, cfg config.Resolved, mode string, p Provider, emit
 	if err := os.WriteFile(filepath.Join(cfg.Paths.Workspace, "AGENTS.md"), []byte("Verify the demo change. Do not write denied.txt."), 0600); err != nil {
 		return e, err
 	}
-	open := func() (*harness.Runtime, error) {
-		return harness.Open(ctx, cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return p, nil }})
+	open := func() (*core.Runtime, error) {
+		return core.Open(ctx, cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return p, nil }})
 	}
 	r, err := open()
 	if err != nil {

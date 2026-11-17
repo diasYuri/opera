@@ -16,8 +16,7 @@ import (
 	"github.com/diasYuri/opera/internal/app"
 	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/contextfiles"
-	"github.com/diasYuri/opera/internal/harness"
-	"github.com/diasYuri/opera/internal/provideradapters"
+	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/opera/internal/providercatalog"
 	"github.com/diasYuri/opera/internal/ui"
 	"github.com/diasYuri/y/pkg/ai"
@@ -37,13 +36,13 @@ type chatSession struct {
 	mu                  sync.Mutex
 	app                 App
 	cfg                 config.Resolved
-	opts                harness.Options
-	runtime             *harness.Runtime
+	opts                core.Options
+	runtime             *core.Runtime
 	methods             []loginMethod
 	openBrowser         func(context.Context, string) error
 }
 
-func newChatSession(a App, cfg config.Resolved, opts harness.Options, r *harness.Runtime) *chatSession {
+func newChatSession(a App, cfg config.Resolved, opts core.Options, r *core.Runtime) *chatSession {
 	if opts.ProviderCatalog == nil {
 		opts.ProviderCatalog = a.ProviderCatalog
 	}
@@ -286,14 +285,14 @@ func (s *chatSession) ModelChoices(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return harness.ModelChoices(ctx, s.cfg, s.app.credentialLookup(s.cfg), catalog)
+	return core.ModelChoices(ctx, s.cfg, s.app.credentialLookup(s.cfg), catalog)
 }
 
 func (s *chatSession) providerCatalog() (*providercatalog.Catalog, error) {
 	if s.opts.ProviderCatalog != nil {
 		return s.opts.ProviderCatalog, nil
 	}
-	return provideradapters.DefaultCatalog(s.cfg.CustomProviders...)
+	return core.DefaultCatalog(s.cfg.CustomProviders...)
 }
 
 func (s *chatSession) ModelProviders() []ui.ProviderOption {
@@ -330,7 +329,7 @@ func (s *chatSession) ModelCatalog(ctx context.Context, provider string) ([]ui.M
 	if err != nil {
 		return nil, err
 	}
-	catalog, err := harness.ModelCatalog(catalogCtx, cfg, s.app.credentialLookup(cfg), providers)
+	catalog, err := core.ModelCatalog(catalogCtx, cfg, s.app.credentialLookup(cfg), providers)
 	if err != nil {
 		return nil, err
 	}
@@ -528,7 +527,7 @@ func (s *chatSession) inspectionService(ctx context.Context) (*app.Service, func
 	cfg := s.cfg
 	cfg.Values = cloneValues(s.cfg.Values)
 	s.mu.Unlock()
-	runtime, err := harness.Open(ctx, cfg, harness.Options{Inspection: true})
+	runtime, err := core.Open(ctx, cfg, core.Options{Inspection: true})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -803,7 +802,7 @@ func (s *chatSession) openResumeRuntime(ctx context.Context, id string) error {
 	opts.ResumeID = id
 	// The checkpoint's context is authoritative when recovering that run.
 	opts.ContextPaths = nil
-	runtime, err := harness.Open(ctx, cfg, opts)
+	runtime, err := core.Open(ctx, cfg, opts)
 	if err != nil {
 		return err
 	}
@@ -838,7 +837,7 @@ func (s *chatSession) ensureRuntime(ctx context.Context) error {
 	if s.runtime != nil {
 		return nil
 	}
-	r, err := harness.Open(ctx, s.cfg, s.opts)
+	r, err := core.Open(ctx, s.cfg, s.opts)
 	if err == nil {
 		s.runtime = r
 	}
@@ -906,7 +905,7 @@ func (s *chatSession) Close(ctx context.Context) error {
 	return nil
 }
 
-func (a App) interactiveChat(ctx context.Context, cfg config.Resolved, opts harness.Options, request app.Request) (code int) {
+func (a App) interactiveChat(ctx context.Context, cfg config.Resolved, opts core.Options, request app.Request) (code int) {
 	session := newChatSession(a, cfg, opts, nil)
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)

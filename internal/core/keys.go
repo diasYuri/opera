@@ -1,4 +1,4 @@
-package harness
+package core
 
 import (
 	"github.com/diasYuri/opera/internal/app"

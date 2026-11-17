@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/core"
 	operaext "github.com/diasYuri/opera/internal/extensions"
-	"github.com/diasYuri/opera/internal/harness"
 	"path/filepath"
 	"strings"
 )
@@ -50,7 +50,7 @@ func (a App) capabilities(command string, opts options, cfg config.Resolved, jso
 		if err != nil {
 			return a.fail(2, err, jsonl)
 		}
-		body, err := json.Marshal(harness.Action{Tool: tool, Arguments: raw, Intent: intent})
+		body, err := json.Marshal(core.Action{Tool: tool, Arguments: raw, Intent: intent})
 		if err != nil {
 			return a.fail(2, err, jsonl)
 		}
@@ -200,7 +200,7 @@ func (a App) capabilities(command string, opts options, cfg config.Resolved, jso
 		return a.fail(2, fmt.Errorf("unknown %s action", command), jsonl)
 	}
 	if args[0] == "reload" {
-		probe, err := harness.Open(ctx, cfg, harness.Options{Inspection: true})
+		probe, err := core.Open(ctx, cfg, core.Options{Inspection: true})
 		if err != nil {
 			return a.fail(1, err, jsonl)
 		}
@@ -210,7 +210,7 @@ func (a App) capabilities(command string, opts options, cfg config.Resolved, jso
 			return a.fail(1, err, jsonl)
 		}
 	}
-	runtime, err := harness.Open(ctx, cfg, harness.Options{Management: true, Offline: args[0] != "reload" && args[0] != "inspect", Secret: a.extensionSecret(cfg)})
+	runtime, err := core.Open(ctx, cfg, core.Options{Management: true, Offline: args[0] != "reload" && args[0] != "inspect", Secret: a.extensionSecret(cfg)})
 	if err != nil {
 		return a.fail(1, err, jsonl)
 	}

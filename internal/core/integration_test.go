@@ -1,4 +1,4 @@
-package harness_test
+package core_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 
 	"github.com/diasYuri/opera/internal/app"
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/harness"
+	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/opera/internal/platform"
 	"github.com/diasYuri/opera/internal/providercatalog"
 	"github.com/diasYuri/y/pkg/agent"
@@ -66,7 +66,7 @@ func TestCancellationPersistsAndExplicitResumeContinues(t *testing.T) {
 	cfg := configuration(t)
 	ctx := context.Background()
 	provider := &cancellableProvider{FakeProvider: providertest.NewFakeProvider(), entered: make(chan struct{}), block: true}
-	runtime, err := harness.Open(ctx, cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }})
+	runtime, err := core.Open(ctx, cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestCancellationPersistsAndExplicitResumeContinues(t *testing.T) {
 func TestCloseCancelsAndDrainsApplicationBeforeStores(t *testing.T) {
 	cfg := configuration(t)
 	provider := &cancellableProvider{FakeProvider: providertest.NewFakeProvider(), entered: make(chan struct{}), block: true}
-	runtime, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }})
+	runtime, err := core.Open(context.Background(), cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,16 +146,16 @@ func TestUncertainEffectBlocksUntilExplicitReconciliation(t *testing.T) {
 		t.Fatal("explicit reconciliation did not unblock cached result", err)
 	}
 }
-func open(t *testing.T, cfg config.Resolved, turns ...agenttest.ScriptedTurn) *harness.Runtime {
+func open(t *testing.T, cfg config.Resolved, turns ...agenttest.ScriptedTurn) *core.Runtime {
 	t.Helper()
 	provider := namedProvider{agenttest.NewScriptProvider(t, turns...)}
-	runtime, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }, Credential: func(context.Context, string) (string, error) { return "fixture-secret-never-persist", nil }})
+	runtime, err := core.Open(context.Background(), cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }, Credential: func(context.Context, string) (string, error) { return "fixture-secret-never-persist", nil }})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return runtime
 }
-func closeRuntime(t *testing.T, runtime *harness.Runtime) {
+func closeRuntime(t *testing.T, runtime *core.Runtime) {
 	t.Helper()
 	if err := runtime.Close(context.Background()); err != nil {
 		t.Fatal(err)
@@ -232,7 +232,7 @@ func TestDenialAndChangedDiffRequireReview(t *testing.T) {
 
 func TestStartupFailureReleasesScope(t *testing.T) {
 	cfg := configuration(t)
-	_, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+	_, err := core.Open(context.Background(), cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
 		return nil, errors.New("fixture startup failure")
 	}})
 	if err == nil {
@@ -264,9 +264,9 @@ func TestStartupFailureRollsBackProviderAndToolPackResources(t *testing.T) {
 	providerClosed := 0
 	provider := &observedCloseProvider{FakeProvider: providertest.NewFakeProvider(), closed: &providerClosed, order: &closes}
 	failure := errors.New("tool pack startup failed")
-	_, err := harness.Open(context.Background(), cfg, harness.Options{
+	_, err := core.Open(context.Background(), cfg, core.Options{
 		ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil },
-		ToolPacks: []harness.ToolPack{{ID: "failing-resource", Register: func(_ context.Context, registry *tools.Registry, _ harness.ToolPackContext) error {
+		ToolPacks: []core.ToolPack{{ID: "failing-resource", Register: func(_ context.Context, registry *tools.Registry, _ core.ToolPackContext) error {
 			if err := registry.AddCloser(func(context.Context) error { closes = append(closes, "tool-resource"); return nil }); err != nil {
 				return err
 			}
@@ -287,7 +287,7 @@ func TestStartupFailureRollsBackProviderAndToolPackResources(t *testing.T) {
 func TestInspectionDoesNotCreateProvider(t *testing.T) {
 	cfg := configuration(t)
 	created := false
-	runtime, err := harness.Open(context.Background(), cfg, harness.Options{Inspection: true, ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+	runtime, err := core.Open(context.Background(), cfg, core.Options{Inspection: true, ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
 		created = true
 		return providertest.NewFakeProvider(), nil
 	}})
@@ -315,7 +315,7 @@ func TestCustomProviderCatalogExecutesOwnImplementation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime, err := harness.Open(context.Background(), cfg, harness.Options{ProviderCatalog: catalog})
+	runtime, err := core.Open(context.Background(), cfg, core.Options{ProviderCatalog: catalog})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +331,7 @@ func TestCancelledStartupDoesNotCreateProvider(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	created := false
-	_, err := harness.Open(ctx, cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+	_, err := core.Open(ctx, cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
 		created = true
 		return providertest.NewFakeProvider(), nil
 	}})
@@ -345,7 +345,7 @@ func TestCancelledStartupDoesNotCreateProvider(t *testing.T) {
 
 func TestContextPathSourceTracksRuntimeUpdates(t *testing.T) {
 	cfg := configuration(t)
-	runtime, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+	runtime, err := core.Open(context.Background(), cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
 		return providertest.NewFakeProvider(), nil
 	}})
 	if err != nil {
@@ -364,7 +364,7 @@ func TestProviderFactoryErrorClosesPartialProvider(t *testing.T) {
 	providerClosed := 0
 	provider := &observedCloseProvider{FakeProvider: providertest.NewFakeProvider(), closed: &providerClosed, order: &[]string{}}
 	failure := errors.New("provider setup failed")
-	_, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, failure }})
+	_, err := core.Open(context.Background(), cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, failure }})
 	if !errors.Is(err, failure) {
 		t.Fatalf("Open error = %v, want factory error", err)
 	}
@@ -392,7 +392,7 @@ func TestContextCommandUpdatesRequestSourceAndResume(t *testing.T) {
 		t.Fatal(err)
 	}
 	closeRuntime(t, runtime)
-	resumed, err := harness.Open(ctx, cfg, harness.Options{ResumeID: result.ID, ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+	resumed, err := core.Open(ctx, cfg, core.Options{ResumeID: result.ID, ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
 		return namedProvider{agenttest.NewScriptProvider(t)}, nil
 	}})
 	if err != nil {

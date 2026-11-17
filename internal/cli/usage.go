@@ -6,7 +6,7 @@ import (
 	"errors"
 
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/harness"
+	"github.com/diasYuri/opera/internal/core"
 )
 
 func (a App) usage(opts options, cfg config.Resolved, jsonl bool) (code int) {
@@ -25,7 +25,7 @@ func (a App) usage(opts options, cfg config.Resolved, jsonl bool) (code int) {
 		return a.fail(2, errors.New("usage: opera usage [workspace|session <id>|run <id>|agent <id>|turn <run-id> <turn-id>]"), jsonl)
 	}
 	ctx := context.Background()
-	r, err := harness.Open(ctx, cfg, harness.Options{Inspection: true})
+	r, err := core.Open(ctx, cfg, core.Options{Inspection: true})
 	if err != nil {
 		return a.fail(1, err, jsonl)
 	}

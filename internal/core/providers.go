@@ -1,11 +1,10 @@
-package harness
+package core
 
 import (
 	"context"
 	"fmt"
 
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/provideradapters"
 	"github.com/diasYuri/opera/internal/providercatalog"
 	"github.com/diasYuri/y/pkg/providers"
 )
@@ -17,7 +16,7 @@ type ModelInfo struct {
 }
 
 func nativeCatalog(cfg config.Resolved) (*providercatalog.Catalog, error) {
-	return provideradapters.DefaultCatalog(cfg.CustomProviders...)
+	return DefaultCatalog(cfg.CustomProviders...)
 }
 
 func configuredProvider(ctx context.Context, cfg config.Resolved, lookup func(context.Context, string) (string, error), catalogs ...*providercatalog.Catalog) (providers.Provider, error) {

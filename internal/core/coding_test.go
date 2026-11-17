@@ -1,4 +1,4 @@
-package harness_test
+package core_test
 
 import (
 	"context"

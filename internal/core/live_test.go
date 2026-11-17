@@ -1,4 +1,4 @@
-package harness_test
+package core_test
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 
 	"github.com/diasYuri/opera/internal/app"
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/harness"
+	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/y/pkg/agent"
 )
 
@@ -35,8 +35,8 @@ func TestLiveVerticalProof(t *testing.T) {
 	cfg.Values["model"] = config.Value{Value: model, Source: "live-test"}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	options := harness.Options{Credential: func(context.Context, string) (string, error) { return key, nil }}
-	one, err := harness.Open(ctx, cfg, options)
+	options := core.Options{Credential: func(context.Context, string) (string, error) { return key, nil }}
+	one, err := core.Open(ctx, cfg, options)
 	if err != nil {
 		t.Fatalf("live harness startup failed (%T)", err)
 	}
@@ -46,7 +46,7 @@ func TestLiveVerticalProof(t *testing.T) {
 		t.Fatalf("live approval proof failed: exit=%d error=%s", first.ExitCode, safeLiveError(err, key))
 	}
 	closeRuntime(t, one)
-	two, err := harness.Open(ctx, cfg, options)
+	two, err := core.Open(ctx, cfg, options)
 	if err != nil {
 		t.Fatalf("live reopen failed (%T)", err)
 	}

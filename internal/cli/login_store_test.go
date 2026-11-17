@@ -7,11 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/diasYuri/opera/internal/adapters/providers/openai/subscription"
 	"github.com/diasYuri/opera/internal/app"
 	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/opera/internal/credentials"
-	"github.com/diasYuri/opera/internal/harness"
 )
 
 type fixtureKeyring struct {
@@ -48,7 +47,7 @@ func TestLoginRecoversFinalCredentialWriteWithoutRepeatingAuthorization(t *testi
 		}
 		return credentials.Open(kind, directory)
 	}}
-	s := newChatSession(a, cfg, harness.Options{}, nil)
+	s := newChatSession(a, cfg, core.Options{}, nil)
 	prompts := 0
 	store, err := s.openLoginStore(context.Background(), s.cfg, "keyring", cfg.Paths.Credentials, func(n app.LoginNotice) error {
 		prompts++
@@ -66,7 +65,7 @@ func TestLoginRecoversFinalCredentialWriteWithoutRepeatingAuthorization(t *testi
 		t.Fatal(err)
 	}
 	// This record represents the already completed authorization-code exchange.
-	record := subscription.Record{ClientID: "oaiapp_fixture", Subject: "verified-user", AccessToken: "private-access", RefreshToken: "private-refresh", ExpiresAt: time.Now().Add(time.Hour)}
+	record := core.SubscriptionRecord{ClientID: "oaiapp_fixture", Subject: "verified-user", AccessToken: "private-access", RefreshToken: "private-refresh", ExpiresAt: time.Now().Add(time.Hour)}
 	if err := saveSubscription(store, s.cfg, record); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +83,7 @@ func TestLoginRecoversFinalCredentialWriteWithoutRepeatingAuthorization(t *testi
 	if s.cfg.String("credentials.store") != "file" {
 		t.Fatal("current session still uses failed keyring")
 	}
-	token, err := s.opts.Credential(context.Background(), subscription.ProviderID)
+	token, err := s.opts.Credential(context.Background(), core.SubscriptionProviderID)
 	if err != nil || token != record.AccessToken {
 		t.Fatal("execution resolver still uses failed keyring", err)
 	}
@@ -110,7 +109,7 @@ func TestKeyringRecoveryBeforeAuthorizationCanRetryOrCancel(t *testing.T) {
 				fileOpens++
 				return credentials.Open(kind, directory)
 			}}
-			s := newChatSession(a, cfg, harness.Options{}, nil)
+			s := newChatSession(a, cfg, core.Options{}, nil)
 			store, err := s.openLoginStore(context.Background(), s.cfg, "keyring", cfg.Paths.Credentials, func(n app.LoginNotice) error {
 				if choice == "retry" {
 					primary.unavailable = false

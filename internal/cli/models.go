@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/harness"
+	"github.com/diasYuri/opera/internal/core"
 )
 
 func (a App) models(opts options, cfg config.Resolved, jsonl bool) int {
@@ -16,7 +16,7 @@ func (a App) models(opts options, cfg config.Resolved, jsonl bool) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	catalog, err := harness.ModelsWithCatalog(ctx, cfg, a.credentialLookup(cfg), a.ProviderCatalog)
+	catalog, err := core.ModelsWithCatalog(ctx, cfg, a.credentialLookup(cfg), a.ProviderCatalog)
 	if err != nil {
 		return a.fail(1, err, jsonl)
 	}

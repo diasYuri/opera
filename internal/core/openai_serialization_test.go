@@ -1,4 +1,4 @@
-package harness_test
+package core_test
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 
 	"github.com/diasYuri/opera/internal/app"
 	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/harness"
+	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/y/pkg/providers"
 	"github.com/diasYuri/y/pkg/providers/openai"
 )
@@ -92,7 +92,7 @@ func TestOpenAIRequestSerializesOperaToolContext(t *testing.T) {
 			return http.DefaultTransport.RoundTrip(r)
 		})}),
 	)
-	runtime, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }})
+	runtime, err := core.Open(context.Background(), cfg, core.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil }})
 	if err != nil {
 		t.Fatal(err)
 	}

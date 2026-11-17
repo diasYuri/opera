@@ -1,4 +1,4 @@
-package harness
+package core
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	"github.com/diasYuri/opera/internal/contextfiles"
-	"github.com/diasYuri/opera/internal/provideradapters"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/component"
@@ -117,7 +116,7 @@ func (b *compositionBuilder) runner() component.Definition {
 			return nil, nil
 		}))...)}
 		if opts.Credential != nil && !opts.Management {
-			options = append(options, agent.WithRunnerCredentialResolver(provideradapters.CredentialResolver{Lookup: opts.Credential}))
+			options = append(options, agent.WithRunnerCredentialResolver(CredentialResolver{Lookup: opts.Credential}))
 		}
 		runner := agent.NewAgentRunner(provider, registry, options...)
 		if err := scope.Track(runner.Close); err != nil {

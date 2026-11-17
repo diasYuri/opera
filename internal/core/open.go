@@ -1,5 +1,5 @@
 // Package harness composes public Y services using Opera-owned factories.
-package harness
+package core
 
 import (
 	"context"
