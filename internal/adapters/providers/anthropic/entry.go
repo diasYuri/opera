@@ -1,0 +1,24 @@
+package anthropic
+
+import (
+	"context"
+
+	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/providercatalog"
+	"github.com/diasYuri/y/pkg/providers"
+	yanthropic "github.com/diasYuri/y/pkg/providers/anthropic"
+)
+
+func Entry() providercatalog.Entry {
+	login := &providercatalog.LoginDescriptor{ID: "anthropic", Name: "Anthropic", Description: "Claude account or Anthropic API key", Methods: []providercatalog.LoginMethod{
+		{ID: "claude", Name: "Sign in with Claude", Description: "Claude Pro/Max OAuth", Kind: "anthropic-oauth", ProviderID: "anthropic"},
+		{ID: "api-key", Name: "Anthropic API key", Description: "Use an Anthropic API key", Kind: "api-key", ProviderID: "anthropic"},
+	}}
+	return providercatalog.Entry{ID: "anthropic", Name: "Anthropic API", Description: "Requires Anthropic credentials", Login: login, Factory: func(_ context.Context, cfg config.Resolved, _ func(context.Context, string) (string, error)) (providers.Provider, error) {
+		opts := []yanthropic.Option{yanthropic.WithEnvLookup(func(string) string { return "" })}
+		if base := cfg.String("base_url"); base != "" {
+			opts = append(opts, yanthropic.WithBaseURL(base))
+		}
+		return yanthropic.New(opts...), nil
+	}}
+}

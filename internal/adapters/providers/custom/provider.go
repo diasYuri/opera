@@ -1,4 +1,4 @@
-package provideradapters
+package custom
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 	"github.com/diasYuri/y/pkg/providers/openai"
 )
 
-func customEntry(def config.CustomProvider) providercatalog.Entry {
+func Entry(def config.CustomProvider) providercatalog.Entry {
 	id := def.ID()
 	return providercatalog.Entry{ID: id, Name: def.Name, Description: "Custom " + def.ProviderType + " provider", Factory: func(_ context.Context, _ config.Resolved, _ func(context.Context, string) (string, error)) (providers.Provider, error) {
 		var provider providers.Provider

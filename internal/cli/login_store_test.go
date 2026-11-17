@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/diasYuri/opera/internal/adapters/providers/openai/subscription"
 	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/chatgpt"
 	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/credentials"
 	"github.com/diasYuri/opera/internal/harness"
@@ -66,7 +66,7 @@ func TestLoginRecoversFinalCredentialWriteWithoutRepeatingAuthorization(t *testi
 		t.Fatal(err)
 	}
 	// This record represents the already completed authorization-code exchange.
-	record := chatgpt.Record{ClientID: "oaiapp_fixture", Subject: "verified-user", AccessToken: "private-access", RefreshToken: "private-refresh", ExpiresAt: time.Now().Add(time.Hour)}
+	record := subscription.Record{ClientID: "oaiapp_fixture", Subject: "verified-user", AccessToken: "private-access", RefreshToken: "private-refresh", ExpiresAt: time.Now().Add(time.Hour)}
 	if err := saveSubscription(store, s.cfg, record); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestLoginRecoversFinalCredentialWriteWithoutRepeatingAuthorization(t *testi
 	if s.cfg.String("credentials.store") != "file" {
 		t.Fatal("current session still uses failed keyring")
 	}
-	token, err := s.opts.Credential(context.Background(), chatgpt.ProviderID)
+	token, err := s.opts.Credential(context.Background(), subscription.ProviderID)
 	if err != nil || token != record.AccessToken {
 		t.Fatal("execution resolver still uses failed keyring", err)
 	}

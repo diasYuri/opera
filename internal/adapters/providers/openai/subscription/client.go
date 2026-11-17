@@ -1,5 +1,5 @@
 // Package chatgpt implements Sign in with ChatGPT for local, open-source clients.
-package chatgpt
+package subscription
 
 import (
 	"context"

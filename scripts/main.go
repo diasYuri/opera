@@ -164,7 +164,7 @@ func validateImport(path, name string) error {
 		}
 	}
 	if strings.HasPrefix(path, "internal/harness/") && !strings.HasSuffix(path, "_test.go") {
-		for _, blocked := range []string{"github.com/diasYuri/y/pkg/providers/openai", "github.com/diasYuri/y/pkg/providers/anthropic", "github.com/diasYuri/y/pkg/providers/google"} {
+		for _, blocked := range []string{"github.com/diasYuri/opera/internal/adapters/providers/", "github.com/diasYuri/y/pkg/providers/openai", "github.com/diasYuri/y/pkg/providers/anthropic", "github.com/diasYuri/y/pkg/providers/google"} {
 			if strings.HasPrefix(name, blocked) {
 				return fmt.Errorf("provider implementations belong in adapters, not %s (%s)", name, path)
 			}

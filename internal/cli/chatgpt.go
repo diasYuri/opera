@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/diasYuri/opera/internal/chatgpt"
+	"github.com/diasYuri/opera/internal/adapters/providers/openai/subscription"
 	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/credentials"
 	"github.com/diasYuri/opera/internal/privatefs"
@@ -19,7 +19,7 @@ import (
 )
 
 func subscriptionReference(cfg config.Resolved) string {
-	return oauthReference(chatgpt.ProviderID, cfg.String("credential_ref"))
+	return oauthReference(subscription.ProviderID, cfg.String("credential_ref"))
 }
 
 // The directory lock serializes token rotation across processes and workspaces,
@@ -54,19 +54,19 @@ func subscriptionLock(ctx context.Context, cfg config.Resolved) (func() error, e
 	}
 }
 
-func readSubscription(store credentials.Store, cfg config.Resolved) (chatgpt.Record, error) {
+func readSubscription(store credentials.Store, cfg config.Resolved) (subscription.Record, error) {
 	raw, err := store.Get(subscriptionReference(cfg))
 	if err != nil {
-		return chatgpt.Record{}, err
+		return subscription.Record{}, err
 	}
-	var record chatgpt.Record
+	var record subscription.Record
 	if json.Unmarshal([]byte(raw), &record) != nil || record.ClientID == "" || record.Subject == "" {
 		return record, errors.New("invalid ChatGPT credential record")
 	}
 	return record, nil
 }
 
-func saveSubscription(store credentials.Store, cfg config.Resolved, record chatgpt.Record) error {
+func saveSubscription(store credentials.Store, cfg config.Resolved, record subscription.Record) error {
 	raw, err := json.Marshal(record)
 	if err != nil {
 		return errors.New("cannot encode ChatGPT credential")
@@ -90,13 +90,13 @@ func (a App) subscriptionAuth(action string, cfg config.Resolved, jsonl bool) in
 	if err != nil && !errors.Is(err, credentials.ErrNotFound) {
 		return a.fail(1, err, jsonl)
 	}
-	client := chatgpt.NewClient()
+	client := subscription.NewClient()
 	status := "stored"
 	switch action {
 	case "login":
 		record, err = loginSubscription(ctx, store, cfg, record, func(u string) error {
 			if jsonl {
-				if a.emit("auth.authorization", map[string]string{"provider": chatgpt.ProviderID, "url": u}) != 0 {
+				if a.emit("auth.authorization", map[string]string{"provider": subscription.ProviderID, "url": u}) != 0 {
 					return errors.New("cannot write ChatGPT authorization notification")
 				}
 				return nil
@@ -132,7 +132,7 @@ func (a App) subscriptionAuth(action string, cfg config.Resolved, jsonl bool) in
 	default:
 		return a.fail(2, errors.New("usage: opera auth <login|status|logout> openai-subscription"), jsonl)
 	}
-	info := map[string]string{"status": status, "provider": chatgpt.ProviderID, "reference": cfg.String("credential_ref"), "email": record.Email, "client_id": record.ClientID, "usage_url": "https://chatgpt.com/settings/usage"}
+	info := map[string]string{"status": status, "provider": subscription.ProviderID, "reference": cfg.String("credential_ref"), "email": record.Email, "client_id": record.ClientID, "usage_url": "https://chatgpt.com/settings/usage"}
 	if jsonl {
 		return a.emit("auth.status", info)
 	}
@@ -167,7 +167,7 @@ func (a App) subscriptionCredential(ctx context.Context, cfg config.Resolved) (s
 		if time.Now().Add(time.Minute).Before(record.ExpiresAt) {
 			return record.AccessToken, nil
 		}
-		record, err = chatgpt.NewClient().Refresh(ctx, record)
+		record, err = subscription.NewClient().Refresh(ctx, record)
 		if err != nil {
 			return "", err
 		}
@@ -178,24 +178,24 @@ func (a App) subscriptionCredential(ctx context.Context, cfg config.Resolved) (s
 	return record.AccessToken, nil
 }
 
-func loginSubscription(ctx context.Context, store credentials.Store, cfg config.Resolved, previous chatgpt.Record, notify func(string) error) (chatgpt.Record, error) {
+func loginSubscription(ctx context.Context, store credentials.Store, cfg config.Resolved, previous subscription.Record, notify func(string) error) (subscription.Record, error) {
 	hostID, err := store.Get("openai-subscription.host")
 	if errors.Is(err, credentials.ErrNotFound) {
 		hostID = "urn:uuid:" + uuid.NewString()
 		err = store.Set("openai-subscription.host", hostID)
 	}
 	if err != nil {
-		return chatgpt.Record{}, err
+		return subscription.Record{}, err
 	}
-	record, err := chatgpt.NewClient().Login(ctx, hostID, previous, notify)
+	record, err := subscription.NewClient().Login(ctx, hostID, previous, notify)
 	if err != nil {
-		return chatgpt.Record{}, err
+		return subscription.Record{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return chatgpt.Record{}, err
+		return subscription.Record{}, err
 	}
 	if err := saveSubscription(store, cfg, record); err != nil {
-		return chatgpt.Record{}, err
+		return subscription.Record{}, err
 	}
 	return record, nil
 }

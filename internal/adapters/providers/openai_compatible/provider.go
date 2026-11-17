@@ -1,4 +1,4 @@
-package provideradapters
+package openai_compatible
 
 import (
 	"context"
@@ -8,8 +8,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/providercatalog"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/providers"
+	"github.com/diasYuri/y/pkg/providers/openai"
 )
 
 // compatibleProvider gives a named OpenAI-compatible endpoint its own provider
@@ -70,4 +73,17 @@ func (p compatibleProvider) Models(ctx context.Context) ([]ai.Model, error) {
 		models = append(models, ai.Model{ID: id, API: "openai-completions", Provider: ai.ProviderID(p.id), BaseURL: p.baseURL, Input: []ai.InputKind{ai.InputText}})
 	}
 	return models, nil
+}
+
+// NamedEntry creates a vendor-specific catalog entry backed by Y's public
+// OpenAI-compatible adapter, with explicit credential lookup for model listing.
+func NamedEntry(id, name, endpoint string, login *providercatalog.LoginDescriptor) providercatalog.Entry {
+	return providercatalog.Entry{ID: id, Name: name, Description: "OpenAI-compatible Chat Completions API", Login: login, Factory: func(_ context.Context, cfg config.Resolved, lookup func(context.Context, string) (string, error)) (providers.Provider, error) {
+		baseURL := cfg.String("base_url")
+		if baseURL == "" {
+			baseURL = endpoint
+		}
+		provider := openai.NewCompatible(baseURL, openai.WithEnvLookup(func(string) string { return "" }))
+		return compatibleProvider{Provider: provider, id: id, baseURL: baseURL, lookup: lookup}, nil
+	}}
 }

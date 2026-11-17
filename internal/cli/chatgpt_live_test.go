@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/diasYuri/opera/internal/adapters/providers/openai/subscription"
 	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/chatgpt"
 	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/harness"
 	"github.com/diasYuri/opera/internal/platform"
@@ -23,7 +23,7 @@ import (
 // No workspace files, tools, credentials or generated text are printed/sent.
 func TestLiveSubscriptionConversationHistory(t *testing.T) {
 	a, cfg := subscriptionLiveConfig(t)
-	p := chatgpt.NewProvider(a.credentialLookup(cfg))
+	p := subscription.NewProvider(a.credentialLookup(cfg))
 	defer func() { _ = p.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
@@ -85,7 +85,7 @@ func TestLiveSubscriptionHarnessConversation(t *testing.T) {
 	if err := os.Mkdir(cfg.Paths.Workspace, 0700); err != nil {
 		t.Fatal(err)
 	}
-	for key, value := range map[string]string{"provider": chatgpt.ProviderID, "policy": "read-only", "extensions.file": "", "accounting.prices_file": "", "base_url": ""} {
+	for key, value := range map[string]string{"provider": subscription.ProviderID, "policy": "read-only", "extensions.file": "", "accounting.prices_file": "", "base_url": ""} {
 		cfg.Values[key] = config.Value{Value: value, Source: "live-test"}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

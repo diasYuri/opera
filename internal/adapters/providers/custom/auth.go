@@ -1,4 +1,4 @@
-package provideradapters
+package custom
 
 import (
 	"bytes"

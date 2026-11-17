@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
+	customprovider "github.com/diasYuri/opera/internal/adapters/providers/custom"
 	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/credentials"
-	"github.com/diasYuri/opera/internal/provideradapters"
 	"github.com/diasYuri/y/pkg/providers/auth"
 	"github.com/diasYuri/y/pkg/providers/oauth"
 )
@@ -95,7 +95,7 @@ func (a App) credentialLookup(cfg config.Resolved) func(context.Context, string)
 		}
 		for _, custom := range cfg.CustomProviders {
 			if custom.ID() == provider {
-				return provideradapters.CustomAPIKey(ctx, custom)
+				return customprovider.CustomAPIKey(ctx, custom)
 			}
 		}
 		if provider == "anthropic" {
