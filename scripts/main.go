@@ -157,7 +157,7 @@ func validateImport(path, name string) error {
 		return fmt.Errorf("private Y import in %s", path)
 	}
 	if strings.HasPrefix(path, "internal/app/") && !strings.HasSuffix(path, "_test.go") {
-		for _, blocked := range []string{"github.com/diasYuri/y/pkg/storage/sqlite", "github.com/diasYuri/opera/internal/persistence", "github.com/diasYuri/opera/internal/skills", "github.com/diasYuri/y/pkg/providers/openai", "github.com/diasYuri/y/pkg/providers/anthropic", "github.com/diasYuri/y/pkg/providers/google"} {
+		for _, blocked := range []string{"github.com/diasYuri/opera/internal/contextfiles", "github.com/diasYuri/opera/internal/approvalfiles", "github.com/diasYuri/opera/internal/harness", "github.com/diasYuri/opera/internal/cli", "github.com/diasYuri/opera/internal/ui", "github.com/diasYuri/opera/internal/provideradapters", "os/exec", "github.com/diasYuri/y/pkg/storage/sqlite", "github.com/diasYuri/opera/internal/persistence", "github.com/diasYuri/opera/internal/skills", "github.com/diasYuri/y/pkg/providers/openai", "github.com/diasYuri/y/pkg/providers/anthropic", "github.com/diasYuri/y/pkg/providers/google"} {
 			if strings.HasPrefix(name, blocked) {
 				return fmt.Errorf("application core must use ports, not %s (%s)", name, path)
 			}

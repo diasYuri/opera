@@ -6,8 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -24,7 +22,7 @@ func mutation(name string) bool {
 	}
 }
 
-func approvalFor(workspace, mode string, pending *agent.PendingApproval) (*Approval, error) {
+func approvalFor(ctx context.Context, workspace, mode string, pending *agent.PendingApproval, read ApprovalFileReader) (*Approval, error) {
 	if pending == nil {
 		return nil, nil
 	}
@@ -41,7 +39,7 @@ func approvalFor(workspace, mode string, pending *agent.PendingApproval) (*Appro
 	var old []byte
 	var err error
 	if pending.ToolCall.Name == "write_file" || pending.ToolCall.Name == "edit" || pending.ToolCall.Name == "patch" {
-		path, old, err = currentFile(workspace, args.Path)
+		path, old, err = readApprovalFile(ctx, read, workspace, args.Path)
 	}
 	if err != nil {
 		return nil, err
@@ -69,7 +67,7 @@ func approvalFor(workspace, mode string, pending *agent.PendingApproval) (*Appro
 				continue
 			}
 			seen[name] = true
-			p, data, e := currentFile(workspace, name)
+			p, data, e := readApprovalFile(ctx, read, workspace, name)
 			if e != nil {
 				return nil, e
 			}
@@ -87,46 +85,6 @@ func approvalFor(workspace, mode string, pending *agent.PendingApproval) (*Appro
 		view.Diff = "Current file (review arguments for the requested change):\n" + string(old) + "\nRequested edit:\n" + string(view.Arguments)
 	}
 	return view, nil
-}
-
-func currentFile(workspace, path string) (string, []byte, error) {
-	if path == "" {
-		return "", nil, nil
-	}
-	if !filepath.IsAbs(path) {
-		path = filepath.Join(workspace, path)
-	}
-	path = filepath.Clean(path)
-	relative, err := filepath.Rel(workspace, path)
-	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return "", nil, fmt.Errorf("tool path escapes workspace")
-	}
-	// Validate every existing ancestor so approval previews never read outside
-	// the workspace through symlinks; tools repeat their own policy validation.
-	for ancestor := path; ancestor != workspace; ancestor = filepath.Dir(ancestor) {
-		info, err := os.Lstat(ancestor)
-		if os.IsNotExist(err) {
-			continue
-		}
-		if err != nil {
-			return "", nil, err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return "", nil, fmt.Errorf("approval paths must not contain symlinks")
-		}
-	}
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return path, []byte("<file does not exist>"), nil
-	}
-	if err != nil {
-		return "", nil, err
-	}
-	if !info.Mode().IsRegular() || info.Size() > 1<<20 {
-		return "", nil, fmt.Errorf("approval preview requires a regular file of at most 1 MiB")
-	}
-	data, err := os.ReadFile(path)
-	return path, data, err
 }
 
 func Policy(mode string, audits ...policy.AuditSink) policy.Engine {
@@ -181,3 +139,17 @@ func approvedRequest(view *Approval, denied bool) *policy.ApprovalResolution {
 type allToolsPolicy struct{ policy.Engine }
 
 func (allToolsPolicy) AuditAllTools() bool { return true }
+
+// ApprovalFileReader supplies the filesystem observation used by approval policy.
+// It does not grant permission to execute the requested tool.
+type ApprovalFileReader func(context.Context, string, string) (string, []byte, error)
+
+func readApprovalFile(ctx context.Context, read ApprovalFileReader, workspace, path string) (string, []byte, error) {
+	if path == "" {
+		return "", nil, nil
+	}
+	if read == nil {
+		return "", nil, fmt.Errorf("approval file reader is unavailable")
+	}
+	return read(ctx, workspace, path)
+}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/diasYuri/opera/internal/accounting"
 	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/approvalfiles"
 	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/contextfiles"
 	operaext "github.com/diasYuri/opera/internal/extensions"
@@ -74,7 +75,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 	serviceKey := component.NewKey[*app.Service]("opera.execution", "1.0.0")
 	workKey := component.NewKey[*app.Work]("opera.work", "1.0.0")
 	extensionsKey := component.NewKey[*operaext.Manager]("opera.extensions", "1.0.0")
-	guard := &app.Guard{Workspace: cfg.Paths.Workspace, Mode: cfg.String("policy"), Queue: workspace.NewQueue()}
+	guard := &app.Guard{ReadApprovalFile: approvalfiles.Read, Workspace: cfg.Paths.Workspace, Mode: cfg.String("policy"), Queue: workspace.NewQueue()}
 	home, _ := os.UserHomeDir()
 	skillManager := skills.NewManager(cfg.Paths.Workspace, home)
 	// Copy the map before adding checkpoint-derived defaults.
@@ -390,7 +391,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 				return err
 			}
 			visionProvider := provider.(providers.Provider)
-			service := &app.Service{ResponseFormat: opts.ResponseFormat, Records: records, Work: work, QuestionBroker: questions, ContextBudget: min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024), ContextPaths: opts.ContextPaths, Skills: skillManager, Runner: runner, Store: store, Guard: guard, Workspace: cfg.Paths.Workspace, Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy"), MaxTokens: cfg.Int("limits.context_tokens"), LoadContext: contextfiles.Load, LoadImages: func(ctx context.Context, paths []string) ([]ai.ContentBlock, error) {
+			service := &app.Service{ReadApprovalFile: approvalfiles.Read, ResponseFormat: opts.ResponseFormat, Records: records, Work: work, QuestionBroker: questions, ContextBudget: min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024), ContextPaths: opts.ContextPaths, Skills: skillManager, Runner: runner, Store: store, Guard: guard, Workspace: cfg.Paths.Workspace, Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy"), MaxTokens: cfg.Int("limits.context_tokens"), LoadContext: contextfiles.Load, LoadImages: func(ctx context.Context, paths []string) ([]ai.ContentBlock, error) {
 				images, err := contextfiles.Images(ctx, cfg.Paths.Workspace, paths, visionProvider.Capabilities(cfg.String("model")).Vision, min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024))
 				if err == nil && len(images) != len(paths) {
 					return nil, errors.New("each /image path must reference a supported image")
@@ -424,7 +425,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 				return err
 			}
 			work := app.NewWork(records, cfg.Int("agents.max_concurrent"), cfg.Int("agents.max_depth"))
-			service := &app.Service{ResponseFormat: opts.ResponseFormat, Store: store, Records: records, Work: work, Workspace: cfg.Paths.Workspace, Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy")}
+			service := &app.Service{ReadApprovalFile: approvalfiles.Read, ResponseFormat: opts.ResponseFormat, Store: store, Records: records, Work: work, Workspace: cfg.Paths.Workspace, Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy")}
 			work.Service = service
 			return component.Provide(scope, serviceKey, service)
 		}))

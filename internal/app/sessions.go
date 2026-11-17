@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/diasYuri/opera/internal/accounting"
-	"github.com/diasYuri/opera/internal/contextfiles"
+	"github.com/diasYuri/opera/internal/contextdata"
 	"github.com/diasYuri/opera/internal/records"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/agent/compaction"
@@ -409,7 +409,7 @@ func scrub(value any) {
 	case map[string]any:
 		for key, child := range v {
 			if text, ok := child.(string); ok {
-				v[key] = contextfiles.RedactText(text)
+				v[key] = contextdata.RedactText(text)
 			} else {
 				scrub(child)
 			}
@@ -417,7 +417,7 @@ func scrub(value any) {
 	case []any:
 		for i, child := range v {
 			if text, ok := child.(string); ok {
-				v[i] = contextfiles.RedactText(text)
+				v[i] = contextdata.RedactText(text)
 			} else {
 				scrub(child)
 			}

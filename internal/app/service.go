@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/diasYuri/opera/internal/contextfiles"
+	"github.com/diasYuri/opera/internal/contextdata"
 	"github.com/diasYuri/opera/internal/skillcatalog"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/agent/compaction"
@@ -21,6 +21,7 @@ import (
 const HarnessVersion = "opera-f1-y1.3.1"
 
 type Service struct {
+	ReadApprovalFile                 ApprovalFileReader
 	ResponseFormat                   *ai.ResponseFormat
 	controlMu                        sync.Mutex
 	ToolGeneration                   string
@@ -42,8 +43,8 @@ type Service struct {
 	MaxTokens                        int
 	ContextPaths                     []string
 	LoadImages                       func(context.Context, []string) ([]ai.ContentBlock, error)
-	LoadContext                      func(context.Context, string, []string, int) (contextfiles.Bundle, error)
-	ContextSummary                   []contextfiles.Source
+	LoadContext                      func(context.Context, string, []string, int) (contextdata.Bundle, error)
+	ContextSummary                   []contextdata.Source
 	Skills                           RunSkills
 }
 
@@ -202,7 +203,7 @@ func (s *Service) Execute(ctx context.Context, request Request, emit func(Event)
 	}
 	var resolution *policy.ApprovalResolution
 	if state.Agent.PendingApproval != nil {
-		view, err := approvalFor(s.Workspace, s.Mode, state.Agent.PendingApproval)
+		view, err := approvalFor(ctx, s.Workspace, s.Mode, state.Agent.PendingApproval, s.ReadApprovalFile)
 		if err != nil {
 			result.ExitCode = 1
 			return result, err
@@ -303,7 +304,7 @@ func (s *Service) Execute(ctx context.Context, request Request, emit func(Event)
 		}
 		content := []ai.ContentBlock{{Type: ai.ContentText, Text: modePrompt}}
 		for _, path := range request.ImagePaths {
-			content = append(content, contextfiles.ImageReference(path))
+			content = append(content, contextdata.ImageReference(path))
 		}
 		run.Prompt = ""
 		run.Messages = []ai.Message{{Role: ai.RoleUser, Content: content}}
@@ -362,7 +363,7 @@ func (s *Service) Execute(ctx context.Context, request Request, emit func(Event)
 			}
 		}
 	} else if errors.Is(runErr, agent.ErrApprovalPending) {
-		view, err := approvalFor(s.Workspace, s.Mode, response.Snapshot.Agent.PendingApproval)
+		view, err := approvalFor(ctx, s.Workspace, s.Mode, response.Snapshot.Agent.PendingApproval, s.ReadApprovalFile)
 		if err != nil {
 			result.ExitCode = 1
 			return result, err

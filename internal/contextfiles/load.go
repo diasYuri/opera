@@ -4,8 +4,8 @@ package contextfiles
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
+	"github.com/diasYuri/opera/internal/contextdata"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/tools/gitignore"
 	"io"
@@ -13,20 +13,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 )
 
-type Source struct {
-	Path  string
-	Bytes int
-	Kind  string
-}
-type Bundle struct {
-	Text    string
-	Sources []Source
-}
+type Source = contextdata.Source
+type Bundle = contextdata.Bundle
 
 // Load orders root instructions before scoped instructions, then explicit files.
 // Symlinks, ignored files, binary data and files outside the workspace are rejected.
@@ -109,7 +101,7 @@ func Load(ctx context.Context, root string, paths []string, limit int) (Bundle, 
 				return fmt.Errorf("attachment budget exceeded")
 			}
 			out.Text += label
-			out.Sources = append(out.Sources, Source{filepath.ToSlash(rel), len(data), "image"})
+			out.Sources = append(out.Sources, Source{Path: filepath.ToSlash(rel), Bytes: len(data), Kind: "image"})
 			return nil
 		}
 		if !utf8.Valid(data) || strings.ContainsRune(string(data), 0) {
@@ -122,7 +114,7 @@ func Load(ctx context.Context, root string, paths []string, limit int) (Bundle, 
 		}
 		limit -= len(block)
 		out.Text += block
-		out.Sources = append(out.Sources, Source{filepath.ToSlash(rel), len(data), kind})
+		out.Sources = append(out.Sources, Source{Path: filepath.ToSlash(rel), Bytes: len(data), Kind: kind})
 		return nil
 	}
 	if err := add("AGENTS.md", "instructions", true); err != nil {
@@ -156,9 +148,7 @@ func Load(ctx context.Context, root string, paths []string, limit int) (Bundle, 
 	return out, nil
 }
 
-var credentialLine = regexp.MustCompile(`(?im)([a-z0-9_]*(?:api[_-]?key|password|secret|token|authorization)[a-z0-9_]*\s*[:=]\s*)[^\r\n]+`)
-
-func redact(data []byte) []byte { return credentialLine.ReplaceAll(data, []byte("${1}[REDACTED]")) }
+func redact(data []byte) []byte { return []byte(contextdata.RedactText(string(data))) }
 func imagePath(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".png", ".jpg", ".jpeg", ".gif", ".webp":
@@ -208,14 +198,8 @@ func Images(ctx context.Context, root string, paths []string, vision bool, limit
 	return blocks, nil
 }
 
-// ImageReference records an attachment path in the transcript without storing
-// the image bytes. The request hook resolves it into a transient image block.
-func ImageReference(path string) ai.ContentBlock {
-	details, _ := json.Marshal(struct {
-		Path string `json:"opera_image_path"`
-	}{Path: filepath.ToSlash(path)})
-	return ai.ContentBlock{Type: ai.ContentText, Text: "", Details: details}
-}
+// ImageReference records a transient image attachment path.
+func ImageReference(path string) ai.ContentBlock { return contextdata.ImageReference(path) }
 
-// RedactText applies the same credential-assignment redaction to exported strings.
-func RedactText(text string) string { return string(redact([]byte(text))) }
+// RedactText redacts credential assignments in exported strings.
+func RedactText(text string) string { return contextdata.RedactText(text) }

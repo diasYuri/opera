@@ -14,11 +14,12 @@ import (
 )
 
 type Guard struct {
-	Workspace, Mode string
-	Queue           *workspace.Queue
-	mu              sync.Mutex
-	expected        map[string]*Approval
-	modes           map[string]Mode
+	ReadApprovalFile ApprovalFileReader
+	Workspace, Mode  string
+	Queue            *workspace.Queue
+	mu               sync.Mutex
+	expected         map[string]*Approval
+	modes            map[string]Mode
 }
 
 func (g *Guard) SetMode(id string, mode Mode) {
@@ -80,7 +81,7 @@ func (g *Guard) Middleware(ctx context.Context, request tools.ToolRequest, _ too
 	g.mu.Unlock()
 	if expected != nil && request.Approval != nil && request.Approval.State == policy.ApprovalApproved {
 		pending := &agent.PendingApproval{Request: policy.ApprovalRequest{ApprovalID: expected.RuntimeID}, ToolCall: ai.ToolCall{ID: request.ID, Name: request.Name, Arguments: request.Arguments}}
-		current, err := approvalFor(g.Workspace, g.Mode, pending)
+		current, err := approvalFor(ctx, g.Workspace, g.Mode, pending, g.ReadApprovalFile)
 		if err != nil {
 			return tools.ToolResponse{}, err
 		}

@@ -65,3 +65,17 @@ as garantias consumidas são as APIs públicas compiladas dessa versão.
   tool pack.
 
 Essas lacunas são concretas; portanto, este relatório não declara o plano completo.
+
+## Revisão integrada do agente principal
+
+Após a primeira entrega parcial, a revisão encontrou leitura direta do filesystem
+na preparação de aprovações e dependência dos casos de uso no pacote de I/O de
+contexto. A leitura passou à porta `app.ApprovalFileReader`, implementada em
+`internal/approvalfiles` e injetada no Service e Guard pela composição. Dados e
+projeções puras de contexto passaram para `internal/contextdata`; o adapter mantém
+aliases compatíveis. Regras de arquitetura agora impedem o retorno dessas
+dependências concretas ao app.
+
+`make check` passou após a correção, incluindo regressões de fingerprint,
+capacidade ausente, cancelamento, confinamento do workspace e tamanho do preview.
+O trabalho restante descrito acima continua necessário.

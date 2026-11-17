@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/diasYuri/opera/internal/contextfiles"
+	"github.com/diasYuri/opera/internal/contextdata"
 	"github.com/diasYuri/y/pkg/ai"
 )
 
@@ -126,7 +126,7 @@ func (s *Service) sendControlMessage(id, kind, text string, paths []string, appl
 			return err
 		}
 		for _, path := range paths {
-			content = append(content, contextfiles.ImageReference(path))
+			content = append(content, contextdata.ImageReference(path))
 		}
 	}
 	message := ai.Message{ID: key, Role: ai.RoleUser, Content: content}
