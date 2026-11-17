@@ -248,11 +248,13 @@ func TestStartupFailureReleasesScope(t *testing.T) {
 type observedCloseProvider struct {
 	*providertest.FakeProvider
 	closed *int
+	order  *[]string
 }
 
 func (p *observedCloseProvider) ID() string { return "openai" }
 func (p *observedCloseProvider) Close() error {
 	*p.closed++
+	*p.order = append(*p.order, "provider")
 	return p.FakeProvider.Close()
 }
 
@@ -260,7 +262,7 @@ func TestStartupFailureRollsBackProviderAndToolPackResources(t *testing.T) {
 	cfg := configuration(t)
 	var closes []string
 	providerClosed := 0
-	provider := &observedCloseProvider{FakeProvider: providertest.NewFakeProvider(), closed: &providerClosed}
+	provider := &observedCloseProvider{FakeProvider: providertest.NewFakeProvider(), closed: &providerClosed, order: &closes}
 	failure := errors.New("tool pack startup failed")
 	_, err := harness.Open(context.Background(), cfg, harness.Options{
 		ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil },
@@ -277,7 +279,7 @@ func TestStartupFailureRollsBackProviderAndToolPackResources(t *testing.T) {
 	if providerClosed != 1 {
 		t.Fatalf("provider close count = %d, want 1", providerClosed)
 	}
-	if len(closes) != 1 || closes[0] != "tool-resource" {
+	if len(closes) != 2 || closes[0] != "tool-resource" || closes[1] != "provider" {
 		t.Fatalf("resource cleanup = %v", closes)
 	}
 }
@@ -321,5 +323,38 @@ func TestCustomProviderCatalogExecutesOwnImplementation(t *testing.T) {
 	result, err := runtime.Service.Execute(context.Background(), app.Request{Prompt: "say hello"}, nil)
 	if err != nil || result.Text != "answer from the custom provider" {
 		t.Fatalf("custom provider result = %#v, %v", result, err)
+	}
+}
+
+func TestCancelledStartupDoesNotCreateProvider(t *testing.T) {
+	cfg := configuration(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	created := false
+	_, err := harness.Open(ctx, cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+		created = true
+		return providertest.NewFakeProvider(), nil
+	}})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("startup error = %v, want cancellation", err)
+	}
+	if created {
+		t.Fatal("cancelled startup created a provider")
+	}
+}
+
+func TestContextPathSourceTracksRuntimeUpdates(t *testing.T) {
+	cfg := configuration(t)
+	runtime, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+		return providertest.NewFakeProvider(), nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeRuntime(t, runtime)
+	runtime.SetContextPaths([]string{"docs/guide.md"})
+	got := runtime.Service.ContextPathSource.Current()
+	if len(got) != 1 || got[0] != "docs/guide.md" {
+		t.Fatalf("runtime context paths = %v", got)
 	}
 }
