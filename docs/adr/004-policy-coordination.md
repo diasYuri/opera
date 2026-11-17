@@ -15,9 +15,10 @@ revalidate preconditions and renew approval if the approved change has changed.
 
 All agents share the canonical workspace. Reads may run concurrently; mutations
 use a cancellable exclusive queue, including shell and unclassified external tools.
-LSP edits, Git, MCP and WASM must use this same path. Multiple CLIs will either
-share local locking or refuse concurrent workspace ownership in F3. Serialization
-does not eliminate logical editing conflicts and is not an OS sandbox.
+LSP edits, Git, MCP and WASM must use this same path. The previous process-level
+workspace ownership lock has been removed. Multiple CLI processes can mutate one
+workspace concurrently; each process only serializes its own mutations. This
+accepts logical editing conflicts and is not an OS sandbox.
 
 Defaults: four concurrent children, maximum depth one. Future execution enforces
 the configured bounded limits and parent-to-child cancellation. RuntimeView snapshots

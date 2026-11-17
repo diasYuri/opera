@@ -75,7 +75,7 @@ and Ctrl+D on an empty editor will exit. No job is detached from its CLI.
   Approval results identify agent and task. Parent resume walks its pending children
   and presents the next operation-bound approval without authorizing other operations.
 
-Inspection acquires workspace ownership and opens stores without constructing a
+Inspection opens stores without constructing a
 provider or accessing credentials. Legacy F1/F2 IDs are indexed on explicit inspect
 or resume; they had no F3 catalog entries at creation. Inspection never schedules work.
 

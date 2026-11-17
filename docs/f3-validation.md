@@ -66,7 +66,8 @@ compaction archives and checkpoint boundaries. It does not read Y private tables
 A migration creates a consistent SQLite backup before product schema v1. Future
 versions and malformed/corrupt databases fail before execution. Product writes
 use full synchronous transactions; version-checked writes are available for CAS.
-The process ownership rule prevents two writers for the same workspace.
+Concurrent Opera processes may write to the same workspace. The application does
+not coordinate mutations across processes; users accept the resulting conflict risk.
 
 Task mutations and child admission commit before their tool result is acknowledged.
 A settled execution records the SDK checkpoint version, event cursor, task snapshot,
@@ -95,7 +96,6 @@ no index can retroactively discover an unknown legacy ID through private SDK tab
 | TestSessionCatalogBranchCompactionAndExport | Session pagination/grouping, branches from current/historical checkpoints, reset grants, compaction archive, redacted export and branch continuation |
 | TestMigrationBackupVersionAndCAS / TestCorruptDatabaseFailsBeforeUse | Backup, stale-write rejection, future schema and corrupt database refusal |
 | TestQueueFIFOWithCanceledMiddleWaiter | FIFO order survives cancellation of an intervening waiter |
-| TestOwnershipLockRejectsSymlinkAlias / TestOwnershipCannotBeBypassedWithDifferentDataDirectory | Alias and data-directory override cannot bypass ownership |
 | TestSessionsInspectionDoesNotLoadProviderOrCredentials | Headless inspection opens no provider/store secret |
 
 The prior approval-denial, stale-diff, uncertain-effect reconciliation, terminal/PTY,

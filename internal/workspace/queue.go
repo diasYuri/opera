@@ -75,6 +75,9 @@ func (q *Queue) Acquire(ctx context.Context) (func(), error) {
 func Lock(directory, canonicalWorkspace string) (func() error, error) {
 	ownership, err := lockWorkspace(canonicalWorkspace)
 	if err != nil {
+		if lockConflict(err) {
+			return nil, fmt.Errorf("resource %q is locked by another Opera process", canonicalWorkspace)
+		}
 		return nil, fmt.Errorf("workspace is already in use or cannot be locked: %w", err)
 	}
 	success := false

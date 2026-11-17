@@ -229,7 +229,7 @@ func TestDenialAndChangedDiffRequireReview(t *testing.T) {
 	}
 }
 
-func TestStartupFailureReleasesScopeAndWorkspace(t *testing.T) {
+func TestStartupFailureReleasesScope(t *testing.T) {
 	cfg := configuration(t)
 	_, err := harness.Open(context.Background(), cfg, harness.Options{ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
 		return nil, errors.New("fixture startup failure")
@@ -239,9 +239,6 @@ func TestStartupFailureReleasesScopeAndWorkspace(t *testing.T) {
 	}
 	runtime := open(t, cfg, agenttest.TextTurn("done"))
 	defer closeRuntime(t, runtime)
-	if _, err := harness.Open(context.Background(), cfg, harness.Options{}); err == nil {
-		t.Fatal("concurrent workspace owner accepted")
-	}
 	if _, err := runtime.Service.Execute(context.Background(), app.Request{Prompt: "hello"}, nil); err != nil {
 		t.Fatal(err)
 	}

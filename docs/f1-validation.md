@@ -23,7 +23,7 @@ Streaming patch: [diasYuri/y#2](https://github.com/diasYuri/y/pull/2) (draft).
   credential/OAuth wiring and a Bubble Tea inline chat without alternate screen.
 - Read/write filesystem tools, operation-bound approvals with arguments/path/diff,
   approval fingerprint revalidation under a cancellable workspace mutation queue,
-  and an OS-held process ownership lock. Headless approval persists and exits 3.
+  and durable workspace state. Headless approval persists and exits 3.
 - Consistent checkpoints, explicit cancelled/crash continuation, completed-result
   replay, and explicit reconciliation of uncertain operations before resume (4).
 - Append-only accessible chat, streaming text/JSONL, cancellation, broken-output
