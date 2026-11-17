@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 func TestTerminalLoginSubmenuAndCancellation(t *testing.T) {
@@ -54,9 +54,9 @@ func TestTerminalLoginSubmenuAndCancellation(t *testing.T) {
 			}
 		}
 	}()
-	e := &loginExecutor{providers: []app.LoginProvider{{ID: "openai", Name: "OpenAI", Description: "ChatGPT subscription"}}, waitForCancel: true}
+	e := &loginExecutor{providers: []execution.LoginProvider{{ID: "openai", Name: "OpenAI", Description: "ChatGPT subscription"}}, waitForCancel: true}
 	done := make(chan error, 1)
-	go func() { _, err := Chat(ctx, e, slave, slave, app.Request{}, true); done <- err }()
+	go func() { _, err := Chat(ctx, e, slave, slave, execution.Request{}, true); done <- err }()
 	wait := func(stage int) {
 		t.Helper()
 		select {

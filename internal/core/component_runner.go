@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/diasYuri/opera/internal/contextfiles"
+	"github.com/diasYuri/opera/internal/adapters/context/filesystem"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/component"

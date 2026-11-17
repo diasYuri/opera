@@ -18,7 +18,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/diasYuri/opera/internal/app"
+	app "github.com/diasYuri/opera/internal/modules/execution"
 )
 
 type Executor interface {

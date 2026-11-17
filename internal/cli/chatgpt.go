@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/adapters/credentials"
+	"github.com/diasYuri/opera/internal/adapters/platform"
 	"github.com/diasYuri/opera/internal/core"
-	"github.com/diasYuri/opera/internal/credentials"
-	"github.com/diasYuri/opera/internal/privatefs"
-	"github.com/diasYuri/opera/internal/workspace"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/workspace"
 	"github.com/google/uuid"
 )
 
@@ -30,13 +30,13 @@ func subscriptionLock(ctx context.Context, cfg config.Resolved) (func() error, e
 		return nil, err
 	}
 	if err := os.Mkdir(dir, 0700); err == nil {
-		if err := privatefs.Protect(dir, true); err != nil {
+		if err := platform.Protect(dir, true); err != nil {
 			return nil, err
 		}
 	} else if !os.IsExist(err) {
 		return nil, err
 	}
-	if err := privatefs.Check(dir, true); err != nil {
+	if err := platform.Check(dir, true); err != nil {
 		return nil, err
 	}
 	waitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/skills"
+	"github.com/diasYuri/opera/internal/adapters/skills/filesystem"
+	"github.com/diasYuri/opera/internal/modules/configuration"
 )
 
 func (a App) skills(args []string, cfg config.Resolved, jsonl bool) int {

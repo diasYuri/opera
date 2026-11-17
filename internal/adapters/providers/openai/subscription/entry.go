@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/providercatalog"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/providers/catalog"
 	"github.com/diasYuri/y/pkg/providers"
 )
 

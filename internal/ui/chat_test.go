@@ -10,7 +10,7 @@ import (
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 func TestFullscreenKeepsCompletedConversationAndStaysBounded(t *testing.T) {
@@ -25,8 +25,8 @@ func TestFullscreenKeepsCompletedConversationAndStaysBounded(t *testing.T) {
 	if !m.View().AltScreen || strings.Count(m.View().Content, "\n") > 10 {
 		t.Fatal("resize reprinted unbounded content")
 	}
-	result := app.Result{ID: "run", Text: "SCROLLBACK_ONLY_MARKER", State: "completed"}
-	next, command := m.Update(updateMsg{update: app.Update{Result: &result}, open: true})
+	result := execution.Result{ID: "run", Text: "SCROLLBACK_ONLY_MARKER", State: "completed"}
+	next, command := m.Update(updateMsg{update: execution.Update{Result: &result}, open: true})
 	m = next.(model)
 	if m.text != "" || command != nil || len(m.conversation.entries) != 1 || m.conversation.entries[0].text != streamText {
 		t.Fatal("completed assistant message was not retained in the conversation viewport ledger")
@@ -34,9 +34,9 @@ func TestFullscreenKeepsCompletedConversationAndStaysBounded(t *testing.T) {
 }
 
 func TestChatSubmissionAfterFailureResumesActualRun(t *testing.T) {
-	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
-	failed := &app.Result{ID: "failed-run", State: "failed", Checkpoint: 3, ExitCode: 1}
-	next, _ := m.Update(updateMsg{open: true, update: app.Update{Result: failed, Error: errors.New("request rejected")}})
+	m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
+	failed := &execution.Result{ID: "failed-run", State: "failed", Checkpoint: 3, ExitCode: 1}
+	next, _ := m.Update(updateMsg{open: true, update: execution.Update{Result: failed, Error: errors.New("request rejected")}})
 	m = next.(model)
 	request := m.chatRequest("try again")
 	if request.ID != "failed-run" || request.ContinueFrom != "" || request.Prompt != "try again" {
@@ -44,12 +44,12 @@ func TestChatSubmissionAfterFailureResumesActualRun(t *testing.T) {
 	}
 	// A validation error has no durable checkpoint. It must not replace the
 	// last resumable run with a freshly generated, nonexistent run ID.
-	next, _ = m.Update(updateMsg{open: true, update: app.Update{Result: &app.Result{ID: "not-persisted", ExitCode: 1}, Error: errors.New("validation failed")}})
+	next, _ = m.Update(updateMsg{open: true, update: execution.Update{Result: &execution.Result{ID: "not-persisted", ExitCode: 1}, Error: errors.New("validation failed")}})
 	m = next.(model)
 	if m.chatRequest("retry").ID != "failed-run" {
 		t.Fatal("validation error lost the resumable run")
 	}
-	next, _ = m.Update(updateMsg{open: true, update: app.Update{Result: &app.Result{ID: "failed-run", State: "completed", Checkpoint: 4}}})
+	next, _ = m.Update(updateMsg{open: true, update: execution.Update{Result: &execution.Result{ID: "failed-run", State: "completed", Checkpoint: 4}}})
 	m = next.(model)
 	request = m.chatRequest("next question")
 	if request.ID != "" || request.ContinueFrom != "failed-run" {
@@ -60,10 +60,10 @@ func TestChatSubmissionAfterFailureResumesActualRun(t *testing.T) {
 func TestCtrlCCancelsExecutionAndWaitsForCancelledResult(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	updates := make(chan app.Update, 1)
-	execution := app.NewExecution("cancel-run", updates, cancel)
-	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
-	m.stream = execution
+	updates := make(chan execution.Update, 1)
+	executionStream := execution.NewExecution("cancel-run", updates, cancel)
+	m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
+	m.stream = executionStream
 	m.status = "Running"
 
 	nextModel, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
@@ -81,7 +81,7 @@ func TestCtrlCCancelsExecutionAndWaitsForCancelledResult(t *testing.T) {
 		t.Fatal("UI settled before the executor returned its cancellation result")
 	}
 
-	update := app.Update{Result: &app.Result{ID: execution.ID, State: "cancelled", ExitCode: 130}}
+	update := execution.Update{Result: &execution.Result{ID: executionStream.ID, State: "cancelled", ExitCode: 130}}
 	nextModel, _ = m.Update(updateMsg{open: true, update: update})
 	m = nextModel.(model)
 	if m.stream != nil || m.status != "Cancelled · /retry to resume" || !m.retryPrevious {
@@ -128,7 +128,7 @@ func TestSessionResumeBranchAndSettingsActions(t *testing.T) {
 	ctx := context.Background()
 	e := &navigationTestExecutor{summary: SessionSummary{ID: "run-1", SessionID: "session-1", Title: "Saved work", State: "completed", Checkpoint: 4}}
 
-	resumeModel := newModel(ctx, e, app.Request{}, true)
+	resumeModel := newModel(ctx, e, execution.Request{}, true)
 	resumeModel.openSelector("Resume a session", []list.Item{sessionChoice{e.summary}}, resumeModel.modelDelegate())
 	resumeModel.overlay.selectionKind = "session-resume"
 	selected, command := resumeModel.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -141,7 +141,7 @@ func TestSessionResumeBranchAndSettingsActions(t *testing.T) {
 		t.Fatalf("completed session did not resume from its saved checkpoint: read=%s/%d previous=%s retry=%v status=%q", e.readID, e.readVersion, resumed.previous, resumed.retryPrevious, resumed.status)
 	}
 
-	branchModel := newModel(ctx, e, app.Request{}, true)
+	branchModel := newModel(ctx, e, execution.Request{}, true)
 	branchCommand := branchModel.branch(e.summary, 2)
 	if branchCommand == nil {
 		t.Fatal("branch action did not schedule persistence")
@@ -161,7 +161,7 @@ func TestSessionResumeBranchAndSettingsActions(t *testing.T) {
 		t.Fatalf("new branch was not made resumable: previous=%q retry=%v status=%q", ready.previous, ready.retryPrevious, ready.status)
 	}
 
-	settingsModel := newModel(ctx, e, app.Request{}, true)
+	settingsModel := newModel(ctx, e, execution.Request{}, true)
 	settingsCommand := settingsModel.applySetting("thinking", "high")
 	if settingsCommand == nil {
 		t.Fatal("settings action did not schedule persistence")
@@ -189,14 +189,14 @@ func TestPasteHistoryAndCheckpointCommitIdentity(t *testing.T) {
 		t.Fatal("history navigation", m.composer.editor.Value())
 	}
 	for _, checkpoint := range []uint64{1, 2} {
-		result := app.Result{ID: "same-run", Checkpoint: checkpoint, Text: "block"}
-		next, _ = m.Update(updateMsg{update: app.Update{Result: &result}, open: true})
+		result := execution.Result{ID: "same-run", Checkpoint: checkpoint, Text: "block"}
+		next, _ = m.Update(updateMsg{update: execution.Update{Result: &result}, open: true})
 		m = next.(model)
 	}
 	if len(m.conversation.committed) != 2 {
 		t.Fatal("approval continuation suppressed a later response")
 	}
-	next, _ = m.Update(updateMsg{update: app.Update{Result: &app.Result{ID: "same-run", Checkpoint: 2, Text: "block"}}, open: true})
+	next, _ = m.Update(updateMsg{update: execution.Update{Result: &execution.Result{ID: "same-run", Checkpoint: 2, Text: "block"}}, open: true})
 	m = next.(model)
 	if len(m.conversation.committed) != 2 {
 		t.Fatal("replay duplicated checkpoint identity")

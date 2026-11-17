@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/core"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/agent/agenttest"
 	"github.com/diasYuri/y/pkg/providers"
 )
@@ -20,11 +20,11 @@ func TestApprovalHandoffRepairsOtherUnresolvedToolResults(t *testing.T) {
 	}
 	defer closeRuntime(t, r)
 	ctx := context.Background()
-	first, err := r.Service.Execute(ctx, app.Request{Prompt: "two separate writes"}, nil)
+	first, err := r.Service.Execute(ctx, execution.Request{Prompt: "two separate writes"}, nil)
 	if err != nil || first.Approval == nil {
 		t.Fatal(first, err)
 	}
-	result, err := r.Service.Execute(ctx, app.Request{ID: first.ID, Approve: first.Approval.ID}, nil)
+	result, err := r.Service.Execute(ctx, execution.Request{ID: first.ID, Approve: first.Approval.ID}, nil)
 	if err != nil || result.ExitCode != 0 {
 		t.Fatal(result, err)
 	}

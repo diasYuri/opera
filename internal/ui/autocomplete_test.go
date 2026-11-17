@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 type completionExecutor struct {
@@ -21,7 +21,7 @@ func (e *completionExecutor) CompleteComposer(ctx context.Context, token string)
 
 func TestCompletionDiscoveryRunsAsCommandAndRejectsStaleResults(t *testing.T) {
 	executor := &completionExecutor{}
-	m := newModel(context.Background(), executor, app.Request{}, true)
+	m := newModel(context.Background(), executor, execution.Request{}, true)
 	m.composer.editor.SetValue("@first")
 	first := m.refreshCompletions()
 	if executor.calls != 0 || first == nil {

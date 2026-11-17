@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/core"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"strconv"
 )
 
@@ -50,7 +50,7 @@ func (a App) sessions(opts options, cfg config.Resolved, jsonl bool) (code int) 
 		if len(args) != 2 {
 			return a.fail(2, errors.New("record inspection requires a run ID"), jsonl)
 		}
-		filter := app.InspectFilter{Type: opts.eventType, Tool: opts.tool, ID: opts.operationID, Limit: 100}
+		filter := execution.InspectFilter{Type: opts.eventType, Tool: opts.tool, ID: opts.operationID, Limit: 100}
 		if opts.limit != "" {
 			filter.Limit, err = strconv.Atoi(opts.limit)
 			if err != nil {

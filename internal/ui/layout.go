@@ -14,10 +14,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
-func newModel(ctx context.Context, service Executor, initial app.Request, noMotion bool) model {
+func newModel(ctx context.Context, service Executor, initial execution.Request, noMotion bool) model {
 	keys := defaultChatKeyMap()
 	editor := textarea.New()
 	editor.Placeholder = "Ask Opera to do anything"
@@ -26,7 +26,7 @@ func newModel(ctx context.Context, service Executor, initial app.Request, noMoti
 	editor.KeyMap.InsertNewline = keys.newline
 	editor.Focus()
 	cwd, _ := os.Getwd()
-	m := model{ctx: ctx, service: service, composer: composerModel{editor: editor}, conversation: newConversationModel(), spinner: spinner.New(spinner.WithSpinner(spinner.Line)), keys: keys, workspace: filepath.Base(cwd), workspaceRoot: cwd, noMotion: noMotion, dark: true, systemDark: true, themeMode: "system", status: "Ready", resume: initial, mode: app.ModeDefault, width: 80, height: 24, actionPending: initial.ID != "" || initial.Prompt != ""}
+	m := model{ctx: ctx, service: service, composer: composerModel{editor: editor}, conversation: newConversationModel(), spinner: spinner.New(spinner.WithSpinner(spinner.Line)), keys: keys, workspace: filepath.Base(cwd), workspaceRoot: cwd, noMotion: noMotion, dark: true, systemDark: true, themeMode: "system", status: "Ready", resume: initial, mode: execution.ModeDefault, width: 80, height: 24, actionPending: initial.ID != "" || initial.Prompt != ""}
 	if initial.Mode != "" {
 		m.mode = initial.Mode
 	}
@@ -119,8 +119,8 @@ func (m model) sessionLine() string {
 		parts = append(parts, t.success.Render(safeText(m.workspace)))
 	}
 	line := strings.Join(parts, t.muted.Render(" · "))
-	if m.mode != "" && m.mode != app.ModeDefault {
-		if mode, err := app.ResolveMode(m.mode); err == nil {
+	if m.mode != "" && m.mode != execution.ModeDefault {
+		if mode, err := execution.ResolveMode(m.mode); err == nil {
 			label := strings.ToLower(mode.Name)
 			if line != "" {
 				line += t.muted.Render(" · ")

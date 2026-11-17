@@ -3,9 +3,9 @@ package core_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/core"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	execmod "github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/providers"
@@ -82,7 +82,7 @@ func TestWorkerChildrenApprovalRecoveryAndTaskIdentity(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	r := workerRuntime(t, cfg)
-	result, err := r.Service.Execute(ctx, app.Request{Prompt: "parent", Worker: true}, nil)
+	result, err := r.Service.Execute(ctx, execmod.Request{Prompt: "parent", Worker: true}, nil)
 	if err != nil || result.ExitCode != 3 || result.Approval == nil {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -90,7 +90,7 @@ func TestWorkerChildrenApprovalRecoveryAndTaskIdentity(t *testing.T) {
 	if err := os.WriteFile(result.Approval.Path, []byte("external change"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	changed, err := r.Service.Execute(ctx, app.Request{ID: result.ID, Approve: oldApproval}, nil)
+	changed, err := r.Service.Execute(ctx, execmod.Request{ID: result.ID, Approve: oldApproval}, nil)
 	if err != nil || changed.Approval == nil || changed.Approval.ID == oldApproval {
 		t.Fatalf("stale child approval was reused: %+v %v", changed, err)
 	}
@@ -105,7 +105,7 @@ func TestWorkerChildrenApprovalRecoveryAndTaskIdentity(t *testing.T) {
 	r = workerRuntime(t, cfg)
 	defer closeRuntime(t, r)
 	for i := 0; i < 3 && result.ExitCode == 3; i++ {
-		result, err = r.Service.Execute(ctx, app.Request{ID: id, Approve: result.Approval.ID}, nil)
+		result, err = r.Service.Execute(ctx, execmod.Request{ID: id, Approve: result.Approval.ID}, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -173,7 +173,7 @@ func TestWorkerParallelReadsAndSerializedWrites(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	result, err := r.Service.Execute(ctx, app.Request{Prompt: "parent", Worker: true}, nil)
+	result, err := r.Service.Execute(ctx, execmod.Request{Prompt: "parent", Worker: true}, nil)
 	if err != nil || result.ExitCode != 0 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -218,10 +218,10 @@ func TestWorkerCancellationPropagatesAndInspectionDoesNotRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution := r.Service.Start(ctx, app.Request{Prompt: "parent", Worker: true})
-	results := make(chan app.Result, 1)
+	execution := r.Service.Start(ctx, execmod.Request{Prompt: "parent", Worker: true})
+	results := make(chan execmod.Result, 1)
 	go func() {
-		var terminal app.Result
+		var terminal execmod.Result
 		for update := range execution.Updates {
 			if update.Result != nil {
 				terminal = *update.Result
@@ -282,7 +282,7 @@ func TestActiveControlsAreOrderedAndPersisted(t *testing.T) {
 	defer closeRuntime(t, r)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	execution := r.Service.Start(ctx, app.Request{Prompt: "begin"})
+	execution := r.Service.Start(ctx, execmod.Request{Prompt: "begin"})
 	select {
 	case <-provider.entered:
 	case <-ctx.Done():
@@ -358,7 +358,7 @@ func TestNestedChildrenYieldSingleWorkerSlot(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closeRuntime(t, r)
-	result, err := r.Service.Execute(ctx, app.Request{Prompt: "node-1"}, nil)
+	result, err := r.Service.Execute(ctx, execmod.Request{Prompt: "node-1"}, nil)
 	if err != nil || result.ExitCode != 0 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -380,7 +380,7 @@ func TestSharedBudgetFailsBeforeInference(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closeRuntime(t, r)
-	result, err := r.Service.Execute(context.Background(), app.Request{Prompt: "budget", Worker: true}, nil)
+	result, err := r.Service.Execute(context.Background(), execmod.Request{Prompt: "budget", Worker: true}, nil)
 	if err == nil || result.ExitCode == 0 || provider.CallCount() != 0 {
 		t.Fatal("inference bypassed shared budget", result, err)
 	}
@@ -401,7 +401,7 @@ func TestControlJournalRecoversMissingQueueExactlyOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution := r.Service.Start(ctx, app.Request{Prompt: "begin"})
+	execution := r.Service.Start(ctx, execmod.Request{Prompt: "begin"})
 	<-provider.entered
 	if err := r.FollowUp(execution.ID, "durable follow-up"); err != nil {
 		t.Fatal(err)
@@ -426,7 +426,7 @@ func TestControlJournalRecoversMissingQueueExactlyOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closeRuntime(t, r)
-	result, err := r.Service.Execute(ctx, app.Request{ID: execution.ID}, nil)
+	result, err := r.Service.Execute(ctx, execmod.Request{ID: execution.ID}, nil)
 	if err != nil || result.ExitCode != 0 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -445,7 +445,7 @@ func TestControlJournalRecoversMissingQueueExactlyOnce(t *testing.T) {
 	if count != 1 {
 		t.Fatal("control redelivered or lost", count)
 	}
-	if _, err := r.Service.Execute(ctx, app.Request{ID: execution.ID}, nil); err != nil {
+	if _, err := r.Service.Execute(ctx, execmod.Request{ID: execution.ID}, nil); err != nil {
 		t.Fatal(err)
 	}
 	snapshot, err = r.Service.Store.Load(ctx, execution.ID)
@@ -474,19 +474,19 @@ func TestWorkerDenialDoesNotAuthorizeAnotherChild(t *testing.T) {
 	defer closeRuntime(t, r)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	result, err := r.Service.Execute(ctx, app.Request{Prompt: "parent", Worker: true}, nil)
+	result, err := r.Service.Execute(ctx, execmod.Request{Prompt: "parent", Worker: true}, nil)
 	if err != nil || result.Approval == nil {
 		t.Fatalf("%+v %v", result, err)
 	}
 	deniedPath := result.Approval.Path
 	deniedID := result.Approval.ID
 	id := result.ID
-	result, err = r.Service.Execute(ctx, app.Request{ID: id, Deny: deniedID}, nil)
+	result, err = r.Service.Execute(ctx, execmod.Request{ID: id, Deny: deniedID}, nil)
 	if err != nil || result.ExitCode != 3 || result.Approval == nil || result.Approval.ID == deniedID {
 		t.Fatalf("denial authorized another child: %+v %v", result, err)
 	}
 	approvedPath := result.Approval.Path
-	result, err = r.Service.Execute(ctx, app.Request{ID: id, Approve: result.Approval.ID}, nil)
+	result, err = r.Service.Execute(ctx, execmod.Request{ID: id, Approve: result.Approval.ID}, nil)
 	if err != nil || result.ExitCode != 0 {
 		t.Fatalf("%+v %v", result, err)
 	}

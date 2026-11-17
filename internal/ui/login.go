@@ -9,10 +9,10 @@ import (
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
-type loginChoice struct{ app.LoginProvider }
+type loginChoice struct{ execution.LoginProvider }
 
 func (c loginChoice) Title() string       { return safeText(c.Name) }
 func (c loginChoice) Description() string { return safeText(c.LoginProvider.Description) }
@@ -26,13 +26,13 @@ type loginFlow struct {
 }
 type loginEvent struct {
 	flow   *loginFlow
-	notice app.LoginNotice
+	notice execution.LoginNotice
 	err    error
 	done   bool
 }
 
 func (m *model) openLoginProviders() {
-	auth, ok := m.service.(app.Authenticator)
+	auth, ok := m.service.(execution.Authenticator)
 	if !ok {
 		m.status = "Login is unavailable in this session"
 		return
@@ -72,7 +72,7 @@ func (m *model) openSelector(title string, items []list.Item, delegate list.Defa
 }
 
 func (m *model) beginLogin(provider loginChoice) tea.Cmd {
-	auth, ok := m.service.(app.Authenticator)
+	auth, ok := m.service.(execution.Authenticator)
 	if !ok {
 		return nil
 	}
@@ -86,7 +86,7 @@ func (m *model) beginLogin(provider loginChoice) tea.Cmd {
 	m.activity.Start()
 	work := func() tea.Msg {
 		defer close(flow.events)
-		err := auth.Login(ctx, provider.ID, func(notice app.LoginNotice) error {
+		err := auth.Login(ctx, provider.ID, func(notice execution.LoginNotice) error {
 			select {
 			case flow.events <- loginEvent{flow: flow, notice: notice}:
 				return nil
@@ -182,7 +182,7 @@ func (m model) updateLogin(event loginEvent) (tea.Model, tea.Cmd) {
 	return m, m.composer.editor.Focus()
 }
 
-type loginStorageChoice struct{ app.LoginOption }
+type loginStorageChoice struct{ execution.LoginOption }
 
 func (c loginStorageChoice) Title() string       { return safeText(c.Name) }
 func (c loginStorageChoice) Description() string { return safeText(c.LoginOption.Description) }

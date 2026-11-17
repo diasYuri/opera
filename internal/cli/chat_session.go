@@ -13,19 +13,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/contextfiles"
+	"github.com/diasYuri/opera/internal/adapters/context/filesystem"
 	"github.com/diasYuri/opera/internal/core"
-	"github.com/diasYuri/opera/internal/providercatalog"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
+	"github.com/diasYuri/opera/internal/modules/providers/catalog"
 	"github.com/diasYuri/opera/internal/ui"
 	"github.com/diasYuri/y/pkg/ai"
 )
 
 type loginMethod struct {
-	app.LoginProvider
+	execution.LoginProvider
 	provider   string
-	login      func(context.Context, config.Resolved, func(app.LoginNotice) error) error
+	login      func(context.Context, config.Resolved, func(execution.LoginNotice) error) error
 	descriptor *providercatalog.LoginDescriptor
 }
 
@@ -63,7 +63,7 @@ func newChatSession(a App, cfg config.Resolved, opts core.Options, r *core.Runti
 			copy := descriptor
 			copy.Methods = append([]providercatalog.LoginMethod(nil), descriptor.Methods...)
 			s.methods = append(s.methods, loginMethod{
-				LoginProvider: app.LoginProvider{ID: descriptor.ID, Name: descriptor.Name, Description: descriptor.Description},
+				LoginProvider: execution.LoginProvider{ID: descriptor.ID, Name: descriptor.Name, Description: descriptor.Description},
 				descriptor:    &copy,
 			})
 		}
@@ -71,17 +71,17 @@ func newChatSession(a App, cfg config.Resolved, opts core.Options, r *core.Runti
 	return s
 }
 
-func (s *chatSession) LoginProviders() []app.LoginProvider {
+func (s *chatSession) LoginProviders() []execution.LoginProvider {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]app.LoginProvider, 0, len(s.methods))
+	out := make([]execution.LoginProvider, 0, len(s.methods))
 	for _, method := range s.methods {
 		out = append(out, method.LoginProvider)
 	}
 	return out
 }
 
-func (s *chatSession) Login(ctx context.Context, id string, notify func(app.LoginNotice) error) error {
+func (s *chatSession) Login(ctx context.Context, id string, notify func(execution.LoginNotice) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, method := range s.methods {
@@ -89,7 +89,7 @@ func (s *chatSession) Login(ctx context.Context, id string, notify func(app.Logi
 			continue
 		}
 		executionProvider := method.provider
-		notifyFlow := func(notice app.LoginNotice) error {
+		notifyFlow := func(notice execution.LoginNotice) error {
 			if notice.URL == "" {
 				return notify(notice)
 			}
@@ -102,7 +102,7 @@ func (s *chatSession) Login(ctx context.Context, id string, notify func(app.Logi
 				err := s.openBrowser(browserCtx, u)
 				cancel()
 				if err != nil {
-					return notify(app.LoginNotice{Message: "Open the authorization link above in your browser to continue."})
+					return notify(execution.LoginNotice{Message: "Open the authorization link above in your browser to continue."})
 				}
 			}
 			return nil
@@ -139,16 +139,16 @@ func (s *chatSession) Login(ctx context.Context, id string, notify func(app.Logi
 	return errors.New("login provider is unavailable; use /login to see available providers")
 }
 
-func chooseLoginMethod(ctx context.Context, notify func(app.LoginNotice) error, descriptor providercatalog.LoginDescriptor) (providercatalog.LoginMethod, error) {
+func chooseLoginMethod(ctx context.Context, notify func(execution.LoginNotice) error, descriptor providercatalog.LoginDescriptor) (providercatalog.LoginMethod, error) {
 	if len(descriptor.Methods) == 1 {
 		return descriptor.Methods[0], nil
 	}
-	options := make([]app.LoginOption, 0, len(descriptor.Methods))
+	options := make([]execution.LoginOption, 0, len(descriptor.Methods))
 	for _, method := range descriptor.Methods {
-		options = append(options, app.LoginOption{ID: method.ID, Name: method.Name, Description: method.Description})
+		options = append(options, execution.LoginOption{ID: method.ID, Name: method.Name, Description: method.Description})
 	}
 	response := make(chan string, 1)
-	if err := notify(app.LoginNotice{Message: "Choose a sign-in method.", Prompt: &app.LoginPrompt{
+	if err := notify(execution.LoginNotice{Message: "Choose a sign-in method.", Prompt: &execution.LoginPrompt{
 		Kind: "select", Title: descriptor.Name + " sign-in", Options: options, Response: response,
 	}}); err != nil {
 		return providercatalog.LoginMethod{}, err
@@ -166,7 +166,7 @@ func chooseLoginMethod(ctx context.Context, notify func(app.LoginNotice) error, 
 	}
 }
 
-func (s *chatSession) runLoginMethod(ctx context.Context, method providercatalog.LoginMethod, notify func(app.LoginNotice) error) error {
+func (s *chatSession) runLoginMethod(ctx context.Context, method providercatalog.LoginMethod, notify func(execution.LoginNotice) error) error {
 	switch method.Kind {
 	case "api-key":
 		return s.apiKeyLogin(ctx, s.cfg, method.ProviderID, notify)
@@ -517,7 +517,7 @@ func (s *chatSession) SetSetting(ctx context.Context, key, value string) (string
 	}
 }
 
-func (s *chatSession) inspectionService(ctx context.Context) (*app.Service, func(), error) {
+func (s *chatSession) inspectionService(ctx context.Context) (*execution.Service, func(), error) {
 	s.mu.Lock()
 	if s.runtime != nil {
 		service := s.runtime.Service
@@ -544,7 +544,7 @@ func (s *chatSession) SessionChoices(ctx context.Context) ([]ui.SessionSummary, 
 		return nil, err
 	}
 	defer closeService()
-	var entries []app.SessionEntry
+	var entries []execution.SessionEntry
 	for offset := 0; ; offset += 500 {
 		page, err := service.Sessions(ctx, offset, 500)
 		if err != nil {
@@ -616,7 +616,7 @@ func (s *chatSession) ReadSession(ctx context.Context, id string, version uint64
 		if err != nil {
 			return ui.SessionView{}, errors.New("checkpoint is no longer available")
 		}
-		var boundary app.Boundary
+		var boundary execution.Boundary
 		if err := json.Unmarshal(document.Data, &boundary); err != nil || boundary.RunID != id || boundary.Checkpoint != version {
 			return ui.SessionView{}, errors.New("checkpoint record is inconsistent")
 		}
@@ -625,7 +625,7 @@ func (s *chatSession) ReadSession(ctx context.Context, id string, version uint64
 		checkpoint = version
 		state = string(snapshot.Status)
 	} else if document, err := service.Records.Get(ctx, "sessions", id); err == nil {
-		var indexed app.SessionEntry
+		var indexed execution.SessionEntry
 		if json.Unmarshal(document.Data, &indexed) == nil && indexed.State != "" {
 			state = indexed.State
 			if state == "running" || state == "queued" {
@@ -738,7 +738,7 @@ func uniqueVersions(versions []uint64) []uint64 {
 	return out
 }
 
-func (s *chatSession) Start(ctx context.Context, request app.Request) *app.Execution {
+func (s *chatSession) Start(ctx context.Context, request execution.Request) *execution.Execution {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if request.ID != "" {
@@ -777,7 +777,7 @@ func (s *chatSession) Start(ctx context.Context, request app.Request) *app.Execu
 	return s.runtime.Start(ctx, request)
 }
 
-func (s *chatSession) AnswerQuestion(runID, toolCallID string, answers []app.UserQuestionAnswer) error {
+func (s *chatSession) AnswerQuestion(runID, toolCallID string, answers []execution.UserQuestionAnswer) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.runtime == nil || s.runtime.Service.QuestionBroker == nil {
@@ -786,11 +786,11 @@ func (s *chatSession) AnswerQuestion(runID, toolCallID string, answers []app.Use
 	return s.runtime.Service.QuestionBroker.Answer(runID, toolCallID, answers)
 }
 
-func failedExecution(err error) *app.Execution {
-	updates := make(chan app.Update, 1)
-	updates <- app.Update{Result: &app.Result{State: "failed", ExitCode: 1}, Error: err}
+func failedExecution(err error) *execution.Execution {
+	updates := make(chan execution.Update, 1)
+	updates <- execution.Update{Result: &execution.Result{State: "failed", ExitCode: 1}, Error: err}
 	close(updates)
-	return &app.Execution{Updates: updates}
+	return &execution.Execution{Updates: updates}
 }
 
 func (s *chatSession) openResumeRuntime(ctx context.Context, id string) error {
@@ -852,7 +852,7 @@ func (s *chatSession) Command(ctx context.Context, text string) (string, error) 
 		return "", nil
 	}
 	if parts[0] == "/help" {
-		return app.CommandHelp(), nil
+		return execution.CommandHelp(), nil
 	}
 	if parts[0] == "/settings" && s.runtime == nil {
 		return fmt.Sprintf("Provider: %s\nModel: %s\nPolicy: %s\nUse /login to connect a provider.", s.cfg.String("provider"), s.cfg.String("model"), s.cfg.String("policy")), nil
@@ -905,7 +905,7 @@ func (s *chatSession) Close(ctx context.Context) error {
 	return nil
 }
 
-func (a App) interactiveChat(ctx context.Context, cfg config.Resolved, opts core.Options, request app.Request) (code int) {
+func (a App) interactiveChat(ctx context.Context, cfg config.Resolved, opts core.Options, request execution.Request) (code int) {
 	session := newChatSession(a, cfg, opts, nil)
 	defer func() {
 		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)

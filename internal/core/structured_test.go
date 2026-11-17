@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/core"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/agent/agenttest"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/providers"
@@ -35,7 +35,7 @@ func TestStructuredOutputCapabilitySchemaAndInvalidResponse(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer closeRuntime(t, r)
-			result, err := r.Service.Execute(context.Background(), app.Request{Prompt: "answer in JSON"}, nil)
+			result, err := r.Service.Execute(context.Background(), execution.Request{Prompt: "answer in JSON"}, nil)
 			if tc.ok {
 				if err != nil || !json.Valid(result.StructuredOutput) {
 					t.Fatal(result, err)

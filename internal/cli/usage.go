@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/core"
+	"github.com/diasYuri/opera/internal/modules/configuration"
 )
 
 func (a App) usage(opts options, cfg config.Resolved, jsonl bool) (code int) {

@@ -8,19 +8,19 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 type questionAnswerer interface {
-	AnswerQuestion(string, string, []app.UserQuestionAnswer) error
+	AnswerQuestion(string, string, []execution.UserQuestionAnswer) error
 }
 
 type questionFlow struct {
 	runID, toolCallID string
-	questions         []app.UserQuestion
+	questions         []execution.UserQuestion
 	index             int
 	selected          []int
-	answers           []app.UserQuestionAnswer
+	answers           []execution.UserQuestionAnswer
 	notes             []string
 	input             textarea.Model
 	focusInput        bool
@@ -37,19 +37,19 @@ func newQuestionFlow(runID string, data json.RawMessage) *questionFlow {
 		return nil
 	}
 	var input struct {
-		Questions []app.UserQuestion `json:"questions"`
+		Questions []execution.UserQuestion `json:"questions"`
 	}
 	if json.Unmarshal(payload.ToolCall.Arguments, &input) != nil || len(input.Questions) == 0 {
 		return nil
 	}
-	flow := &questionFlow{runID: runID, toolCallID: payload.ToolCall.ID, questions: input.Questions, selected: make([]int, len(input.Questions)), answers: make([]app.UserQuestionAnswer, len(input.Questions)), notes: make([]string, len(input.Questions)), input: textarea.New()}
+	flow := &questionFlow{runID: runID, toolCallID: payload.ToolCall.ID, questions: input.Questions, selected: make([]int, len(input.Questions)), answers: make([]execution.UserQuestionAnswer, len(input.Questions)), notes: make([]string, len(input.Questions)), input: textarea.New()}
 	flow.input.Placeholder = "Add details or type a custom answer…"
 	flow.input.ShowLineNumbers = false
 	flow.input.SetHeight(2)
 	return flow
 }
 
-func (m *model) openUserQuestion(event *app.Event) {
+func (m *model) openUserQuestion(event *execution.Event) {
 	if event == nil || event.Type != "tool_started" || event.Tool != "user_question" {
 		return
 	}
@@ -69,8 +69,8 @@ func (m model) questionView() string {
 	}
 	t := m.theme()
 	item := q.questions[q.index]
-	options := append([]app.UserQuestionOption(nil), item.Options...)
-	options = append(options, app.UserQuestionOption{Label: "None of the above", Description: "Add your own answer or details with Tab"})
+	options := append([]execution.UserQuestionOption(nil), item.Options...)
+	options = append(options, execution.UserQuestionOption{Label: "None of the above", Description: "Add your own answer or details with Tab"})
 	width := max(1, m.contentWidth())
 	rows := []string{t.muted.Render(fmt.Sprintf("Question %d/%d (%d unanswered)", q.index+1, len(q.questions), len(q.questions)-q.index)), t.accent.Render(safeText(item.Question))}
 	for i, option := range options {
@@ -144,7 +144,7 @@ func (m model) updateQuestionKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool)
 	case "enter":
 		question := q.questions[q.index]
 		optionIndex := q.selected[q.index]
-		answer := app.UserQuestionAnswer{Question: question.Question, Notes: q.notes[q.index]}
+		answer := execution.UserQuestionAnswer{Question: question.Question, Notes: q.notes[q.index]}
 		if optionIndex < len(question.Options) {
 			answer.Option = question.Options[optionIndex].Label
 		}

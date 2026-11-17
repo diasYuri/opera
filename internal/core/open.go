@@ -6,13 +6,13 @@ import (
 	"errors"
 	"os"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/approvalfiles"
-	"github.com/diasYuri/opera/internal/config"
-	operaext "github.com/diasYuri/opera/internal/extensions"
-	"github.com/diasYuri/opera/internal/providercatalog"
-	"github.com/diasYuri/opera/internal/skills"
-	"github.com/diasYuri/opera/internal/workspace"
+	"github.com/diasYuri/opera/internal/adapters/approvals/filesystem"
+	"github.com/diasYuri/opera/internal/adapters/skills/filesystem"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
+	operaext "github.com/diasYuri/opera/internal/modules/extensions"
+	"github.com/diasYuri/opera/internal/modules/providers/catalog"
+	"github.com/diasYuri/opera/internal/modules/workspace"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/component"
 	"github.com/diasYuri/y/pkg/providers"
@@ -37,7 +37,7 @@ type Options struct {
 type Runtime struct {
 	Extensions *operaext.Manager
 	Harness    *yruntime.Harness
-	Service    *app.Service
+	Service    *execution.Service
 	cfg        config.Resolved
 	opts       Options
 }
@@ -56,7 +56,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 		return nil, errors.New("unsupported thinking level")
 	}
 	keys := newCompositionKeys()
-	guard := &app.Guard{ReadApprovalFile: approvalfiles.Read, Workspace: cfg.Paths.Workspace, Mode: cfg.String("policy"), Queue: workspace.NewQueue()}
+	guard := &execution.Guard{ReadApprovalFile: approvalfiles.Read, Workspace: cfg.Paths.Workspace, Mode: cfg.String("policy"), Queue: workspace.NewQueue()}
 	home, _ := os.UserHomeDir()
 	skillManager := skills.NewManager(cfg.Paths.Workspace, home)
 	// Copy the map before adding checkpoint-derived defaults.
@@ -66,7 +66,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 	}
 	cfg.Values = values
 	contextPaths := newContextPathState(opts.ContextPaths)
-	questions := app.NewQuestionBroker()
+	questions := execution.NewQuestionBroker()
 	builder := &compositionBuilder{cfg: cfg, opts: &opts, keys: keys, guard: guard, skillManager: skillManager, questions: questions, contextPaths: contextPaths}
 	definitions := []component.Definition{builder.storage(), builder.provider(), builder.tools(), builder.runner(), builder.application()}
 	if opts.Inspection {

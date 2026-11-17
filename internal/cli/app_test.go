@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/diasYuri/opera/internal/adapters/credentials"
+	"github.com/diasYuri/opera/internal/adapters/platform"
 	"github.com/diasYuri/opera/internal/cli"
-	"github.com/diasYuri/opera/internal/credentials"
 	"github.com/diasYuri/opera/internal/output"
-	"github.com/diasYuri/opera/internal/platform"
 )
 
 type fixture struct {

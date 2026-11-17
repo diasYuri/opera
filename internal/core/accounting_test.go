@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/agent/agenttest"
 )
 
@@ -15,7 +15,7 @@ func TestUsageSurvivesReplayBranchAndCompaction(t *testing.T) {
 	r := open(t, cfg, agenttest.TextTurn(strings.Repeat("context ", 1000)), agenttest.TextTurn("second answer"))
 	defer closeRuntime(t, r)
 	ctx := context.Background()
-	first, err := r.Service.Execute(ctx, app.Request{Prompt: "one"}, nil)
+	first, err := r.Service.Execute(ctx, execution.Request{Prompt: "one"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,14 +23,14 @@ func TestUsageSurvivesReplayBranchAndCompaction(t *testing.T) {
 	if err != nil || before.Totals.Total.Count != 1 {
 		t.Fatal(before, err)
 	}
-	if _, err := r.Service.Execute(ctx, app.Request{ID: first.ID}, nil); err != nil {
+	if _, err := r.Service.Execute(ctx, execution.Request{ID: first.ID}, nil); err != nil {
 		t.Fatal(err)
 	}
 	after, err := r.Service.Usage(ctx, "run", first.ID, "")
 	if err != nil || after.Totals.Total.Count != before.Totals.Total.Count {
 		t.Fatal("replay added a provider charge", after, err)
 	}
-	second, err := r.Service.Execute(ctx, app.Request{Prompt: "two", ContinueFrom: first.ID}, nil)
+	second, err := r.Service.Execute(ctx, execution.Request{Prompt: "two", ContinueFrom: first.ID}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestUsageSurvivesReplayBranchAndCompaction(t *testing.T) {
 			t.Fatal("branch charged to source session")
 		}
 	}
-	raw, err := r.Service.InspectRecords(ctx, first.ID, "events", app.InspectFilter{Limit: 1})
+	raw, err := r.Service.InspectRecords(ctx, first.ID, "events", execution.InspectFilter{Limit: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

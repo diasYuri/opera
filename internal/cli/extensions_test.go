@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/credentials"
-	operaext "github.com/diasYuri/opera/internal/extensions"
+	"github.com/diasYuri/opera/internal/adapters/credentials"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
+	operaext "github.com/diasYuri/opera/internal/modules/extensions"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"net/http"
 	"net/http/httptest"
@@ -32,9 +32,9 @@ func capabilitiesFixture(t *testing.T) *fixture {
 	}
 	return f
 }
-func executionResult(t *testing.T, text string) app.Result {
+func executionResult(t *testing.T, text string) execution.Result {
 	t.Helper()
-	var result app.Result
+	var result execution.Result
 	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
 		var event struct {
 			Type string          `json:"type"`
@@ -51,7 +51,7 @@ func executionResult(t *testing.T, text string) app.Result {
 	}
 	return result
 }
-func approve(t *testing.T, f *fixture, result app.Result) app.Result {
+func approve(t *testing.T, f *fixture, result execution.Result) execution.Result {
 	t.Helper()
 	if result.Approval == nil {
 		t.Fatal("approval missing", result)

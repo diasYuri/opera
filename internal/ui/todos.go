@@ -9,7 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 // TaskItem is the presentation-safe portion of a persisted Opera task.
@@ -54,7 +54,7 @@ func (m *model) loadTaskSnapshot(runID string) tea.Cmd {
 	}
 }
 
-func (m model) isTaskToolCompletion(event *app.Event) bool {
+func (m model) isTaskToolCompletion(event *execution.Event) bool {
 	if event == nil || event.Type != "tool_completed" {
 		return false
 	}

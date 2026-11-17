@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/adapters/platform"
 	"github.com/diasYuri/opera/internal/demo"
-	"github.com/diasYuri/opera/internal/platform"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 func (a App) demo(opts options, jsonl bool) int {
@@ -53,7 +53,7 @@ func (a App) demo(opts options, jsonl bool) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	evidence, err := demo.Run(ctx, cfg, mode, demo.Provider{Command: binary, Args: []string{"--version"}}, func(event app.Event) error {
+	evidence, err := demo.Run(ctx, cfg, mode, demo.Provider{Command: binary, Args: []string{"--version"}}, func(event execution.Event) error {
 		if jsonl {
 			return json.NewEncoder(a.Out).Encode(event)
 		}

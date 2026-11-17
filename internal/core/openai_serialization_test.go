@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/core"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/providers"
 	"github.com/diasYuri/y/pkg/providers/openai"
 )
@@ -98,7 +98,7 @@ func TestOpenAIRequestSerializesOperaToolContext(t *testing.T) {
 	}
 	defer closeRuntime(t, runtime)
 
-	result, err := runtime.Service.Execute(context.Background(), app.Request{Prompt: "Explain this project"}, nil)
+	result, err := runtime.Service.Execute(context.Background(), execution.Request{Prompt: "Explain this project"}, nil)
 	if err != nil || result.Text != "ok" {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}

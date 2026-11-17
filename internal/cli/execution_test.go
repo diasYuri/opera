@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/credentials"
-	"github.com/diasYuri/opera/internal/providercatalog"
+	"github.com/diasYuri/opera/internal/adapters/credentials"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/providers/catalog"
 	"github.com/diasYuri/y/pkg/agent/agenttest"
 	"github.com/diasYuri/y/pkg/providers"
 	"net/http"
@@ -17,7 +17,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 func TestHeadlessHTTPProviderApprovalAndResume(t *testing.T) {
@@ -45,7 +45,7 @@ func TestHeadlessHTTPProviderApprovalAndResume(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(f.root, "proof.txt")); !os.IsNotExist(err) {
 		t.Fatal("headless tool executed without approval")
 	}
-	var first app.Result
+	var first execution.Result
 	for _, line := range strings.Split(strings.TrimSpace(f.out.String()), "\n") {
 		var event struct {
 			Type string          `json:"type"`

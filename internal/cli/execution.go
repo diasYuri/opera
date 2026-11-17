@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/core"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/opera/internal/ui"
 	"github.com/diasYuri/y/pkg/tools"
 )
@@ -20,7 +20,7 @@ import (
 func (a App) execution(command string, opts options, cfg config.Resolved, jsonl bool) (code int) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	request := app.Request{Management: opts.management}
+	request := execution.Request{Management: opts.management}
 	if (opts.approve != "" || opts.deny != "") && command != "resume" && command != "retry" {
 		return a.fail(2, errors.New("approval flags require resume"), jsonl)
 	}
@@ -135,7 +135,7 @@ func (a App) execution(command string, opts options, cfg config.Resolved, jsonl 
 	signalCtx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
 	lastAgent := ""
-	result, err := runtime.Service.Execute(signalCtx, request, func(event app.Event) error {
+	result, err := runtime.Service.Execute(signalCtx, request, func(event execution.Event) error {
 		if jsonl {
 			return json.NewEncoder(a.Out).Encode(event)
 		}
@@ -161,9 +161,9 @@ func (a App) execution(command string, opts options, cfg config.Resolved, jsonl 
 	})
 	if jsonl {
 		if writeErr := json.NewEncoder(a.Out).Encode(struct {
-			SchemaVersion int        `json:"schema_version"`
-			Type          string     `json:"type"`
-			Data          app.Result `json:"data"`
+			SchemaVersion int              `json:"schema_version"`
+			Type          string           `json:"type"`
+			Data          execution.Result `json:"data"`
 		}{1, "execution.result", result}); writeErr != nil {
 			return 1
 		}

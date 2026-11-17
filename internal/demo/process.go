@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 // ProcessProof verifies headless exit-3 recovery across actual CLI processes.
@@ -35,7 +35,7 @@ func ProcessProof(ctx context.Context, binary string) (Evidence, error) {
 		env = append(env, entry)
 	}
 	env = append(env, "OPERA_CONFIG_DIR="+filepath.Join(root, "config"), "OPERA_DATA_DIR="+filepath.Join(root, "data"), "OPERA_CACHE_DIR="+filepath.Join(root, "cache"))
-	call := func(args ...string) (app.Result, int, error) {
+	call := func(args ...string) (execution.Result, int, error) {
 		cmd := exec.CommandContext(ctx, binary, append(args, "--workspace", workspace, "--format=jsonl")...)
 		cmd.Env = env
 		cmd.Dir = workspace
@@ -46,11 +46,11 @@ func ProcessProof(ctx context.Context, binary string) (Evidence, error) {
 		if err != nil {
 			var exit *exec.ExitError
 			if !errors.As(err, &exit) {
-				return app.Result{}, 1, err
+				return execution.Result{}, 1, err
 			}
 			code = exit.ExitCode()
 		}
-		var result app.Result
+		var result execution.Result
 		for _, line := range bytes.Split(bytes.TrimSpace(output.Bytes()), []byte{'\n'}) {
 			var event struct {
 				Type string          `json:"type"`

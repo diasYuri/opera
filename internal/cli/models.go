@@ -6,8 +6,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/core"
+	"github.com/diasYuri/opera/internal/modules/configuration"
 )
 
 func (a App) models(opts options, cfg config.Resolved, jsonl bool) int {

@@ -2,7 +2,7 @@ package groq
 
 import (
 	"github.com/diasYuri/opera/internal/adapters/providers/openai_compatible"
-	"github.com/diasYuri/opera/internal/providercatalog"
+	"github.com/diasYuri/opera/internal/modules/providers/catalog"
 )
 
 func Entry() providercatalog.Entry {

@@ -3,7 +3,7 @@ package core_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/agent/agenttest"
 	"strings"
 	"testing"
@@ -25,7 +25,7 @@ func TestSessionCatalogBranchCompactionAndExport(t *testing.T) {
 		if i == 0 {
 			prompt = "API_KEY=private-export-value\nPlease inspect the code"
 		}
-		result, err := r.Service.Execute(ctx, app.Request{Prompt: prompt, ContinueFrom: previous}, nil)
+		result, err := r.Service.Execute(ctx, execution.Request{Prompt: prompt, ContinueFrom: previous}, nil)
 		if err != nil || result.ExitCode != 0 {
 			t.Fatalf("%+v %v", result, err)
 		}
@@ -74,7 +74,7 @@ func TestSessionCatalogBranchCompactionAndExport(t *testing.T) {
 	if err != nil || len(historicalState.Agent.Transcript) != len(before.Agent.Transcript) {
 		t.Fatal("historical boundary lost transcript", err)
 	}
-	resumed, err := r.Service.Execute(ctx, app.Request{ID: branch, Prompt: "new branch task"}, nil)
+	resumed, err := r.Service.Execute(ctx, execution.Request{ID: branch, Prompt: "new branch task"}, nil)
 	if err != nil || resumed.ExitCode != 0 {
 		t.Fatal("branch resume failed", err)
 	}

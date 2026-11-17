@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/core"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 func TestNativeProviderFixturesUseOperaToolsAndAccounting(t *testing.T) {
@@ -74,7 +74,7 @@ func TestNativeProviderFixturesUseOperaToolsAndAccounting(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer closeRuntime(t, r)
-			result, err := r.Service.Execute(context.Background(), app.Request{Prompt: "read the input"}, nil)
+			result, err := r.Service.Execute(context.Background(), execution.Request{Prompt: "read the input"}, nil)
 			if err != nil || !strings.Contains(result.Text, "native proof") {
 				t.Fatal(result, err)
 			}

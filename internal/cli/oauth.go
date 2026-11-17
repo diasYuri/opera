@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/adapters/credentials"
 	"github.com/diasYuri/opera/internal/core"
-	"github.com/diasYuri/opera/internal/credentials"
+	"github.com/diasYuri/opera/internal/modules/configuration"
 	"github.com/diasYuri/y/pkg/providers/auth"
 	"github.com/diasYuri/y/pkg/providers/oauth"
 )

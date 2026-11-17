@@ -9,31 +9,31 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 func TestLayoutFitsTerminalAcrossStates(t *testing.T) {
 	for _, size := range [][2]int{{120, 30}, {80, 24}, {40, 12}, {20, 8}, {5, 3}} {
 		for _, state := range []string{"idle", "streaming", "error", "approval", "models", "login-menu", "login-progress"} {
 			t.Run(fmt.Sprintf("%dx%d/%s", size[0], size[1], state), func(t *testing.T) {
-				m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
+				m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
 				updated, _ := m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 				m = updated.(model)
 				m.composer.editor.SetValue("a multiline\nmessage 界🙂")
 				m.sizeEditor()
 				switch state {
 				case "streaming":
-					m.stream = &app.Execution{ID: "run"}
+					m.stream = &execution.Execution{ID: "run"}
 					m.text = strings.Repeat("Unicode 界🙂 long stream\n", 1000)
 					m.status = "Running"
 				case "error":
 					m.lastError = "failure"
 					m.status = strings.Repeat("long error ", 100)
 				case "approval":
-					m.approval = &app.Approval{ID: "approval"}
+					m.approval = &execution.Approval{ID: "approval"}
 					m.openPanel("Review operation", strings.Repeat("long/path/界🙂", 100))
 				case "login-menu":
-					m.service = &loginExecutor{providers: []app.LoginProvider{{ID: "openai", Name: "OpenAI", Description: "ChatGPT subscription · Continue with ChatGPT"}}}
+					m.service = &loginExecutor{providers: []execution.LoginProvider{{ID: "openai", Name: "OpenAI", Description: "ChatGPT subscription · Continue with ChatGPT"}}}
 					m.openLoginProviders()
 				case "login-progress":
 					m.login = &loginFlow{name: "OpenAI"}
@@ -63,9 +63,9 @@ func TestLayoutFitsTerminalAcrossStates(t *testing.T) {
 
 func TestErrorSummaryKeepsDiagnosticsAndCommitsOnce(t *testing.T) {
 	raw := "openai: network error: POST https://api.openai.com/v1/responses: 404 Not Found {\"message\":\"The model `gpt` does not exist\",\"code\":\"model_not_found\"}"
-	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
-	result := &app.Result{ID: "failed-run", Checkpoint: 2, State: "failed", ExitCode: 1}
-	update := updateMsg{open: true, update: app.Update{Result: result, Error: errors.New(raw)}}
+	m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
+	result := &execution.Result{ID: "failed-run", Checkpoint: 2, State: "failed", ExitCode: 1}
+	update := updateMsg{open: true, update: execution.Update{Result: result, Error: errors.New(raw)}}
 	updated, cmd := m.Update(update)
 	m = updated.(model)
 	if cmd != nil || m.lastError != raw {
@@ -94,7 +94,7 @@ func TestErrorSummaryKeepsDiagnosticsAndCommitsOnce(t *testing.T) {
 
 func TestNoColorCoversBannerMessagesAndViewers(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
-	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
+	m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
 	for _, text := range []string{m.banner(), m.View().Content, m.messageBlock("Opera", "answer"), m.errorBlock("failure")} {
 		if strings.Contains(text, "\x1b") {
 			t.Fatalf("NO_COLOR emitted terminal styling: %q", text)
@@ -108,12 +108,12 @@ func TestNoColorCoversBannerMessagesAndViewers(t *testing.T) {
 }
 
 func TestActivityStopsAtIdleAndWithNoMotion(t *testing.T) {
-	idle := newModel(context.Background(), terminalExecutor{}, app.Request{}, false)
+	idle := newModel(context.Background(), terminalExecutor{}, execution.Request{}, false)
 	if idle.composer.editor.Styles().Cursor.Blink || idle.composer.editor.Focus() != nil {
 		t.Fatal("idle cursor scheduled a blink timer")
 	}
-	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, false)
-	m.stream = &app.Execution{ID: "run"}
+	m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, false)
+	m.stream = &execution.Execution{ID: "run"}
 	m.activity.generation = 7
 	m.activity.target = 1
 	updated, cmd := m.Update(frameMsg{7})
@@ -139,7 +139,7 @@ func TestActivityStopsAtIdleAndWithNoMotion(t *testing.T) {
 }
 
 func TestComposerGrowsForPasteAndShrinksAfterSend(t *testing.T) {
-	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
+	m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
 	if m.composer.editor.ShowLineNumbers || m.composer.editor.Height() != 1 {
 		t.Fatal("composer should start with a single plain line")
 	}
@@ -159,7 +159,7 @@ func TestCompletionsAppearBelowComposer(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	for _, width := range []int{40, 80, 120} {
 		t.Run(fmt.Sprintf("width=%d", width), func(t *testing.T) {
-			m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
+			m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
 			m.width = width
 			m.resize()
 			m.composer.editor.SetValue("/")
@@ -184,7 +184,7 @@ func TestCompletionsAppearBelowComposer(t *testing.T) {
 
 func TestComposerStaysPinnedWhileHistoryScrolls(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
-	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
+	m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m = updated.(model)
 	for i := 0; i < 30; i++ {
@@ -219,18 +219,18 @@ func TestComposerStaysPinnedWhileHistoryScrolls(t *testing.T) {
 
 func TestAssistantOutputAfterToolStaysAfterTool(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
-	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
-	updated, _ := m.Update(started{execution: &app.Execution{ID: "run-1"}})
+	m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
+	updated, _ := m.Update(started{execution: &execution.Execution{ID: "run-1"}})
 	m = updated.(model)
 	if len(m.conversation.entries) != 0 {
 		t.Fatal("execution start inserted an empty assistant item before any output")
 	}
-	m.updateConversationEvent(&app.Event{Type: "message_delta", RunID: "run-1", Sequence: 1, Text: "before tool"})
-	m.updateConversationEvent(&app.Event{
+	m.updateConversationEvent(&execution.Event{Type: "message_delta", RunID: "run-1", Sequence: 1, Text: "before tool"})
+	m.updateConversationEvent(&execution.Event{
 		Type: "tool_started", RunID: "run-1", Sequence: 2,
 		Data: []byte(`{"tool_call":{"id":"call-1","name":"read_file","arguments":{"path":"example.txt"}}}`),
 	})
-	m.updateConversationEvent(&app.Event{Type: "message_delta", RunID: "run-1", Sequence: 3, Text: "after tool"})
+	m.updateConversationEvent(&execution.Event{Type: "message_delta", RunID: "run-1", Sequence: 3, Text: "after tool"})
 
 	content := m.renderConversation()
 	before := strings.Index(content, "before tool")
@@ -249,7 +249,7 @@ func TestExternalControlCharactersCannotMoveTerminalCursor(t *testing.T) {
 }
 
 func TestHistoryResizeAndStreamingPreserveReadingPosition(t *testing.T) {
-	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
+	m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
 	for i := 0; i < 40; i++ {
 		m.appendUser(fmt.Sprintf("history %d", i), "You")
 	}
@@ -264,7 +264,7 @@ func TestHistoryResizeAndStreamingPreserveReadingPosition(t *testing.T) {
 		t.Fatal("wheel did not scroll history")
 	}
 	before := m.conversation.View()
-	m.updateConversationEvent(&app.Event{Type: "message_delta", RunID: "run", Text: strings.Repeat("stream 界🙂\n", 100)})
+	m.updateConversationEvent(&execution.Event{Type: "message_delta", RunID: "run", Text: strings.Repeat("stream 界🙂\n", 100)})
 	if m.conversation.YOffset() != offset || m.conversation.View() != before {
 		t.Fatal("stream moved reading position")
 	}
@@ -288,14 +288,14 @@ func TestHistoryResizeAndStreamingPreserveReadingPosition(t *testing.T) {
 	}
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd, Mod: tea.ModCtrl})
 	m = next.(model)
-	m.updateConversationEvent(&app.Event{Type: "message_delta", RunID: "run", Text: "latest"})
+	m.updateConversationEvent(&execution.Event{Type: "message_delta", RunID: "run", Text: "latest"})
 	if !m.conversation.AtBottom() {
 		t.Fatal("latest mode did not follow stream")
 	}
 }
 
 func TestComposerScrollsInternallyAndYieldsHistoryRows(t *testing.T) {
-	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
+	m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
 	initial := m.conversation.Height()
 	next, _ := m.Update(tea.PasteMsg{Content: strings.Repeat("line 界🙂\n", 20) + "LAST_INPUT"})
 	m = next.(model)

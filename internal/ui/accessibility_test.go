@@ -7,7 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 type commandExecutor struct {
@@ -44,7 +44,7 @@ func TestModelSelectorWorksEntirelyFromKeyboard(t *testing.T) {
 }
 func TestNoMotionAndColorlessStatusCarryTextualMeaning(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
-	m := model{composer: composerModel{editor: textarea.New()}, width: 80, height: 24, noMotion: true, stream: &app.Execution{ID: "run"}, status: "Running", text: "界"}
+	m := model{composer: composerModel{editor: textarea.New()}, width: 80, height: 24, noMotion: true, stream: &execution.Execution{ID: "run"}, status: "Running", text: "界"}
 	content := m.View().Content
 	if !strings.Contains(content, "Running") || strings.Contains(content, "· ·") {
 		t.Fatal(content)

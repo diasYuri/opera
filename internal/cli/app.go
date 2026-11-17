@@ -14,14 +14,14 @@ import (
 	"golang.org/x/term"
 
 	"context"
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/contextfiles"
-	"github.com/diasYuri/opera/internal/credentials"
-	"github.com/diasYuri/opera/internal/diagnostics"
+	"github.com/diasYuri/opera/internal/adapters/context/filesystem"
+	"github.com/diasYuri/opera/internal/adapters/credentials"
+	"github.com/diasYuri/opera/internal/adapters/platform"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/diagnostics"
+	"github.com/diasYuri/opera/internal/modules/execution"
+	"github.com/diasYuri/opera/internal/modules/providers/catalog"
 	"github.com/diasYuri/opera/internal/output"
-	"github.com/diasYuri/opera/internal/platform"
-	"github.com/diasYuri/opera/internal/providercatalog"
 )
 
 const (
@@ -58,7 +58,7 @@ func (a App) Run(args []string) int {
 		return a.fail(ExitUsage, err, a.jsonRequested(opts))
 	}
 	if opts.help {
-		return a.writeText(help + "\n" + app.CommandHelp())
+		return a.writeText(help + "\n" + execution.CommandHelp())
 	}
 	if opts.version {
 		return a.writeText("opera " + a.Version + "\n")
@@ -68,7 +68,7 @@ func (a App) Run(args []string) int {
 	}
 	command := opts.args[0]
 	if command == "help" {
-		return a.writeText(help + "\n" + app.CommandHelp())
+		return a.writeText(help + "\n" + execution.CommandHelp())
 	}
 	if command == "config" && len(opts.args) == 2 && opts.args[1] == "schema" {
 		if a.jsonRequested(opts) {

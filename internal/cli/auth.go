@@ -6,8 +6,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/credentials"
+	"github.com/diasYuri/opera/internal/adapters/credentials"
+	"github.com/diasYuri/opera/internal/modules/configuration"
 )
 
 func (a App) auth(args []string, cfg config.Resolved, jsonl bool) int {

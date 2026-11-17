@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/credentials"
+	"github.com/diasYuri/opera/internal/adapters/credentials"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 // loginStore retries the same storage operation after an explicit user choice.
@@ -81,11 +81,11 @@ func (s *loginStore) Delete(name string) error {
 	return s.run(func(store credentials.Store) error { return store.Delete(name) })
 }
 
-func chooseLoginStore(ctx context.Context, notify func(app.LoginNotice) error) (string, error) {
+func chooseLoginStore(ctx context.Context, notify func(execution.LoginNotice) error) (string, error) {
 	response := make(chan string, 1)
-	if err := notify(app.LoginNotice{Message: "System keyring unavailable. Choose credential storage to continue.", Prompt: &app.LoginPrompt{
+	if err := notify(execution.LoginNotice{Message: "System keyring unavailable. Choose credential storage to continue.", Prompt: &execution.LoginPrompt{
 		Title: "Credential storage",
-		Options: []app.LoginOption{
+		Options: []execution.LoginOption{
 			{ID: "retry", Name: "Retry system keyring", Description: "Unlock the system keyring, then try again"},
 			{ID: "file", Name: "Use private local file", Description: "Unencrypted · only your OS user can access it"},
 			{ID: "cancel", Name: "Cancel login", Description: "Keep the current storage setting"},
@@ -101,18 +101,18 @@ func chooseLoginStore(ctx context.Context, notify func(app.LoginNotice) error) (
 	}
 }
 
-func (s *chatSession) subscriptionLoginWithRecovery(ctx context.Context, cfg config.Resolved, notify func(app.LoginNotice) error) error {
+func (s *chatSession) subscriptionLoginWithRecovery(ctx context.Context, cfg config.Resolved, notify func(execution.LoginNotice) error) error {
 	a := s.app
 	a.OpenStore = func(kind, directory string) (credentials.Store, error) {
 		return s.openLoginStore(ctx, cfg, kind, directory, notify)
 	}
 
 	return a.interactiveSubscriptionLogin(ctx, cfg, func(u string) error {
-		return notify(app.LoginNotice{URL: u, Message: "Finish sign-in in your browser. The authorization link is above."})
+		return notify(execution.LoginNotice{URL: u, Message: "Finish sign-in in your browser. The authorization link is above."})
 	})
 }
 
-func (s *chatSession) openLoginStore(ctx context.Context, cfg config.Resolved, kind, directory string, notify func(app.LoginNotice) error) (credentials.Store, error) {
+func (s *chatSession) openLoginStore(ctx context.Context, cfg config.Resolved, kind, directory string, notify func(execution.LoginNotice) error) (credentials.Store, error) {
 	open := s.app.OpenStore
 	store, err := open(kind, directory)
 	if kind != "keyring" {

@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"golang.org/x/term"
 )
 
@@ -54,7 +54,7 @@ func TestTerminalRestoredWithAlternateScreen(t *testing.T) {
 	}()
 	done := make(chan error, 1)
 	go func() {
-		_, err := Chat(ctx, terminalExecutor{}, slave, slave, app.Request{Prompt: "fixture"})
+		_, err := Chat(ctx, terminalExecutor{}, slave, slave, execution.Request{Prompt: "fixture"})
 		done <- err
 	}()
 	select {

@@ -7,7 +7,7 @@ import (
 
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 const maxCompletions = 6
@@ -49,7 +49,7 @@ func (m *model) refreshCompletions() tea.Cmd {
 		return nil
 	}
 	if strings.HasPrefix(token, "/") && start == 0 {
-		for _, command := range app.Commands {
+		for _, command := range execution.Commands {
 			if strings.HasPrefix(command.Name, token) && command.Name != token {
 				m.completions = append(m.completions, completionItem{start: start, end: end, replacement: command.Name + " ", label: command.Usage, detail: command.Description})
 			}

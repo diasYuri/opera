@@ -10,7 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 type SubagentItem struct {
@@ -73,7 +73,7 @@ func (m model) hasPendingSubagents() bool {
 	return false
 }
 
-func (m model) isSubagentToolCompletion(event *app.Event) bool {
+func (m model) isSubagentToolCompletion(event *execution.Event) bool {
 	if event == nil || event.Type != "tool_completed" {
 		return false
 	}

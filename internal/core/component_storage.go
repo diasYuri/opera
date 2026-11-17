@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/persistence"
+	operasqlite "github.com/diasYuri/opera/internal/adapters/persistence/sqlite"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/component"
 	"github.com/diasYuri/y/pkg/storage/sqlite"
 	"path/filepath"
@@ -24,7 +24,7 @@ func (b *compositionBuilder) storage() component.Definition {
 			_ = store.Close()
 			return err
 		}
-		records, err := persistence.Open(ctx, filepath.Join(cfg.Paths.Data, "opera.db"), cfg.Paths.Workspace)
+		records, err := operasqlite.Open(ctx, filepath.Join(cfg.Paths.Data, "opera.db"), cfg.Paths.Workspace)
 		if err != nil {
 			return err
 		}
@@ -40,7 +40,7 @@ func (b *compositionBuilder) storage() component.Definition {
 			if e != nil {
 				return e
 			}
-			var meta app.Metadata
+			var meta execution.Metadata
 			if e := json.Unmarshal(raw, &meta); e != nil {
 				return e
 			}

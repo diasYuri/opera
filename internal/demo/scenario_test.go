@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/adapters/platform"
 	"github.com/diasYuri/opera/internal/demo"
-	"github.com/diasYuri/opera/internal/platform"
+	"github.com/diasYuri/opera/internal/modules/configuration"
 )
 
 func TestFinalCodingAcceptanceAcrossSharedModes(t *testing.T) {

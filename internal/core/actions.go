@@ -8,9 +8,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/contextfiles"
+	"github.com/diasYuri/opera/internal/adapters/context/filesystem"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 // SessionInfo exposes only the current workspace and model for presentation.
@@ -18,7 +18,7 @@ func (r *Runtime) SessionInfo() (workspace, provider, model string) {
 	return r.cfg.Paths.Workspace, r.Service.Provider, r.Service.Model
 }
 
-func (r *Runtime) Start(ctx context.Context, req app.Request) *app.Execution {
+func (r *Runtime) Start(ctx context.Context, req execution.Request) *execution.Execution {
 	return r.Service.Start(ctx, req)
 }
 func (r *Runtime) FollowUp(id, text string) error { return r.Service.FollowUp(id, text) }
@@ -125,7 +125,7 @@ func (r *Runtime) Command(ctx context.Context, text string) (string, error) {
 		raw, err := json.MarshalIndent(value, "", "  ")
 		return string(raw), err
 	case "/help":
-		return app.CommandHelp(), nil
+		return execution.CommandHelp(), nil
 	case "/settings":
 		return fmt.Sprintf("Provider: %s\nModel: %s\nThinking: %s\nPolicy: %s", r.Service.Provider, r.Service.Model, r.opts.Thinking, r.Service.Mode), nil
 	case "/context":

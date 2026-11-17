@@ -7,9 +7,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/approvalfiles"
-	"github.com/diasYuri/opera/internal/contextfiles"
+	"github.com/diasYuri/opera/internal/adapters/approvals/filesystem"
+	"github.com/diasYuri/opera/internal/adapters/context/filesystem"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/component"
 	"github.com/diasYuri/y/pkg/providers"
@@ -49,7 +49,7 @@ func (b *compositionBuilder) application() component.Definition {
 		if !ok || visionProvider == nil {
 			return errors.New("configured provider does not implement providers.Provider")
 		}
-		service := &app.Service{ReadApprovalFile: approvalfiles.Read, ResponseFormat: opts.ResponseFormat, Records: records, Work: work, QuestionBroker: questions, ContextBudget: min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024), ContextPaths: contextPaths.Current(), ContextPathSource: contextPaths, Skills: skillManager, Runner: runner, Store: store, Guard: guard, Workspace: cfg.Paths.Workspace, Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy"), MaxTokens: cfg.Int("limits.context_tokens"), LoadContext: contextfiles.Load, LoadImages: func(ctx context.Context, paths []string) ([]ai.ContentBlock, error) {
+		service := &execution.Service{ReadApprovalFile: approvalfiles.Read, ResponseFormat: opts.ResponseFormat, Records: records, Work: work, QuestionBroker: questions, ContextBudget: min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024), ContextPaths: contextPaths.Current(), ContextPathSource: contextPaths, Skills: skillManager, Runner: runner, Store: store, Guard: guard, Workspace: cfg.Paths.Workspace, Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy"), MaxTokens: cfg.Int("limits.context_tokens"), LoadContext: contextfiles.Load, LoadImages: func(ctx context.Context, paths []string) ([]ai.ContentBlock, error) {
 			images, err := contextfiles.Images(ctx, cfg.Paths.Workspace, paths, visionProvider.Capabilities(cfg.String("model")).Vision, min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024))
 			if err == nil && len(images) != len(paths) {
 				return nil, errors.New("each /image path must reference a supported image")

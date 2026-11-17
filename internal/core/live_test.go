@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/core"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/agent"
 )
 
@@ -40,7 +40,7 @@ func TestLiveVerticalProof(t *testing.T) {
 	if err != nil {
 		t.Fatalf("live harness startup failed (%T)", err)
 	}
-	first, err := one.Service.Execute(ctx, app.Request{Prompt: "This is an integration test in a disposable workspace. Your next response must contain exactly one write_file tool call creating live-proof.txt with the text opera-f1 and no newline. Do not reply with prose or use another tool first. After the write has been approved and its result returned, use read_file to verify that file and reply LIVE_PROOF_OK."}, nil)
+	first, err := one.Service.Execute(ctx, execution.Request{Prompt: "This is an integration test in a disposable workspace. Your next response must contain exactly one write_file tool call creating live-proof.txt with the text opera-f1 and no newline. Do not reply with prose or use another tool first. After the write has been approved and its result returned, use read_file to verify that file and reply LIVE_PROOF_OK."}, nil)
 	if err != nil || first.ExitCode != 3 || first.Approval == nil {
 		closeRuntime(t, one)
 		t.Fatalf("live approval proof failed: exit=%d error=%s", first.ExitCode, safeLiveError(err, key))
@@ -51,7 +51,7 @@ func TestLiveVerticalProof(t *testing.T) {
 		t.Fatalf("live reopen failed (%T)", err)
 	}
 	defer closeRuntime(t, two)
-	second, err := two.Service.Execute(ctx, app.Request{ID: first.ID, Approve: first.Approval.ID}, nil)
+	second, err := two.Service.Execute(ctx, execution.Request{ID: first.ID, Approve: first.Approval.ID}, nil)
 	if err != nil || second.ExitCode != 0 {
 		t.Fatalf("live resume failed: exit=%d error=%s", second.ExitCode, safeLiveError(err, key))
 	}
@@ -84,7 +84,7 @@ func TestLiveVerticalProof(t *testing.T) {
 		return false
 	}
 	if !verified(ops) {
-		follow, err := two.Service.Execute(ctx, app.Request{ContinueFrom: first.ID, Prompt: "Explicit verification is still required. Call read_file on live-proof.txt now. Do not write files. Then reply LIVE_PROOF_OK with the observed content."}, nil)
+		follow, err := two.Service.Execute(ctx, execution.Request{ContinueFrom: first.ID, Prompt: "Explicit verification is still required. Call read_file on live-proof.txt now. Do not write files. Then reply LIVE_PROOF_OK with the observed content."}, nil)
 		if err != nil || follow.ExitCode != 0 {
 			t.Fatalf("live verification follow-up failed: %s", safeLiveError(err, key))
 		}

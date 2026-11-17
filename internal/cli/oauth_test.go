@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/diasYuri/opera/internal/adapters/credentials"
 	"github.com/diasYuri/opera/internal/core"
-	"github.com/diasYuri/opera/internal/credentials"
 )
 
 func TestOAuthDeviceNotificationAndSeparateSecretStore(t *testing.T) {
@@ -107,7 +107,7 @@ func TestFirstRunAccessibleChatOffersLoginWithoutOnboarding(t *testing.T) {
 	if code := f.app.Run([]string{"chat", "--accessible", "--no-motion"}); code != 0 {
 		t.Fatalf("first run chat: %d %s", code, &f.err)
 	}
-	if !strings.Contains(f.out.String(), "Connect a provider") || !strings.Contains(f.out.String(), "1. OpenAI") || strings.Contains(f.out.String(), "Anthropic") {
+	if !strings.Contains(f.out.String(), "Connect a provider") || !strings.Contains(f.out.String(), "Anthropic") || !strings.Contains(f.out.String(), "OpenAI") || !strings.Contains(f.out.String(), "OpenRouter") || !strings.Contains(f.out.String(), "/cancel goes back") {
 		t.Fatal("first-run login submenu missing", f.out.String())
 	}
 }

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/core"
-	operaext "github.com/diasYuri/opera/internal/extensions"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	operaext "github.com/diasYuri/opera/internal/modules/extensions"
 	"path/filepath"
 	"strings"
 )

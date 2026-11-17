@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/core"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	taskmanager "github.com/diasYuri/y/pkg/extensions/task-manager"
 	"github.com/diasYuri/y/pkg/providers"
 )
@@ -25,7 +25,7 @@ type Evidence struct {
 	Verified  bool   `json:"verified"`
 }
 
-func Run(ctx context.Context, cfg config.Resolved, mode string, p Provider, emit func(app.Event) error) (e Evidence, err error) {
+func Run(ctx context.Context, cfg config.Resolved, mode string, p Provider, emit func(execution.Event) error) (e Evidence, err error) {
 	e.Mode = mode
 	if mode != "chat" && mode != "run" && mode != "worker" {
 		return e, errors.New("demo mode must be chat, run or worker")
@@ -50,8 +50,8 @@ func Run(ctx context.Context, cfg config.Resolved, mode string, p Provider, emit
 			err = errors.Join(err, r.Close(cleanup))
 		}
 	}()
-	request := app.Request{Prompt: "Implement and verify the demo change", Worker: mode == "worker"}
-	var result app.Result
+	request := execution.Request{Prompt: "Implement and verify the demo change", Worker: mode == "worker"}
+	var result execution.Result
 	if mode == "chat" {
 		execution := r.Start(ctx, request)
 		for update := range execution.Updates {
@@ -77,7 +77,7 @@ func Run(ctx context.Context, cfg config.Resolved, mode string, p Provider, emit
 			return e, errors.New("demo has no actionable pending approval")
 		}
 		e.RunID = result.ID
-		next := app.Request{ID: result.ID, Approve: result.Approval.ID}
+		next := execution.Request{ID: result.ID, Approve: result.Approval.ID}
 		if result.Approval.Tool == "write_file" && filepath.Base(result.Approval.Path) == "denied.txt" {
 			next.Approve = ""
 			next.Deny = result.Approval.ID

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/skills"
+	"github.com/diasYuri/opera/internal/adapters/skills/filesystem"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/policy"
 	"github.com/diasYuri/y/pkg/tools"
 )
@@ -17,10 +17,10 @@ type ToolPackContext struct {
 	Config    config.Resolved
 	Policy    policy.Engine
 	Limits    tools.ToolLimits
-	Guard     *app.Guard
-	Questions *app.QuestionBroker
+	Guard     *execution.Guard
+	Questions *execution.QuestionBroker
 	Skills    *skills.Manager
-	Work      *app.Work
+	Work      *execution.Work
 }
 
 // ToolPack is an explicitly selected group of related tools.

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/adapters/platform"
 	"github.com/diasYuri/opera/internal/core"
-	"github.com/diasYuri/opera/internal/platform"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 func sessionConfig(t *testing.T) config.Resolved {
@@ -29,16 +29,29 @@ func TestChatLoginRegistryAndSelection(t *testing.T) {
 	cfg.Values["model"] = config.Value{Value: "old-model"}
 	cfg.Values["base_url"] = config.Value{Value: "https://old-provider.test"}
 	s := newChatSession(App{}, cfg, core.Options{}, nil)
-	if providers := s.LoginProviders(); len(providers) != 1 || providers[0].ID != "openai" || providers[0].Name != "OpenAI" {
-		t.Fatal("production registry must offer only OpenAI", providers)
+	providers := s.LoginProviders()
+	available := make(map[string]bool, len(providers))
+	for _, provider := range providers {
+		available[provider.ID] = true
 	}
-	s.methods[0].login = func(_ context.Context, _ config.Resolved, notify func(app.LoginNotice) error) error {
-		return notify(app.LoginNotice{URL: "https://example.test/authorize"})
+	for _, id := range []string{"anthropic", "deepseek", "google", "groq", "openai", "openrouter"} {
+		if !available[id] {
+			t.Fatalf("production registry is missing provider %q: %#v", id, providers)
+		}
+	}
+	openai := s.loginMethod("openai")
+	if openai == nil {
+		t.Fatal("OpenAI login method was not registered")
+	}
+	openai.descriptor = nil // replace the interactive provider flow with this test double
+	openai.provider = "openai-subscription"
+	openai.login = func(_ context.Context, _ config.Resolved, notify func(execution.LoginNotice) error) error {
+		return notify(execution.LoginNotice{URL: "https://example.test/authorize"})
 	}
 	var opened string
 	s.openBrowser = func(_ context.Context, u string) error { opened = u; return errors.New("no browser installed") }
-	var notices []app.LoginNotice
-	if err := s.Login(context.Background(), "openai", func(n app.LoginNotice) error { notices = append(notices, n); return nil }); err != nil {
+	var notices []execution.LoginNotice
+	if err := s.Login(context.Background(), "openai", func(n execution.LoginNotice) error { notices = append(notices, n); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	if opened == "" || len(notices) != 2 || notices[0].URL == "" || !strings.Contains(notices[1].Message, "Open the authorization link") {
@@ -63,24 +76,41 @@ func TestChatLoginRegistryAndSelection(t *testing.T) {
 func TestChatLoginFailurePreservesSelectionAndFirstRunNeedsNoRuntime(t *testing.T) {
 	cfg := sessionConfig(t)
 	s := newChatSession(App{}, cfg, core.Options{}, nil)
-	first := s.Start(context.Background(), app.Request{Prompt: "before login"})
+	first := s.Start(context.Background(), execution.Request{Prompt: "before login"})
 	update := <-first.Updates
 	if update.Error == nil || !strings.Contains(update.Error.Error(), "/login") || s.runtime != nil {
 		t.Fatal("first-run prompt bypassed connection guidance")
 	}
-	s.methods[0].login = func(context.Context, config.Resolved, func(app.LoginNotice) error) error { return context.Canceled }
-	if err := s.Login(context.Background(), "openai", func(app.LoginNotice) error { return nil }); !errors.Is(err, context.Canceled) {
+	openai := s.loginMethod("openai")
+	if openai == nil {
+		t.Fatal("OpenAI login method was not registered")
+	}
+	openai.descriptor = nil // replace the interactive provider flow with this test double
+	openai.login = func(context.Context, config.Resolved, func(execution.LoginNotice) error) error {
+		return context.Canceled
+	}
+	if err := s.Login(context.Background(), "openai", func(execution.LoginNotice) error { return nil }); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
 	_, provider, model := s.SessionInfo()
 	if provider != "" || model != "" {
 		t.Fatal("cancelled login changed selection")
 	}
-	if err := s.Login(context.Background(), "unavailable", func(app.LoginNotice) error { return nil }); err == nil {
+	if err := s.Login(context.Background(), "unavailable", func(execution.LoginNotice) error { return nil }); err == nil {
 		t.Fatal("unknown provider accepted")
 	}
-	s.methods = append(s.methods, loginMethod{LoginProvider: app.LoginProvider{ID: "fixture", Name: "Fixture"}})
-	if len(s.LoginProviders()) != 2 {
+	providerCount := len(s.LoginProviders())
+	s.methods = append(s.methods, loginMethod{LoginProvider: execution.LoginProvider{ID: "fixture", Name: "Fixture"}})
+	if len(s.LoginProviders()) != providerCount+1 {
 		t.Fatal("menu registry did not discover a newly registered provider")
 	}
+}
+
+func (s *chatSession) loginMethod(id string) *loginMethod {
+	for i := range s.methods {
+		if s.methods[i].ID == id {
+			return &s.methods[i]
+		}
+	}
+	return nil
 }

@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/credentials"
+	"github.com/diasYuri/opera/internal/adapters/credentials"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/providers/auth"
 )
 
@@ -33,7 +33,7 @@ const (
 	openRouterToken      = "https://openrouter.ai/api/v1/auth/keys"
 )
 
-func (s *chatSession) apiKeyLogin(ctx context.Context, cfg config.Resolved, provider string, notify func(app.LoginNotice) error) error {
+func (s *chatSession) apiKeyLogin(ctx context.Context, cfg config.Resolved, provider string, notify func(execution.LoginNotice) error) error {
 	environmentKey, err := s.environmentAPIKey(ctx, provider)
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func (s *chatSession) apiKeyLogin(ctx context.Context, cfg config.Resolved, prov
 		}
 		return fmt.Errorf("accessible mode does not echo secrets; set the key with opera auth set %s.%s from piped stdin, then run /login again", provider, cfg.String("credential_ref"))
 	}
-	key, err := promptLoginValue(ctx, notify, app.LoginPrompt{
+	key, err := promptLoginValue(ctx, notify, execution.LoginPrompt{
 		Kind: "secret", Title: "API key", Message: "Enter the provider API key", Placeholder: "API key",
 	})
 	if err != nil {
@@ -95,10 +95,10 @@ func (s *chatSession) environmentAPIKey(ctx context.Context, provider string) (s
 	return source.Resolve(ctx, provider)
 }
 
-func promptLoginValue(ctx context.Context, notify func(app.LoginNotice) error, prompt app.LoginPrompt) (string, error) {
+func promptLoginValue(ctx context.Context, notify func(execution.LoginNotice) error, prompt execution.LoginPrompt) (string, error) {
 	response := make(chan string, 1)
 	prompt.Response = response
-	if err := notify(app.LoginNotice{Message: prompt.Message, Prompt: &prompt}); err != nil {
+	if err := notify(execution.LoginNotice{Message: prompt.Message, Prompt: &prompt}); err != nil {
 		return "", err
 	}
 	select {
@@ -112,10 +112,10 @@ func promptLoginValue(ctx context.Context, notify func(app.LoginNotice) error, p
 	}
 }
 
-func promptLoginChoice(ctx context.Context, notify func(app.LoginNotice) error, title, message string, options []app.LoginOption) (string, error) {
+func promptLoginChoice(ctx context.Context, notify func(execution.LoginNotice) error, title, message string, options []execution.LoginOption) (string, error) {
 	response := make(chan string, 1)
-	prompt := app.LoginPrompt{Kind: "select", Title: title, Message: message, Options: options, Response: response}
-	if err := notify(app.LoginNotice{Message: message, Prompt: &prompt}); err != nil {
+	prompt := execution.LoginPrompt{Kind: "select", Title: title, Message: message, Options: options, Response: response}
+	if err := notify(execution.LoginNotice{Message: message, Prompt: &prompt}); err != nil {
 		return "", err
 	}
 	select {
@@ -131,11 +131,11 @@ func promptLoginChoice(ctx context.Context, notify func(app.LoginNotice) error, 
 	}
 }
 
-func (s *chatSession) anthropicOAuthLogin(ctx context.Context, cfg config.Resolved, notify func(app.LoginNotice) error) error {
+func (s *chatSession) anthropicOAuthLogin(ctx context.Context, cfg config.Resolved, notify func(execution.LoginNotice) error) error {
 	method := "browser"
 	if !cfg.Bool("ui.accessible") {
 		var err error
-		method, err = promptLoginChoice(ctx, notify, "Claude sign-in", "Choose a Claude account login method.", []app.LoginOption{
+		method, err = promptLoginChoice(ctx, notify, "Claude sign-in", "Choose a Claude account login method.", []execution.LoginOption{
 			{ID: "browser", Name: "Browser login", Description: "Local callback on this machine"},
 			{ID: "copy-code", Name: "Copy code", Description: "Paste the code from the browser"},
 		})
@@ -173,7 +173,7 @@ func (s *chatSession) anthropicOAuthLogin(ctx context.Context, cfg config.Resolv
 		"code_challenge_method": {"S256"},
 		"state":                 {verifier},
 	}
-	if err := notify(app.LoginNotice{URL: anthropicAuthorize + "?" + query.Encode(), Message: "Complete Anthropic sign-in in the browser."}); err != nil {
+	if err := notify(execution.LoginNotice{URL: anthropicAuthorize + "?" + query.Encode(), Message: "Complete Anthropic sign-in in the browser."}); err != nil {
 		return err
 	}
 	var code string
@@ -181,7 +181,7 @@ func (s *chatSession) anthropicOAuthLogin(ctx context.Context, cfg config.Resolv
 		code, err = callback.Wait(loginCtx)
 	} else {
 		var input string
-		input, err = promptLoginValue(loginCtx, notify, app.LoginPrompt{
+		input, err = promptLoginValue(loginCtx, notify, execution.LoginPrompt{
 			Kind: "secret", Title: "Claude authorization code", Message: "Paste the code or redirect URL shown after signing in", Placeholder: "authorization code",
 		})
 		if err == nil {
@@ -285,7 +285,7 @@ func normalizeAnthropicToken(token oauthTokenResponse, source string, requireRef
 	return providerOAuthToken{AccessToken: token.AccessToken, RefreshToken: token.RefreshToken, ExpiresAt: expiresAt}, nil
 }
 
-func (s *chatSession) openRouterOAuthLogin(ctx context.Context, cfg config.Resolved, notify func(app.LoginNotice) error) error {
+func (s *chatSession) openRouterOAuthLogin(ctx context.Context, cfg config.Resolved, notify func(execution.LoginNotice) error) error {
 	loginCtx, cancel := context.WithTimeout(ctx, providerLoginTimeout)
 	defer cancel()
 	verifier, challenge, err := newPKCEPair()
@@ -307,7 +307,7 @@ func (s *chatSession) openRouterOAuthLogin(ctx context.Context, cfg config.Resol
 		"code_challenge":        {challenge},
 		"code_challenge_method": {"S256"},
 	}
-	if err := notify(app.LoginNotice{URL: openRouterAuthorize + "?" + query.Encode(), Message: "Complete OpenRouter sign-in in the browser."}); err != nil {
+	if err := notify(execution.LoginNotice{URL: openRouterAuthorize + "?" + query.Encode(), Message: "Complete OpenRouter sign-in in the browser."}); err != nil {
 		return err
 	}
 	code, err := callback.WaitBefore(loginCtx, 90*time.Second)
@@ -316,7 +316,7 @@ func (s *chatSession) openRouterOAuthLogin(ctx context.Context, cfg config.Resol
 			return errors.New("OpenRouter callback was not received; use the API-key login in accessible mode")
 		}
 		callback.Close()
-		input, promptErr := promptLoginValue(loginCtx, notify, app.LoginPrompt{
+		input, promptErr := promptLoginValue(loginCtx, notify, execution.LoginPrompt{
 			Kind: "secret", Title: "OpenRouter authorization code", Message: "Paste the final callback URL or authorization code", Placeholder: callback.RedirectURI,
 		})
 		if promptErr != nil {
@@ -369,7 +369,7 @@ func exchangeOpenRouterCode(ctx context.Context, code, verifier string) (string,
 	return result.Key, nil
 }
 
-func (s *chatSession) storeProviderOAuth(ctx context.Context, cfg config.Resolved, provider string, record oauthRecord, notify func(app.LoginNotice) error) error {
+func (s *chatSession) storeProviderOAuth(ctx context.Context, cfg config.Resolved, provider string, record oauthRecord, notify func(execution.LoginNotice) error) error {
 	store, err := s.openLoginStore(ctx, cfg, cfg.String("credentials.store"), cfg.Paths.Credentials, notify)
 	if err != nil {
 		return err

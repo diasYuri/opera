@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/adapters/credentials"
 	"github.com/diasYuri/opera/internal/core"
-	"github.com/diasYuri/opera/internal/credentials"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 type fixtureKeyring struct {
@@ -49,7 +49,7 @@ func TestLoginRecoversFinalCredentialWriteWithoutRepeatingAuthorization(t *testi
 	}}
 	s := newChatSession(a, cfg, core.Options{}, nil)
 	prompts := 0
-	store, err := s.openLoginStore(context.Background(), s.cfg, "keyring", cfg.Paths.Credentials, func(n app.LoginNotice) error {
+	store, err := s.openLoginStore(context.Background(), s.cfg, "keyring", cfg.Paths.Credentials, func(n execution.LoginNotice) error {
 		prompts++
 		if n.Prompt == nil || !strings.Contains(n.Prompt.Options[1].Description, "Unencrypted") {
 			t.Fatal("fallback must require an informed storage choice")
@@ -110,7 +110,7 @@ func TestKeyringRecoveryBeforeAuthorizationCanRetryOrCancel(t *testing.T) {
 				return credentials.Open(kind, directory)
 			}}
 			s := newChatSession(a, cfg, core.Options{}, nil)
-			store, err := s.openLoginStore(context.Background(), s.cfg, "keyring", cfg.Paths.Credentials, func(n app.LoginNotice) error {
+			store, err := s.openLoginStore(context.Background(), s.cfg, "keyring", cfg.Paths.Credentials, func(n execution.LoginNotice) error {
 				if choice == "retry" {
 					primary.unavailable = false
 				}

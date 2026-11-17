@@ -3,7 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
-	"github.com/diasYuri/opera/internal/skillcatalog"
+	"github.com/diasYuri/opera/internal/modules/skills/catalog"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/diasYuri/opera/internal/skills"
+	"github.com/diasYuri/opera/internal/adapters/skills/filesystem"
 	"github.com/diasYuri/opera/internal/ui"
 )
 

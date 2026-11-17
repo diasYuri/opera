@@ -5,8 +5,8 @@ import (
 	"context"
 
 	"github.com/diasYuri/opera/internal/adapters/providers/openai/subscription"
-	"github.com/diasYuri/opera/internal/config"
-	"github.com/diasYuri/opera/internal/providercatalog"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/providers/catalog"
 	"github.com/diasYuri/y/pkg/providers"
 	yopenai "github.com/diasYuri/y/pkg/providers/openai"
 )

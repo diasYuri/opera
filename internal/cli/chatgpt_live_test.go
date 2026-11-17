@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/adapters/platform"
 	"github.com/diasYuri/opera/internal/core"
-	"github.com/diasYuri/opera/internal/platform"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/providers"
 )
@@ -100,7 +100,7 @@ func TestLiveSubscriptionHarnessConversation(t *testing.T) {
 	}()
 	previous := ""
 	for _, word := range []string{"first", "second", "third"} {
-		result, err := r.Service.Execute(ctx, app.Request{Prompt: "This is a chat integration test. Do not use tools. Reply with exactly this word: " + word, ContinueFrom: previous}, nil)
+		result, err := r.Service.Execute(ctx, execution.Request{Prompt: "This is a chat integration test. Do not use tools. Reply with exactly this word: " + word, ContinueFrom: previous}, nil)
 		if err != nil || result.ExitCode != 0 {
 			t.Fatalf("live conversation failed: exit=%d error=%v", result.ExitCode, err)
 		}

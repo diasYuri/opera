@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/opera/internal/ui"
 )
 
@@ -46,8 +46,8 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt)
 	defer signal.Stop(signals)
-	var loginPrompt *app.LoginPrompt
-	var loginProviders []app.LoginProvider
+	var loginPrompt *execution.LoginPrompt
+	var loginProviders []execution.LoginProvider
 	var modelMenu []string
 	var loginCancel context.CancelFunc
 	var loginEvents <-chan accessibleLoginEvent
@@ -56,26 +56,30 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 			loginCancel()
 		}
 	}()
-	var execution *app.Execution
-	var updates <-chan app.Update
-	var pending *app.Result
+	var currentExecution *execution.Execution
+	var updates <-chan execution.Update
+	var pending *execution.Result
 	previous := ""
-	mode := app.ModeDefault
+	mode := execution.ModeDefault
 	retryPrevious := false
 	lastCode := 0
 	closedInput, quitting, followUp := false, false, false
 	multiline := false
 	var buffer []string
 	write := func(text string) bool { _, err := fmt.Fprint(a.Out, ansi.Strip(text)); return err == nil }
-	start := func(req app.Request) { execution = r.Start(ctx, req); updates = execution.Updates; pending = nil }
+	start := func(req execution.Request) {
+		currentExecution = r.Start(ctx, req)
+		updates = currentExecution.Updates
+		pending = nil
+	}
 	if !write("Append-only chat. /help lists commands; /multiline and /send compose multiple lines.\nYou> ") {
 		return 1
 	}
 	for {
 		select {
 		case <-ctx.Done():
-			if execution != nil {
-				execution.Cancel()
+			if currentExecution != nil {
+				currentExecution.Cancel()
 			}
 			return 130
 		case <-signals:
@@ -83,8 +87,8 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				loginCancel()
 				continue
 			}
-			if execution != nil {
-				execution.Cancel()
+			if currentExecution != nil {
+				currentExecution.Cancel()
 				if !write("\nCancelling execution; session stays open.\n") {
 					return 1
 				}
@@ -98,7 +102,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 			if in.eof {
 				closedInput = true
 				lines = nil
-				if execution == nil && loginCancel == nil {
+				if currentExecution == nil && loginCancel == nil {
 					if pending != nil {
 						return 3
 					}
@@ -106,7 +110,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				}
 				if a.IsTTY {
 					quitting = true
-					execution.Cancel()
+					currentExecution.Cancel()
 				}
 				continue
 			}
@@ -118,16 +122,16 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 					}
 					continue
 				}
-				if execution != nil || pending != nil {
+				if currentExecution != nil || pending != nil {
 					if !write("Resolve the active execution before changing modes.\nYou> ") {
 						return 1
 					}
 					continue
 				}
-				if mode == app.ModePlan {
-					mode = app.ModeDefault
+				if mode == execution.ModePlan {
+					mode = execution.ModeDefault
 				} else {
-					mode = app.ModePlan
+					mode = execution.ModePlan
 				}
 				if !write("Agent mode: " + mode + ".\nYou> ") {
 					return 1
@@ -137,7 +141,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 			commandName, _, _ := strings.Cut(text, " ")
 			if commandName == "/mode" {
 				fields := strings.Fields(text)
-				if execution != nil || pending != nil {
+				if currentExecution != nil || pending != nil {
 					if !write("Resolve the active execution before changing modes.\nYou> ") {
 						return 1
 					}
@@ -145,7 +149,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				}
 				if len(fields) == 1 {
 					var options []string
-					for _, available := range app.AvailableModes() {
+					for _, available := range execution.AvailableModes() {
 						options = append(options, available.ID+" — "+available.Description)
 					}
 					if !write("Available modes:\n" + strings.Join(options, "\n") + "\nUse /mode <name>.\nYou> ") {
@@ -159,7 +163,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 					}
 					continue
 				}
-				selected, err := app.ResolveMode(fields[1])
+				selected, err := execution.ResolveMode(fields[1])
 				if err != nil {
 					if !write(err.Error() + "\nYou> ") {
 						return 1
@@ -173,11 +177,11 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				continue
 			}
 			if text == "/quit" {
-				if execution == nil {
+				if currentExecution == nil {
 					return 0
 				}
 				quitting = true
-				execution.Cancel()
+				currentExecution.Cancel()
 				continue
 			}
 			if loginPrompt != nil {
@@ -221,13 +225,13 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				continue
 			}
 			if text == "/login" {
-				if execution != nil || pending != nil {
+				if currentExecution != nil || pending != nil {
 					if !write("Resolve the active execution before signing in.\n") {
 						return 1
 					}
 					continue
 				}
-				auth, ok := r.(app.Authenticator)
+				auth, ok := r.(execution.Authenticator)
 				if !ok {
 					if !write("Login is unavailable in this session.\n") {
 						return 1
@@ -264,7 +268,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 					}
 					continue
 				}
-				auth := r.(app.Authenticator)
+				auth := r.(execution.Authenticator)
 				chooser, _ := r.(ui.ModelChooser)
 				loginCtx, cancel := context.WithCancel(ctx)
 				loginCancel = cancel
@@ -319,7 +323,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				continue
 			}
 			if pending != nil {
-				req := app.Request{ID: pending.ID}
+				req := execution.Request{ID: pending.ID}
 				switch text {
 				case "y", "/approve":
 					req.Approve = pending.Approval.ID
@@ -336,13 +340,13 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 			}
 			name, rest, _ := strings.Cut(text, " ")
 			if name == "/steer" {
-				if execution == nil || strings.TrimSpace(rest) == "" {
+				if currentExecution == nil || strings.TrimSpace(rest) == "" {
 					if !write("Steering requires an active execution and a message.\n") {
 						return 1
 					}
 					continue
 				}
-				if err := r.Steer(execution.ID, rest); err != nil {
+				if err := r.Steer(currentExecution.ID, rest); err != nil {
 					if !write(err.Error() + "\n") {
 						return 1
 					}
@@ -350,13 +354,13 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				continue
 			}
 			if name == "/retry" {
-				if execution != nil || previous == "" {
+				if currentExecution != nil || previous == "" {
 					if !write("Retry requires an idle previous run.\n") {
 						return 1
 					}
 					continue
 				}
-				start(app.Request{ID: previous})
+				start(execution.Request{ID: previous})
 				continue
 			}
 			if name == "/new" || name == "/clear" || name == "/fork" {
@@ -373,7 +377,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 					}
 					continue
 				}
-				if execution != nil || pending != nil {
+				if currentExecution != nil || pending != nil {
 					if !write("Resolve the active execution before changing sessions.\nYou> ") {
 						return 1
 					}
@@ -414,8 +418,8 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 			if strings.HasPrefix(text, "/") {
 				if name == "/usage" || name == "/tasks" || name == "/agents" || name == "/compact" {
 					id := previous
-					if execution != nil {
-						id = execution.ID
+					if currentExecution != nil {
+						id = currentExecution.ID
 					}
 					text = name + " " + id
 				}
@@ -428,8 +432,8 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				}
 				continue
 			}
-			if execution != nil {
-				if err := r.FollowUp(execution.ID, text); err != nil {
+			if currentExecution != nil {
+				if err := r.FollowUp(currentExecution.ID, text); err != nil {
 					if !write(err.Error() + "\n") {
 						return 1
 					}
@@ -438,7 +442,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				}
 				continue
 			}
-			request := app.Request{Prompt: text, ContinueFrom: previous, Mode: mode}
+			request := execution.Request{Prompt: text, ContinueFrom: previous, Mode: mode}
 			if retryPrevious && previous != "" {
 				request.ID = previous
 				request.ContinueFrom = ""
@@ -495,7 +499,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 		case update, ok := <-updates:
 			if !ok {
 				updates = nil
-				execution = nil
+				currentExecution = nil
 				if closedInput || quitting {
 					return lastCode
 				}
@@ -503,7 +507,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 			}
 			if update.Event != nil && update.Event.Text != "" {
 				if !write(update.Event.Text) {
-					execution.Cancel()
+					currentExecution.Cancel()
 					return 1
 				}
 			}
@@ -512,7 +516,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 			}
 			result := *update.Result
 			updates = nil
-			execution = nil
+			currentExecution = nil
 			if result.State != "" {
 				previous = result.ID
 				retryPrevious = result.ExitCode != 0 && result.Approval == nil
@@ -540,7 +544,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 			}
 			if result.ExitCode == 0 && followUp {
 				followUp = false
-				start(app.Request{ContinueFrom: previous})
+				start(execution.Request{ContinueFrom: previous})
 				continue
 			}
 			if quitting || closedInput {

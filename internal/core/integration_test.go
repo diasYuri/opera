@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/adapters/platform"
 	"github.com/diasYuri/opera/internal/core"
-	"github.com/diasYuri/opera/internal/platform"
-	"github.com/diasYuri/opera/internal/providercatalog"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	execmod "github.com/diasYuri/opera/internal/modules/execution"
+	"github.com/diasYuri/opera/internal/modules/providers/catalog"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/agent/agenttest"
 	"github.com/diasYuri/y/pkg/providers"
@@ -70,10 +70,10 @@ func TestCancellationPersistsAndExplicitResumeContinues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution := runtime.Service.Start(ctx, app.Request{Prompt: "start"})
+	execution := runtime.Service.Start(ctx, execmod.Request{Prompt: "start"})
 	<-provider.entered
 	execution.Cancel()
-	var cancelled app.Result
+	var cancelled execmod.Result
 	for update := range execution.Updates {
 		if update.Result != nil {
 			cancelled = *update.Result
@@ -85,7 +85,7 @@ func TestCancellationPersistsAndExplicitResumeContinues(t *testing.T) {
 	closeRuntime(t, runtime)
 	resumed := open(t, cfg, agenttest.TextTurn("recovered"))
 	defer closeRuntime(t, resumed)
-	result, err := resumed.Service.Execute(ctx, app.Request{ID: cancelled.ID}, nil)
+	result, err := resumed.Service.Execute(ctx, execmod.Request{ID: cancelled.ID}, nil)
 	if err != nil || result.ExitCode != 0 || result.Text != "recovered" {
 		t.Fatalf("explicit recovery failed: %#v %v", result, err)
 	}
@@ -98,14 +98,14 @@ func TestCloseCancelsAndDrainsApplicationBeforeStores(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	execution := runtime.Service.Start(context.Background(), app.Request{Prompt: "start"})
+	execution := runtime.Service.Start(context.Background(), execmod.Request{Prompt: "start"})
 	<-provider.entered
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := runtime.Close(ctx); err != nil {
 		t.Fatal("application did not drain before storage shutdown", err)
 	}
-	var result app.Result
+	var result execmod.Result
 	for update := range execution.Updates {
 		if update.Result != nil {
 			result = *update.Result
@@ -116,7 +116,7 @@ func TestCloseCancelsAndDrainsApplicationBeforeStores(t *testing.T) {
 	}
 	reopened := open(t, cfg, agenttest.TextTurn("resumed"))
 	defer closeRuntime(t, reopened)
-	resumed, err := reopened.Service.Execute(context.Background(), app.Request{ID: result.ID}, nil)
+	resumed, err := reopened.Service.Execute(context.Background(), execmod.Request{ID: result.ID}, nil)
 	if err != nil || resumed.ExitCode != 0 {
 		t.Fatal("shutdown checkpoint was not resumable", err)
 	}
@@ -127,21 +127,21 @@ func TestUncertainEffectBlocksUntilExplicitReconciliation(t *testing.T) {
 	ctx := context.Background()
 	runtime := open(t, cfg, agenttest.TextTurn("done"))
 	defer closeRuntime(t, runtime)
-	first, err := runtime.Service.Execute(ctx, app.Request{Prompt: "hello"}, nil)
+	first, err := runtime.Service.Execute(ctx, execmod.Request{Prompt: "hello"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, acquired, err := runtime.Service.Store.BeginOperation(ctx, agent.OperationRecord{RunID: first.ID, IdempotencyKey: "uncertain", ToolName: "write_file", ArgumentsHash: "hash"}); err != nil || !acquired {
 		t.Fatal(err)
 	}
-	blocked, err := runtime.Service.Execute(ctx, app.Request{ID: first.ID}, nil)
+	blocked, err := runtime.Service.Execute(ctx, execmod.Request{ID: first.ID}, nil)
 	if err == nil || blocked.ExitCode != 4 {
 		t.Fatal("uncertain operation did not block resume")
 	}
 	if err := runtime.Service.Store.CompleteOperation(ctx, "uncertain", tools.ToolResponse{Content: []tools.ContentBlock{{Type: tools.ContentText, Text: "user confirmed observed effect"}}}, nil); err != nil {
 		t.Fatal(err)
 	}
-	result, err := runtime.Service.Execute(ctx, app.Request{ID: first.ID}, nil)
+	result, err := runtime.Service.Execute(ctx, execmod.Request{ID: first.ID}, nil)
 	if err != nil || result.ExitCode != 0 {
 		t.Fatal("explicit reconciliation did not unblock cached result", err)
 	}
@@ -167,7 +167,7 @@ func TestVerticalApprovalCheckpointAndResume(t *testing.T) {
 	cfg := configuration(t)
 	one := open(t, cfg, agenttest.TextAndToolTurn("Preparing change", "write_file", `{"path":"result.txt","content":"verified"}`))
 	var text strings.Builder
-	first, err := one.Service.Execute(ctx, app.Request{Prompt: "write the result"}, func(event app.Event) error { text.WriteString(event.Text); return nil })
+	first, err := one.Service.Execute(ctx, execmod.Request{Prompt: "write the result"}, func(event execmod.Event) error { text.WriteString(event.Text); return nil })
 	if err != nil || first.ExitCode != 3 || first.Approval == nil || !strings.Contains(text.String(), "Preparing change") {
 		t.Fatalf("first execution: %#v %v", first, err)
 	}
@@ -184,7 +184,7 @@ func TestVerticalApprovalCheckpointAndResume(t *testing.T) {
 	}
 	closeRuntime(t, one)
 	two := open(t, cfg, agenttest.TextTurn("Change verified"))
-	second, err := two.Service.Execute(ctx, app.Request{ID: first.ID, Approve: first.Approval.ID}, nil)
+	second, err := two.Service.Execute(ctx, execmod.Request{ID: first.ID, Approve: first.Approval.ID}, nil)
 	if err != nil || second.ExitCode != 0 {
 		t.Fatalf("resume: %#v %v", second, err)
 	}
@@ -196,7 +196,7 @@ func TestVerticalApprovalCheckpointAndResume(t *testing.T) {
 	if err != nil || len(ops) != 1 {
 		t.Fatal("durable operations missing", err)
 	}
-	replayed, err := two.Service.Execute(ctx, app.Request{ID: first.ID}, nil)
+	replayed, err := two.Service.Execute(ctx, execmod.Request{ID: first.ID}, nil)
 	if err != nil || replayed.ExitCode != 0 {
 		t.Fatal("completed replay failed", err)
 	}
@@ -209,18 +209,18 @@ func TestDenialAndChangedDiffRequireReview(t *testing.T) {
 	path := filepath.Join(cfg.Paths.Workspace, "result.txt")
 	one := open(t, cfg, agenttest.ToolTurn("write_file", `{"path":"result.txt","content":"candidate"}`), agenttest.TextTurn("Denied"))
 	defer closeRuntime(t, one)
-	first, err := one.Service.Execute(ctx, app.Request{Prompt: "change"}, nil)
+	first, err := one.Service.Execute(ctx, execmod.Request{Prompt: "change"}, nil)
 	if err != nil || first.Approval == nil {
 		t.Fatal("missing approval", err)
 	}
 	if err := os.WriteFile(path, []byte("concurrent change"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	changed, err := one.Service.Execute(ctx, app.Request{ID: first.ID, Approve: first.Approval.ID}, nil)
+	changed, err := one.Service.Execute(ctx, execmod.Request{ID: first.ID, Approve: first.Approval.ID}, nil)
 	if err != nil || changed.ExitCode != 3 || changed.Approval.ID == first.Approval.ID {
 		t.Fatal("stale diff was approved", err)
 	}
-	denied, err := one.Service.Execute(ctx, app.Request{ID: first.ID, Deny: changed.Approval.ID}, nil)
+	denied, err := one.Service.Execute(ctx, execmod.Request{ID: first.ID, Deny: changed.Approval.ID}, nil)
 	if err != nil || denied.ExitCode != 0 {
 		t.Fatal("denial failed", err)
 	}
@@ -240,7 +240,7 @@ func TestStartupFailureReleasesScope(t *testing.T) {
 	}
 	runtime := open(t, cfg, agenttest.TextTurn("done"))
 	defer closeRuntime(t, runtime)
-	if _, err := runtime.Service.Execute(context.Background(), app.Request{Prompt: "hello"}, nil); err != nil {
+	if _, err := runtime.Service.Execute(context.Background(), execmod.Request{Prompt: "hello"}, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -320,7 +320,7 @@ func TestCustomProviderCatalogExecutesOwnImplementation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closeRuntime(t, runtime)
-	result, err := runtime.Service.Execute(context.Background(), app.Request{Prompt: "say hello"}, nil)
+	result, err := runtime.Service.Execute(context.Background(), execmod.Request{Prompt: "say hello"}, nil)
 	if err != nil || result.Text != "answer from the custom provider" {
 		t.Fatalf("custom provider result = %#v, %v", result, err)
 	}
@@ -387,7 +387,7 @@ func TestContextCommandUpdatesRequestSourceAndResume(t *testing.T) {
 	if len(paths) != 1 || paths[0] != "guide.txt" {
 		t.Fatalf("context command paths = %v", paths)
 	}
-	result, err := runtime.Service.Execute(ctx, app.Request{Prompt: "hello"}, nil)
+	result, err := runtime.Service.Execute(ctx, execmod.Request{Prompt: "hello"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

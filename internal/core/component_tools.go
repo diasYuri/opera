@@ -3,8 +3,8 @@ package core
 import (
 	"context"
 
-	"github.com/diasYuri/opera/internal/app"
-	operaext "github.com/diasYuri/opera/internal/extensions"
+	"github.com/diasYuri/opera/internal/modules/execution"
+	operaext "github.com/diasYuri/opera/internal/modules/extensions"
 	"github.com/diasYuri/y/pkg/component"
 	"github.com/diasYuri/y/pkg/policy"
 	yruntime "github.com/diasYuri/y/pkg/runtime"
@@ -20,14 +20,14 @@ func (b *compositionBuilder) tools() component.Definition {
 		if err != nil {
 			return err
 		}
-		engine := app.Policy(cfg.String("policy"), policy.AuditSinkFunc(func(ctx context.Context, event policy.AuditEvent) error {
+		engine := execution.Policy(cfg.String("policy"), policy.AuditSinkFunc(func(ctx context.Context, event policy.AuditEvent) error {
 			return records.Put(ctx, "decisions", event.EventID, event)
 		}))
 		registry := tools.NewRegistry(tools.WithPolicy(engine))
 		if err := scope.Track(registry.Close); err != nil {
 			return err
 		}
-		if err := registry.AddExecutionMiddleware(app.OutputLimit(cfg.Int("limits.output_bytes"), func(ctx context.Context, req tools.ToolRequest, response tools.ToolResponse) error {
+		if err := registry.AddExecutionMiddleware(execution.OutputLimit(cfg.Int("limits.output_bytes"), func(ctx context.Context, req tools.ToolRequest, response tools.ToolResponse) error {
 			return records.Put(context.WithoutCancel(ctx), "tool-output", req.RunID+":"+req.ID, struct {
 				RunID, ToolCallID, Tool string
 				Response                tools.ToolResponse
@@ -39,7 +39,7 @@ func (b *compositionBuilder) tools() component.Definition {
 			return err
 		}
 		limits := tools.ToolLimits{MaxOutputBytes: int64(cfg.Int("limits.output_bytes"))}
-		work := app.NewWork(records, cfg.Int("agents.max_concurrent"), cfg.Int("agents.max_depth"))
+		work := execution.NewWork(records, cfg.Int("agents.max_concurrent"), cfg.Int("agents.max_depth"))
 		work.MaxBudget = int64(cfg.Int("limits.worker_tokens"))
 		if err := registerToolPacks(ctx, registry, ToolPackContext{Config: cfg, Policy: engine, Limits: limits, Guard: guard, Questions: questions, Skills: skillManager, Work: work}, opts.ToolPacks, opts.DisabledToolPacks); err != nil {
 			return err

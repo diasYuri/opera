@@ -10,7 +10,7 @@ import (
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 type conversationModel struct {
@@ -191,7 +191,7 @@ func (m *model) refreshConversation() {
 	}
 }
 
-func (m *model) updateConversationEvent(event *app.Event) {
+func (m *model) updateConversationEvent(event *execution.Event) {
 	var payload eventPayload
 	if len(event.Data) > 0 {
 		_ = json.Unmarshal(event.Data, &payload)
@@ -335,7 +335,7 @@ func (m *model) updateConversationEvent(event *app.Event) {
 // updateTypedVisualEvent handles state-machine notices before normal speech and
 // tool rendering. Child run deltas stay attached to their agent event instead
 // of appearing as parent assistant speech.
-func (m *model) updateTypedVisualEvent(event *app.Event, payload eventPayload) (handled, changed bool) {
+func (m *model) updateTypedVisualEvent(event *execution.Event, payload eventPayload) (handled, changed bool) {
 	if event.ParentRunID != "" {
 		switch event.Type {
 		case "agent_started", "agent_completed", "agent_settled", "completed":

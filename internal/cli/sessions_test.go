@@ -1,7 +1,7 @@
 package cli_test
 
 import (
-	"github.com/diasYuri/opera/internal/credentials"
+	"github.com/diasYuri/opera/internal/adapters/credentials"
 	"strings"
 	"testing"
 )

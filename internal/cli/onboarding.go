@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"charm.land/huh/v2"
-	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/modules/configuration"
 )
 
 func (a App) onboard(ctx context.Context, cfg config.Resolved) (config.Resolved, error) {

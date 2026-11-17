@@ -14,7 +14,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"golang.org/x/sys/windows"
 	"golang.org/x/term"
 )
@@ -29,7 +29,7 @@ func TestConPTYChild(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	_, err = Chat(ctx, terminalExecutor{}, os.Stdin, os.Stdout, app.Request{Prompt: "fixture"}, true)
+	_, err = Chat(ctx, terminalExecutor{}, os.Stdin, os.Stdout, execution.Request{Prompt: "fixture"}, true)
 	if err != nil {
 		os.Exit(22)
 	}

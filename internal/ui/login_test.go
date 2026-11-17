@@ -7,21 +7,21 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 type loginExecutor struct {
 	terminalExecutor
-	providers     []app.LoginProvider
+	providers     []execution.LoginProvider
 	selected      string
 	waitForCancel bool
 	loginError    error
 }
 
-func (e *loginExecutor) LoginProviders() []app.LoginProvider { return e.providers }
-func (e *loginExecutor) Login(ctx context.Context, id string, notify func(app.LoginNotice) error) error {
+func (e *loginExecutor) LoginProviders() []execution.LoginProvider { return e.providers }
+func (e *loginExecutor) Login(ctx context.Context, id string, notify func(execution.LoginNotice) error) error {
 	e.selected = id
-	if err := notify(app.LoginNotice{URL: "https://example.test/authorize?state=fixture", Message: "Finish sign-in in your browser"}); err != nil {
+	if err := notify(execution.LoginNotice{URL: "https://example.test/authorize?state=fixture", Message: "Finish sign-in in your browser"}); err != nil {
 		return err
 	}
 	if e.waitForCancel {
@@ -36,7 +36,7 @@ func (e *loginExecutor) ModelChoices(context.Context) ([]string, error) {
 
 func loginModel(t *testing.T, e *loginExecutor) model {
 	t.Helper()
-	m := newModel(context.Background(), e, app.Request{}, true)
+	m := newModel(context.Background(), e, execution.Request{}, true)
 	m.composer.editor.SetValue("/login")
 	m.refreshCompletions()
 	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -44,7 +44,7 @@ func loginModel(t *testing.T, e *loginExecutor) model {
 }
 
 func TestLoginSubmenuUsesAvailableProvidersAndKeyboard(t *testing.T) {
-	e := &loginExecutor{providers: []app.LoginProvider{{ID: "openai", Name: "OpenAI", Description: "ChatGPT subscription"}, {ID: "fixture", Name: "Fixture provider", Description: "Future provider"}}}
+	e := &loginExecutor{providers: []execution.LoginProvider{{ID: "openai", Name: "OpenAI", Description: "ChatGPT subscription"}, {ID: "fixture", Name: "Fixture provider", Description: "Future provider"}}}
 	m := loginModel(t, e)
 	if !m.overlay.selecting || m.overlay.selectionKind != "login" || len(m.overlay.selector.Items()) != 2 || !strings.Contains(m.View().Content, "Connect a provider") {
 		t.Fatal("missing provider submenu")
@@ -83,7 +83,7 @@ func TestLoginSubmenuUsesAvailableProvidersAndKeyboard(t *testing.T) {
 }
 
 func TestLoginCancellationKeepsSessionAndRestoresComposer(t *testing.T) {
-	e := &loginExecutor{providers: []app.LoginProvider{{ID: "openai", Name: "OpenAI"}}, waitForCancel: true}
+	e := &loginExecutor{providers: []execution.LoginProvider{{ID: "openai", Name: "OpenAI"}}, waitForCancel: true}
 	m := loginModel(t, e)
 	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(model)
@@ -114,11 +114,11 @@ func TestLoginCancellationKeepsSessionAndRestoresComposer(t *testing.T) {
 func TestLoginErrorsAndBusyStates(t *testing.T) {
 	for _, busy := range []string{"execution", "approval"} {
 		t.Run(busy, func(t *testing.T) {
-			m := newModel(context.Background(), &loginExecutor{}, app.Request{}, true)
+			m := newModel(context.Background(), &loginExecutor{}, execution.Request{}, true)
 			if busy == "execution" {
-				m.stream = &app.Execution{}
+				m.stream = &execution.Execution{}
 			} else {
-				m.approval = &app.Approval{ID: "approval"}
+				m.approval = &execution.Approval{ID: "approval"}
 			}
 			m.composer.editor.SetValue("/login")
 			next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -128,7 +128,7 @@ func TestLoginErrorsAndBusyStates(t *testing.T) {
 			}
 		})
 	}
-	m := newModel(context.Background(), &loginExecutor{}, app.Request{}, true)
+	m := newModel(context.Background(), &loginExecutor{}, execution.Request{}, true)
 	m.login = &loginFlow{cancel: func() {}, name: "OpenAI"}
 	next, _ := m.Update(loginEvent{flow: m.login, done: true, err: errors.New("fixture authorization failed")})
 	m = next.(model)
@@ -138,15 +138,15 @@ func TestLoginErrorsAndBusyStates(t *testing.T) {
 }
 
 func TestLoginStoragePromptContinuesTheSameFlow(t *testing.T) {
-	m := newModel(context.Background(), &loginExecutor{}, app.Request{}, true)
+	m := newModel(context.Background(), &loginExecutor{}, execution.Request{}, true)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	flow := &loginFlow{ctx: ctx, cancel: cancel, name: "OpenAI", events: make(chan loginEvent, 1)}
 	m.login = flow
 	m.actionPending = true
 	response := make(chan string, 1)
-	prompt := &app.LoginPrompt{Title: "Credential storage", Options: []app.LoginOption{{ID: "retry", Name: "Retry system keyring"}, {ID: "file", Name: "Use private local file", Description: "Unencrypted"}}, Response: response}
-	next, _ := m.Update(loginEvent{flow: flow, notice: app.LoginNotice{Prompt: prompt}})
+	prompt := &execution.LoginPrompt{Title: "Credential storage", Options: []execution.LoginOption{{ID: "retry", Name: "Retry system keyring"}, {ID: "file", Name: "Use private local file", Description: "Unencrypted"}}, Response: response}
+	next, _ := m.Update(loginEvent{flow: flow, notice: execution.LoginNotice{Prompt: prompt}})
 	m = next.(model)
 	if !m.overlay.selecting || !strings.Contains(m.View().Content, "Credential storage") || !strings.Contains(m.View().Content, "Unencrypted") {
 		t.Fatal("storage recovery menu not visible")

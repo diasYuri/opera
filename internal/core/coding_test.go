@@ -2,8 +2,8 @@ package core_test
 
 import (
 	"context"
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/agent/agenttest"
 	"os"
 	"path/filepath"
@@ -18,11 +18,11 @@ func TestCodingEditApprovalAndShell(t *testing.T) {
 	}
 	r := open(t, cfg, agenttest.ToolTurn("edit", `{"path":"sample.txt","old_text":"before","new_text":"after"}`), agenttest.TextTurn("edited"))
 	defer closeRuntime(t, r)
-	result, err := r.Service.Execute(context.Background(), app.Request{Prompt: "edit"}, nil)
+	result, err := r.Service.Execute(context.Background(), execution.Request{Prompt: "edit"}, nil)
 	if err != nil || result.ExitCode != 3 {
 		t.Fatalf("%+v %v", result, err)
 	}
-	result, err = r.Service.Execute(context.Background(), app.Request{ID: result.ID, Approve: result.Approval.ID}, nil)
+	result, err = r.Service.Execute(context.Background(), execution.Request{ID: result.ID, Approve: result.Approval.ID}, nil)
 	if err != nil || result.ExitCode != 0 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -35,11 +35,11 @@ func TestCodingShellRequiresApproval(t *testing.T) {
 	cfg := configuration(t)
 	r := open(t, cfg, agenttest.ToolTurn("run_command", `{"command":"go","args":["version"]}`), agenttest.TextTurn("checked"))
 	defer closeRuntime(t, r)
-	result, err := r.Service.Execute(context.Background(), app.Request{Prompt: "check"}, nil)
+	result, err := r.Service.Execute(context.Background(), execution.Request{Prompt: "check"}, nil)
 	if err != nil || result.Approval == nil || result.Approval.Tool != "run_command" {
 		t.Fatalf("%+v %v", result, err)
 	}
-	result, err = r.Service.Execute(context.Background(), app.Request{ID: result.ID, Approve: result.Approval.ID}, nil)
+	result, err = r.Service.Execute(context.Background(), execution.Request{ID: result.ID, Approve: result.Approval.ID}, nil)
 	if err != nil || result.ExitCode != 0 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -72,7 +72,7 @@ func TestSemanticFallbackAndGitInspection(t *testing.T) {
 	}
 	r := open(t, cfg, agenttest.ToolTurn("definition", `{"path":"sample.go","line":2,"column":6}`), agenttest.ToolTurn("search", `{"query":"Run"}`), agenttest.ToolTurn("read_file", `{"path":"sample.go"}`), agenttest.ToolTurn("git_diff", `{}`), agenttest.TextTurn("inspected with fallback"))
 	defer closeRuntime(t, r)
-	result, err := r.Service.Execute(context.Background(), app.Request{Prompt: "Inspect the symbol; use file search if semantic navigation is unavailable"}, nil)
+	result, err := r.Service.Execute(context.Background(), execution.Request{Prompt: "Inspect the symbol; use file search if semantic navigation is unavailable"}, nil)
 	if err != nil || result.ExitCode != 0 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -96,7 +96,7 @@ func TestReadOnlyRejectsShellWithoutEffect(t *testing.T) {
 	cfg.Values["policy"] = config.Value{Value: "read-only", Source: "test"}
 	r := open(t, cfg, agenttest.ToolTurn("run_command", `{"command":"echo unsafe > effect.txt","shell":true}`), agenttest.TextTurn("denied"))
 	defer closeRuntime(t, r)
-	result, err := r.Service.Execute(context.Background(), app.Request{Prompt: "run"}, nil)
+	result, err := r.Service.Execute(context.Background(), execution.Request{Prompt: "run"}, nil)
 	if err != nil || result.ExitCode != 0 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -116,7 +116,7 @@ func TestPatchApprovalIncludesNestedFilePrecondition(t *testing.T) {
 	}
 	r := open(t, cfg, agenttest.ToolTurn("patch", `{"patch":"--- a/b/sample.txt\n+++ b/b/sample.txt\n@@ -1 +1 @@\n-old\n+new\n"}`))
 	defer closeRuntime(t, r)
-	first, err := r.Service.Execute(context.Background(), app.Request{Prompt: "patch"}, nil)
+	first, err := r.Service.Execute(context.Background(), execution.Request{Prompt: "patch"}, nil)
 	if err != nil || first.Approval == nil {
 		t.Fatalf("%+v %v", first, err)
 	}
@@ -126,7 +126,7 @@ func TestPatchApprovalIncludesNestedFilePrecondition(t *testing.T) {
 	if err := os.WriteFile(path, []byte("changed\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	second, err := r.Service.Execute(context.Background(), app.Request{ID: first.ID, Approve: first.Approval.ID}, nil)
+	second, err := r.Service.Execute(context.Background(), execution.Request{ID: first.ID, Approve: first.Approval.ID}, nil)
 	if err != nil || second.Approval == nil || second.Approval.ID == first.Approval.ID {
 		t.Fatalf("stale patch approved: %+v %v", second, err)
 	}

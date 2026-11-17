@@ -8,23 +8,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/diasYuri/opera/internal/app"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/opera/internal/ui"
 )
 
 type accessibleLoginEvent struct {
-	notice     app.LoginNotice
+	notice     execution.LoginNotice
 	err        error
 	models     []string
 	catalogErr error
 	done       bool
 }
 
-func accessibleLogin(ctx context.Context, auth app.Authenticator, chooser ui.ModelChooser, id string) <-chan accessibleLoginEvent {
+func accessibleLogin(ctx context.Context, auth execution.Authenticator, chooser ui.ModelChooser, id string) <-chan accessibleLoginEvent {
 	events := make(chan accessibleLoginEvent, 1)
 	go func() {
 		defer close(events)
-		err := auth.Login(ctx, id, func(notice app.LoginNotice) error {
+		err := auth.Login(ctx, id, func(notice execution.LoginNotice) error {
 			select {
 			case events <- accessibleLoginEvent{notice: notice}:
 				return nil
@@ -51,7 +51,7 @@ func menuSelection(text string, size int) (int, bool) {
 	return n - 1, err == nil && n >= 1 && n <= size
 }
 
-func loginMenuText(providers []app.LoginProvider) string {
+func loginMenuText(providers []execution.LoginProvider) string {
 	var text strings.Builder
 	text.WriteString("Connect a provider\n")
 	for i, p := range providers {
@@ -80,7 +80,7 @@ func loginResultText(event accessibleLoginEvent) string {
 	return text.String()
 }
 
-func loginPromptText(prompt *app.LoginPrompt) string {
+func loginPromptText(prompt *execution.LoginPrompt) string {
 	var text strings.Builder
 	text.WriteString(prompt.Title + "\n")
 	if prompt.Message != "" {

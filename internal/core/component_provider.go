@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/diasYuri/opera/internal/accounting"
-	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/config"
+	"github.com/diasYuri/opera/internal/modules/accounting"
+	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/component"
 	"github.com/diasYuri/y/pkg/providers"
@@ -27,7 +27,7 @@ func (b *compositionBuilder) provider() component.Definition {
 			if err != nil {
 				return err
 			}
-			var metadata app.Metadata
+			var metadata execution.Metadata
 			if err := json.Unmarshal(raw, &metadata); err != nil {
 				return err
 			}
@@ -102,7 +102,7 @@ func (b *compositionBuilder) provider() component.Definition {
 			if err != nil {
 				return accounting.Identity{}, err
 			}
-			var m app.Metadata
+			var m execution.Metadata
 			if err := json.Unmarshal(raw, &m); err != nil {
 				return accounting.Identity{}, err
 			}
