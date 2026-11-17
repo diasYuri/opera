@@ -136,11 +136,10 @@ func (m model) banner() string {
 }
 
 func (m *model) openPanel(title, text string) {
-	m.overlay.panelTitle = title
-	m.overlay.panel = viewport.New(viewport.WithWidth(max(1, m.contentWidth()-4)), viewport.WithHeight(m.viewerHeight()))
-	m.overlay.panel.SoftWrap = true
-	m.overlay.panel.SetContent(safeText(text))
-	m.overlay.panelOpen = true
+	panel := viewport.New(viewport.WithWidth(max(1, m.contentWidth()-4)), viewport.WithHeight(m.viewerHeight()))
+	panel.SoftWrap = true
+	panel.SetContent(safeText(text))
+	m.overlay.showPanel(title, panel)
 	m.composer.editor.Blur()
 }
 

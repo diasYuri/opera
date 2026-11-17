@@ -15,10 +15,10 @@ import (
 
 type conversationModel struct {
 	viewport.Model
-	entries []conversationEntry
+	entries      []conversationEntry
 	entryIndexes map[string]int
-	nextMessage uint64
-	committed map[string]bool
+	nextMessage  uint64
+	committed    map[string]bool
 }
 
 func newConversationModel() conversationModel { return conversationModel{Model: viewport.New()} }
@@ -106,25 +106,44 @@ type eventPayload struct {
 	} `json:"compaction"`
 }
 
-func (m *model) appendEntry(entry conversationEntry) int {
-	if m.conversation.entryIndexes == nil {
-		m.conversation.entryIndexes = make(map[string]int)
+func (c *conversationModel) append(entry conversationEntry) int {
+	if c.entryIndexes == nil {
+		c.entryIndexes = make(map[string]int)
 	}
-	if index, exists := m.conversation.entryIndexes[entry.id]; exists {
-		m.conversation.entries[index] = entry
+	if index, exists := c.entryIndexes[entry.id]; exists {
+		c.entries[index] = entry
 		return index
 	}
-	m.conversation.entryIndexes[entry.id] = len(m.conversation.entries)
-	m.conversation.entries = append(m.conversation.entries, entry)
-	return len(m.conversation.entries) - 1
+	c.entryIndexes[entry.id] = len(c.entries)
+	c.entries = append(c.entries, entry)
+	return len(c.entries) - 1
 }
 
+func (c *conversationModel) nextIdentity(prefix string) string {
+	c.nextMessage++
+	return fmt.Sprintf("%s:%d", prefix, c.nextMessage)
+}
+
+func (c *conversationModel) resetLedger() { c.entries = nil; c.entryIndexes = make(map[string]int) }
+
+func (c *conversationModel) commitCheckpoint(identity string) bool {
+	if c.committed == nil {
+		c.committed = make(map[string]bool)
+	}
+	if c.committed[identity] {
+		return false
+	}
+	c.committed[identity] = true
+	return true
+}
+
+func (m *model) appendEntry(entry conversationEntry) int { return m.conversation.append(entry) }
+
 func (m *model) appendUser(text, label string) {
-	m.conversation.nextMessage++
 	if label == "" {
 		label = "You"
 	}
-	m.appendEntry(conversationEntry{id: fmt.Sprintf("user:%d", m.conversation.nextMessage), kind: conversationUser, text: text, state: label})
+	m.appendEntry(conversationEntry{id: m.conversation.nextIdentity("user"), kind: conversationUser, text: text, state: label})
 	m.refreshConversation()
 }
 
@@ -137,8 +156,7 @@ func (m *model) appendVisualEvent(id string, kind visualEventKind, title, body, 
 
 func (m *model) commitQueuedMessages() {
 	for _, text := range m.queuedMessages {
-		m.conversation.nextMessage++
-		m.appendEntry(conversationEntry{id: fmt.Sprintf("user:%d", m.conversation.nextMessage), kind: conversationUser, text: text, state: "You"})
+		m.appendEntry(conversationEntry{id: m.conversation.nextIdentity("user"), kind: conversationUser, text: text, state: "You"})
 	}
 	m.queuedMessages = nil
 	m.resize()

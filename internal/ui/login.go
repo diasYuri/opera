@@ -64,8 +64,7 @@ func (m *model) openSelector(title string, items []list.Item, delegate list.Defa
 	m.overlay.selector.SetShowTitle(false)
 	m.overlay.selector.SetShowStatusBar(false)
 	m.overlay.selector.SetShowHelp(false)
-	m.overlay.selecting = true
-	m.overlay.panelOpen = false
+	m.overlay.showSelector(m.overlay.selector)
 	m.composer.editor.Blur()
 	m.resize()
 }

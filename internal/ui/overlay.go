@@ -16,3 +16,25 @@ type overlayModel struct {
 	selecting     bool
 	panelOpen     bool
 }
+
+func (o *overlayModel) showSelector(selector list.Model) {
+	o.selector = selector
+	o.selecting = true
+	o.modelMenu = false
+	o.panelOpen = false
+}
+
+func (o *overlayModel) dismissSelector() {
+	o.selecting = false
+	o.modelMenu = false
+	o.selectionKind = ""
+}
+
+func (o *overlayModel) showPanel(title string, panel viewport.Model) {
+	o.panelTitle = title
+	o.panel = panel
+	o.panelOpen = true
+	o.selecting = false
+}
+
+func (o *overlayModel) dismissPanel() { o.panelOpen = false }

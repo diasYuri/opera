@@ -75,25 +75,25 @@ type model struct {
 	code          int
 	width, height int
 
-	retryPrevious                      bool
-	loginPrompt                        *app.LoginPrompt
-	login                              *loginFlow
-	formKind, formKey                  string
-	formValue                          string
-	formHeight                         int
-	selectedProvider                   string
-	selectedSession                    *SessionSummary
-	selectedCheckpoint                 uint64
-	treeSelection                      bool
-	completions                        []completionItem
-	skillCatalogCache                  skills.Catalog
-	skillCatalogAt                     time.Time
-	extensionContributions             []ExtensionContribution
-	completionIndex                    int
-	actionPending, quitting, followUp  bool
-	dark, noMotion                     bool
-	systemDark                         bool
-	themeMode                          string
+	retryPrevious                     bool
+	loginPrompt                       *app.LoginPrompt
+	login                             *loginFlow
+	formKind, formKey                 string
+	formValue                         string
+	formHeight                        int
+	selectedProvider                  string
+	selectedSession                   *SessionSummary
+	selectedCheckpoint                uint64
+	treeSelection                     bool
+	completions                       []completionItem
+	skillCatalogCache                 skills.Catalog
+	skillCatalogAt                    time.Time
+	extensionContributions            []ExtensionContribution
+	completionIndex                   int
+	actionPending, quitting, followUp bool
+	dark, noMotion                    bool
+	systemDark                        bool
+	themeMode                         string
 	activity                          activityModel
 }
 
@@ -430,8 +430,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case shellResultMsg:
 		m.actionPending = false
-		m.conversation.nextMessage++
-		id := fmt.Sprintf("shell:%d", m.conversation.nextMessage)
+		id := m.conversation.nextIdentity("shell")
 		output := msg.output
 		state := "Completed"
 		if msg.err != nil {
@@ -622,12 +621,8 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.text = ""
 			m.streamBuffer = nil
 			commands := []tea.Cmd{}
-			if m.conversation.committed == nil {
-				m.conversation.committed = map[string]bool{}
-			}
 			identity := fmt.Sprintf("%s:%d", result.ID, result.Checkpoint)
-			if !m.conversation.committed[identity] {
-				m.conversation.committed[identity] = true
+			if m.conversation.commitCheckpoint(identity) {
 				if text != "" {
 					id := m.currentAssistantID
 					if id == "" {
@@ -701,9 +696,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if m.overlay.selecting {
 			switch {
 			case keyMatches(msg, keys.cancel):
-				m.overlay.selecting = false
-				m.overlay.modelMenu = false
-				m.overlay.selectionKind = ""
+				m.overlay.dismissSelector()
 				m.resize()
 				return m, m.composer.editor.Focus()
 			case keyMatches(msg, keys.quit):
@@ -719,14 +712,14 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			if keyMatches(msg, keys.quit) {
 				if m.approvalForm != nil {
 					m.approvalForm = nil
-					m.overlay.panelOpen = false
+					m.overlay.dismissPanel()
 					m.formKind = ""
 					m.formHeight = 0
 					m.resize()
 					return m, m.composer.editor.Focus()
 				}
 				if m.stream != nil {
-					m.overlay.panelOpen = false
+					m.overlay.dismissPanel()
 					m.status = "Cancelling execution…"
 					m.composer.editor.Focus()
 					return m, func() tea.Msg { m.stream.Cancel(); return nil }
@@ -734,7 +727,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			if keyMatches(msg, keys.cancel) {
-				m.overlay.panelOpen = false
+				m.overlay.dismissPanel()
 				m.approvalForm = nil
 				m.formKind = ""
 				m.formHeight = 0
@@ -757,7 +750,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				if form.State == huh.StateAborted {
 					m.approvalForm = nil
-					m.overlay.panelOpen = false
+					m.overlay.dismissPanel()
 					m.formKind = ""
 					m.formHeight = 0
 					m.resize()
@@ -1217,8 +1210,7 @@ func (m *model) loadSessionView(view SessionView) {
 	m.lastError = ""
 	m.runDetails = fmt.Sprintf("Session: %s\nRun: %s\nState: %s\nCheckpoint: %d", view.Summary.SessionID, view.Summary.ID, view.Summary.State, view.Summary.Checkpoint)
 	m.newConversationItems = false
-	m.conversation.entries = nil
-	m.conversation.entryIndexes = make(map[string]int)
+	m.conversation.resetLedger()
 	m.queuedMessages = nil
 	m.text = ""
 	m.streamBuffer = nil
@@ -1262,8 +1254,7 @@ func (m *model) clearConversation() {
 	m.runDetails = ""
 	m.text = ""
 	m.streamBuffer = nil
-	m.conversation.entries = nil
-	m.conversation.entryIndexes = make(map[string]int)
+	m.conversation.resetLedger()
 	m.queuedMessages = nil
 	m.currentAssistantID = ""
 	m.lastSequence = 0
@@ -1275,7 +1266,7 @@ func (m *model) clearConversation() {
 	m.subagentRunID = ""
 	m.subagentGeneration++
 	m.selectedSession = nil
-	m.overlay.panelOpen = false
+	m.overlay.dismissPanel()
 	m.overlay.panelTitle = ""
 	m.newConversationItems = false
 	m.composer.editor.Reset()
@@ -1326,9 +1317,9 @@ func (m *model) openBranchConfirmation(summary SessionSummary, version uint64) t
 }
 
 func (m *model) openForm(title string, form *huh.Form, kind, keyName, value string) tea.Cmd {
-	m.overlay.panelTitle = title
-	m.overlay.panel = viewport.New(viewport.WithWidth(max(1, m.contentWidth()-4)), viewport.WithHeight(m.viewerHeight()))
-	m.overlay.panel.SetContent("")
+	panel := viewport.New(viewport.WithWidth(max(1, m.contentWidth()-4)), viewport.WithHeight(m.viewerHeight()))
+	panel.SetContent("")
+	m.overlay.showPanel(title, panel)
 	m.formHeight = m.viewerHeight()
 	switch kind {
 	case "thinking":
@@ -1465,7 +1456,7 @@ func (m *model) openContextInput() tea.Cmd {
 func (m model) finishForm() (tea.Model, tea.Cmd) {
 	form, kind, keyName, value := m.approvalForm, m.formKind, m.formKey, m.formValue
 	m.approvalForm = nil
-	m.overlay.panelOpen = false
+	m.overlay.dismissPanel()
 	m.formKind, m.formKey, m.formValue = "", "", ""
 	m.formHeight = 0
 	m.resize()
@@ -1695,7 +1686,7 @@ func (m *model) resolveApproval(allow bool) tea.Cmd {
 	}
 	m.approval = nil
 	m.approvalForm = nil
-	m.overlay.panelOpen = false
+	m.overlay.dismissPanel()
 	m.formKind = ""
 	m.actionPending = true
 	if allow {
