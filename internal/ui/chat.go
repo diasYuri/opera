@@ -106,8 +106,7 @@ type model struct {
 	dark, noMotion                     bool
 	systemDark                         bool
 	themeMode                          string
-	animation                          uint64
-	progress, velocity, activityTarget float64
+	activity                          activityModel
 }
 
 type started struct{ execution *app.Execution }
@@ -490,8 +489,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.text = ""
 		m.streamBuffer = &strings.Builder{}
 		m.lastSequence = 0
-		m.progress, m.velocity, m.activityTarget = 0, 0, 1
-		m.animation++
+		m.activity.Start()
 		m.lastError = ""
 		m.status = "Running"
 		m.runGeneration++
@@ -615,7 +613,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.stream = nil
 			m.subagentGeneration++
 			m.subagents = nil
-			m.animation++
+			m.activity.Stop()
 			if result.State != "" {
 				m.previous = result.ID
 				m.retryPrevious = result.Approval == nil && (result.State == "failed" && result.ExitCode == 1 || (result.State == "cancelled" || result.State == "canceled") && result.ExitCode == 130)

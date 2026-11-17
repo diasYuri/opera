@@ -114,11 +114,11 @@ func TestActivityStopsAtIdleAndWithNoMotion(t *testing.T) {
 	}
 	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, false)
 	m.stream = &app.Execution{ID: "run"}
-	m.animation = 7
-	m.activityTarget = 1
+	m.activity.generation = 7
+	m.activity.target = 1
 	updated, cmd := m.Update(frameMsg{7})
 	m = updated.(model)
-	if cmd == nil || m.progress <= 0 {
+	if cmd == nil || m.activity.progress <= 0 {
 		t.Fatal("active spring did not advance")
 	}
 	_, cmd = m.Update(frameMsg{6})

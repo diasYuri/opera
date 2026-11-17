@@ -82,7 +82,7 @@ func (m *model) beginLogin(provider loginChoice) tea.Cmd {
 	m.actionPending = true
 	m.editor.Blur()
 	m.status = "Connecting to " + provider.Name + "…"
-	m.animation++
+	m.activity.Start()
 	work := func() tea.Msg {
 		defer close(flow.events)
 		err := auth.Login(ctx, provider.ID, func(notice app.LoginNotice) error {

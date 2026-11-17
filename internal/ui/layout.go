@@ -13,7 +13,6 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/harmonica"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/diasYuri/opera/internal/app"
 )
@@ -149,22 +148,15 @@ func (m model) animate() tea.Cmd {
 	if m.noMotion {
 		return nil
 	}
-	generation := m.animation
+	generation := m.activity.generation
 	return tea.Tick(50*time.Millisecond, func(time.Time) tea.Msg { return frameMsg{generation} })
 }
 
 func (m model) updateFrame(msg frameMsg) (tea.Model, tea.Cmd) {
-	if m.noMotion || m.stream == nil && m.login == nil || msg.generation != m.animation {
+	if m.noMotion || m.stream == nil && m.login == nil || !m.activity.Frame(msg.generation) {
 		return m, nil
 	}
 	m.spinner, _ = m.spinner.Update(m.spinner.Tick())
-	m.progress, m.velocity = harmonica.NewSpring(1.0/20, 8, 1).Update(m.progress, m.velocity, m.activityTarget)
-	if m.progress > .98 {
-		m.activityTarget = 0
-	}
-	if m.progress < .02 {
-		m.activityTarget = 1
-	}
 	return m, m.animate()
 }
 
@@ -201,7 +193,7 @@ func (m model) statusLine() string {
 		style = t.accent
 		if !m.noMotion {
 			// An indeterminate activity trace, never a fabricated completion percentage.
-			position := min(5, max(0, int(m.progress*5)))
+			position := m.activity.Position()
 			status = m.spinner.View() + " " + status + "  " + strings.Repeat("─", position) + "━" + strings.Repeat("─", 5-position)
 		}
 	}
