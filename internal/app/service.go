@@ -42,11 +42,14 @@ type Service struct {
 	Workspace, Provider, Model, Mode string
 	MaxTokens                        int
 	ContextPaths                     []string
+	ContextPathSource                ContextPathReader
 	LoadImages                       func(context.Context, []string) ([]ai.ContentBlock, error)
 	LoadContext                      func(context.Context, string, []string, int) (contextdata.Bundle, error)
 	ContextSummary                   []contextdata.Source
 	Skills                           RunSkills
 }
+
+type ContextPathReader interface{ Current() []string }
 
 // RunSkills is the application-facing skill projection and run-lifecycle port.
 type RunSkills interface {
@@ -135,7 +138,7 @@ func (s *Service) Execute(ctx context.Context, request Request, emit func(Event)
 		}()
 	}
 
-	paths := s.ContextPaths
+	paths := s.currentContextPaths()
 	if len(paths) == 0 {
 		paths = metadata.ContextPaths
 	}
@@ -460,7 +463,7 @@ func (s *Service) prepare(ctx context.Context, id string, request Request) (agen
 	if err != nil {
 		return agent.Snapshot{}, Metadata{}, false, err
 	}
-	metadata := Metadata{ResponseFormat: s.ResponseFormat, Management: request.Management, ToolGeneration: s.ToolGeneration, SkillGeneration: skillGeneration, SkillActivations: skillActivations, Worker: request.Worker, ParentID: request.ParentID, Mode: mode.ID, ContextPaths: append([]string(nil), s.ContextPaths...), InitialPrompt: request.Prompt, Workspace: s.Workspace, Provider: s.Provider, Model: s.Model, SessionID: request.SessionID, HarnessVersion: HarnessVersion}
+	metadata := Metadata{ResponseFormat: s.ResponseFormat, Management: request.Management, ToolGeneration: s.ToolGeneration, SkillGeneration: skillGeneration, SkillActivations: skillActivations, Worker: request.Worker, ParentID: request.ParentID, Mode: mode.ID, ContextPaths: s.currentContextPaths(), InitialPrompt: request.Prompt, Workspace: s.Workspace, Provider: s.Provider, Model: s.Model, SessionID: request.SessionID, HarnessVersion: HarnessVersion}
 	if metadata.SessionID == "" {
 		metadata.SessionID = id
 	}
@@ -547,4 +550,11 @@ func repairTranscript(state *agent.Snapshot, operations []agent.OperationRecord)
 		}
 	}
 	state.Agent.Transcript = append(state.Agent.Transcript, missing...)
+}
+
+func (s *Service) currentContextPaths() []string {
+	if s.ContextPathSource != nil {
+		return s.ContextPathSource.Current()
+	}
+	return append([]string(nil), s.ContextPaths...)
 }

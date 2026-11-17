@@ -14,6 +14,7 @@ import (
 	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/harness"
 	"github.com/diasYuri/opera/internal/platform"
+	"github.com/diasYuri/opera/internal/providercatalog"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/agent/agenttest"
 	"github.com/diasYuri/y/pkg/providers"
@@ -241,5 +242,84 @@ func TestStartupFailureReleasesScope(t *testing.T) {
 	defer closeRuntime(t, runtime)
 	if _, err := runtime.Service.Execute(context.Background(), app.Request{Prompt: "hello"}, nil); err != nil {
 		t.Fatal(err)
+	}
+}
+
+type observedCloseProvider struct {
+	*providertest.FakeProvider
+	closed *int
+}
+
+func (p *observedCloseProvider) ID() string { return "openai" }
+func (p *observedCloseProvider) Close() error {
+	*p.closed++
+	return p.FakeProvider.Close()
+}
+
+func TestStartupFailureRollsBackProviderAndToolPackResources(t *testing.T) {
+	cfg := configuration(t)
+	var closes []string
+	providerClosed := 0
+	provider := &observedCloseProvider{FakeProvider: providertest.NewFakeProvider(), closed: &providerClosed}
+	failure := errors.New("tool pack startup failed")
+	_, err := harness.Open(context.Background(), cfg, harness.Options{
+		ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil },
+		ToolPacks: []harness.ToolPack{{ID: "failing-resource", Register: func(_ context.Context, registry *tools.Registry, _ harness.ToolPackContext) error {
+			if err := registry.AddCloser(func(context.Context) error { closes = append(closes, "tool-resource"); return nil }); err != nil {
+				return err
+			}
+			return failure
+		}}},
+	})
+	if !errors.Is(err, failure) {
+		t.Fatalf("Open error = %v, want tool pack failure", err)
+	}
+	if providerClosed != 1 {
+		t.Fatalf("provider close count = %d, want 1", providerClosed)
+	}
+	if len(closes) != 1 || closes[0] != "tool-resource" {
+		t.Fatalf("resource cleanup = %v", closes)
+	}
+}
+
+func TestInspectionDoesNotCreateProvider(t *testing.T) {
+	cfg := configuration(t)
+	created := false
+	runtime, err := harness.Open(context.Background(), cfg, harness.Options{Inspection: true, ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+		created = true
+		return providertest.NewFakeProvider(), nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeRuntime(t, runtime)
+	if created {
+		t.Fatal("inspection created a provider")
+	}
+}
+
+type catalogScriptProvider struct{ *agenttest.ScriptProvider }
+
+func (catalogScriptProvider) ID() string { return "example" }
+
+func TestCustomProviderCatalogExecutesOwnImplementation(t *testing.T) {
+	cfg := configuration(t)
+	cfg.Values["provider"] = config.Value{Value: "example", Source: "test"}
+	cfg.Values["model"] = config.Value{Value: "scripted", Source: "test"}
+	provider := catalogScriptProvider{agenttest.NewScriptProvider(t, agenttest.TextTurn("answer from the custom provider"))}
+	catalog, err := providercatalog.New(providercatalog.Entry{ID: "example", Name: "Example", Factory: func(context.Context, config.Resolved, func(context.Context, string) (string, error)) (providers.Provider, error) {
+		return provider, nil
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := harness.Open(context.Background(), cfg, harness.Options{ProviderCatalog: catalog})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeRuntime(t, runtime)
+	result, err := runtime.Service.Execute(context.Background(), app.Request{Prompt: "say hello"}, nil)
+	if err != nil || result.Text != "answer from the custom provider" {
+		t.Fatalf("custom provider result = %#v, %v", result, err)
 	}
 }

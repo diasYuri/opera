@@ -37,6 +37,9 @@ func (r *Runtime) RunShell(ctx context.Context, command string) (string, error) 
 
 func (r *Runtime) SetContextPaths(paths []string) {
 	r.opts.ContextPaths = append([]string(nil), paths...)
+	if source, ok := r.Service.ContextPathSource.(*contextPathState); ok {
+		source.Set(paths)
+	}
 	r.Service.ContextPaths = append([]string(nil), paths...)
 }
 func (r *Runtime) Command(ctx context.Context, text string) (string, error) {

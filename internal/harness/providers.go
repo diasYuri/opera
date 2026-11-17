@@ -62,6 +62,28 @@ func Models(ctx context.Context, cfg config.Resolved, credentials ...func(contex
 	return out, nil
 }
 
+// ModelsWithCatalog lists models from the same catalog used for execution.
+func ModelsWithCatalog(ctx context.Context, cfg config.Resolved, lookup func(context.Context, string) (string, error), catalog *providercatalog.Catalog) (any, error) {
+	provider, err := configuredProvider(ctx, cfg, lookup, catalog)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = provider.Close() }()
+	models, err := provider.Models(ctx)
+	if err != nil {
+		return nil, err
+	}
+	type entry struct {
+		Model        any                    `json:"model"`
+		Capabilities providers.Capabilities `json:"capabilities"`
+	}
+	out := make([]entry, 0, len(models))
+	for _, model := range models {
+		out = append(out, entry{model, provider.Capabilities(model.ID)})
+	}
+	return out, nil
+}
+
 func ModelChoices(ctx context.Context, cfg config.Resolved, lookup func(context.Context, string) (string, error), providers ...*providercatalog.Catalog) ([]string, error) {
 	catalog, err := ModelCatalog(ctx, cfg, lookup, providers...)
 	if err != nil {

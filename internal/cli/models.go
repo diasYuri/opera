@@ -16,7 +16,7 @@ func (a App) models(opts options, cfg config.Resolved, jsonl bool) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	catalog, err := harness.Models(ctx, cfg, a.credentialLookup(cfg))
+	catalog, err := harness.ModelsWithCatalog(ctx, cfg, a.credentialLookup(cfg), a.ProviderCatalog)
 	if err != nil {
 		return a.fail(1, err, jsonl)
 	}

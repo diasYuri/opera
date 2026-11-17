@@ -21,6 +21,7 @@ import (
 	"github.com/diasYuri/opera/internal/diagnostics"
 	"github.com/diasYuri/opera/internal/output"
 	"github.com/diasYuri/opera/internal/platform"
+	"github.com/diasYuri/opera/internal/providercatalog"
 )
 
 const (
@@ -33,15 +34,16 @@ const (
 )
 
 type App struct {
-	In        io.Reader
-	Out, Err  io.Writer
-	Version   string
-	IsTTY     bool
-	Getwd     func() (string, error)
-	Env       func(string) (string, bool)
-	Paths     func(string) (platform.Paths, error)
-	LookPath  func(string) (string, error)
-	OpenStore func(string, string) (credentials.Store, error)
+	In              io.Reader
+	Out, Err        io.Writer
+	Version         string
+	IsTTY           bool
+	Getwd           func() (string, error)
+	Env             func(string) (string, bool)
+	Paths           func(string) (platform.Paths, error)
+	LookPath        func(string) (string, error)
+	OpenStore       func(string, string) (credentials.Store, error)
+	ProviderCatalog *providercatalog.Catalog
 }
 
 func New(in *os.File, out, stderr io.Writer, version string) App {

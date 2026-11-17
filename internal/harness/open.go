@@ -87,7 +87,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 	definition := func(id string, provides, requires []component.ServiceRef, start func(context.Context, *component.Scope) error) component.Definition {
 		return component.Define(component.Descriptor{ID: id, Version: "1.0.0", Provides: provides, Requires: requires}, func() (component.Component, error) { return component.ComponentFunc(start), nil })
 	}
-	var application *app.Service
+	contextPaths := newContextPathState(opts.ContextPaths)
 	var extensions *operaext.Manager
 	questions := app.NewQuestionBroker()
 	definitions := []component.Definition{
@@ -191,6 +191,9 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 			if err != nil {
 				return err
 			}
+			if provider == nil {
+				return errors.New("provider factory returned nil")
+			}
 			if err := scope.Track(func(context.Context) error { return provider.Close() }); err != nil {
 				_ = provider.Close()
 				return err
@@ -266,6 +269,10 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 			if err != nil {
 				return err
 			}
+			providerAdapter, ok := provider.(providers.Provider)
+			if !ok || providerAdapter == nil {
+				return errors.New("configured provider does not implement providers.Provider")
+			}
 			registry, err := component.Require(scope, yruntime.ToolRegistryKey)
 			if err != nil {
 				return err
@@ -288,63 +295,61 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 			}
 			options := []agent.RunnerOption{agent.WithRunnerStateStore(store), agent.WithRunnerEventStore(store), agent.WithRunnerTranscriptStore(store), agent.WithRunnerOperationStore(store), agent.WithRunnerAgentOptions(append(extensions.AgentOptions(), work.AgentOption(), agent.WithMaxTurns(64), agent.WithMaxRetries(0), agent.WithToolTimeout(timeout), agent.WithStreamDefaults(providers.StreamOptions{Timeout: timeout, MaxTokens: 4096, Reasoning: ai.ThinkingLevel(opts.Thinking), ResponseFormat: opts.ResponseFormat}), agent.WithBeforeRequest(func(ctx context.Context, request *providers.StreamRequest) (*agent.HookedResponse, error) {
 				if request.Options.ResponseFormat != nil {
-					if err := providers.ValidateStructuredOutputRequest(*request, provider.(providers.Provider).ID(), provider.(providers.Provider).Capabilities(request.Model.ID)); err != nil {
+					if err := providers.ValidateStructuredOutputRequest(*request, providerAdapter.ID(), providerAdapter.Capabilities(request.Model.ID)); err != nil {
 						return nil, err
 					}
 				}
-				if opts.Thinking != "" && opts.Thinking != "off" && !provider.(providers.Provider).Capabilities(request.Model.ID).Reasoning {
+				if opts.Thinking != "" && opts.Thinking != "off" && !providerAdapter.Capabilities(request.Model.ID).Reasoning {
 					return nil, errors.New("thinking is unsupported by the selected model")
 				}
-				if application != nil {
-					request.Context.Messages = append([]ai.Message(nil), request.Context.Messages...)
-					var imagePaths []string
-					for mi := range request.Context.Messages {
-						if request.Context.Messages[mi].Role != ai.RoleUser {
-							continue
+				request.Context.Messages = append([]ai.Message(nil), request.Context.Messages...)
+				var imagePaths []string
+				for mi := range request.Context.Messages {
+					if request.Context.Messages[mi].Role != ai.RoleUser {
+						continue
+					}
+					blocks := request.Context.Messages[mi].Content
+					for bi := range blocks {
+						var reference struct {
+							Path string `json:"opera_image_path"`
 						}
-						blocks := request.Context.Messages[mi].Content
-						for bi := range blocks {
-							var reference struct {
-								Path string `json:"opera_image_path"`
-							}
-							if blocks[bi].Type == ai.ContentText && len(blocks[bi].Details) > 0 && json.Unmarshal(blocks[bi].Details, &reference) == nil && reference.Path != "" {
-								imagePaths = append(imagePaths, reference.Path)
-							}
+						if blocks[bi].Type == ai.ContentText && len(blocks[bi].Details) > 0 && json.Unmarshal(blocks[bi].Details, &reference) == nil && reference.Path != "" {
+							imagePaths = append(imagePaths, reference.Path)
 						}
 					}
-					if len(imagePaths) > 0 {
-						attached, err := contextfiles.Images(ctx, cfg.Paths.Workspace, imagePaths, provider.(providers.Provider).Capabilities(request.Model.ID).Vision, min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024))
-						if err != nil {
-							return nil, err
-						}
-						at := 0
-						for mi := range request.Context.Messages {
-							blocks := request.Context.Messages[mi].Content
-							var resolved []ai.ContentBlock
-							for _, block := range blocks {
-								var reference struct {
-									Path string `json:"opera_image_path"`
-								}
-								if block.Type == ai.ContentText && len(block.Details) > 0 && json.Unmarshal(block.Details, &reference) == nil && reference.Path != "" {
-									resolved = append(resolved, attached[at])
-									at++
-									continue
-								}
-								resolved = append(resolved, block)
-							}
-							request.Context.Messages[mi].Content = resolved
-						}
-					}
-					images, err := contextfiles.Images(ctx, cfg.Paths.Workspace, application.ContextPaths, provider.(providers.Provider).Capabilities(request.Model.ID).Vision, min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024))
+				}
+				if len(imagePaths) > 0 {
+					attached, err := contextfiles.Images(ctx, cfg.Paths.Workspace, imagePaths, providerAdapter.Capabilities(request.Model.ID).Vision, min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024))
 					if err != nil {
 						return nil, err
 					}
-					if len(images) > 0 {
-						for i := len(request.Context.Messages) - 1; i >= 0; i-- {
-							if request.Context.Messages[i].Role == ai.RoleUser {
-								request.Context.Messages[i].Content = append(append([]ai.ContentBlock(nil), request.Context.Messages[i].Content...), images...)
-								break
+					at := 0
+					for mi := range request.Context.Messages {
+						blocks := request.Context.Messages[mi].Content
+						var resolved []ai.ContentBlock
+						for _, block := range blocks {
+							var reference struct {
+								Path string `json:"opera_image_path"`
 							}
+							if block.Type == ai.ContentText && len(block.Details) > 0 && json.Unmarshal(block.Details, &reference) == nil && reference.Path != "" {
+								resolved = append(resolved, attached[at])
+								at++
+								continue
+							}
+							resolved = append(resolved, block)
+						}
+						request.Context.Messages[mi].Content = resolved
+					}
+				}
+				images, err := contextfiles.Images(ctx, cfg.Paths.Workspace, contextPaths.Current(), providerAdapter.Capabilities(request.Model.ID).Vision, min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024))
+				if err != nil {
+					return nil, err
+				}
+				if len(images) > 0 {
+					for i := len(request.Context.Messages) - 1; i >= 0; i-- {
+						if request.Context.Messages[i].Role == ai.RoleUser {
+							request.Context.Messages[i].Content = append(append([]ai.ContentBlock(nil), request.Context.Messages[i].Content...), images...)
+							break
 						}
 					}
 				}
@@ -390,8 +395,11 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 			if err != nil {
 				return err
 			}
-			visionProvider := provider.(providers.Provider)
-			service := &app.Service{ReadApprovalFile: approvalfiles.Read, ResponseFormat: opts.ResponseFormat, Records: records, Work: work, QuestionBroker: questions, ContextBudget: min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024), ContextPaths: opts.ContextPaths, Skills: skillManager, Runner: runner, Store: store, Guard: guard, Workspace: cfg.Paths.Workspace, Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy"), MaxTokens: cfg.Int("limits.context_tokens"), LoadContext: contextfiles.Load, LoadImages: func(ctx context.Context, paths []string) ([]ai.ContentBlock, error) {
+			visionProvider, ok := provider.(providers.Provider)
+			if !ok || visionProvider == nil {
+				return errors.New("configured provider does not implement providers.Provider")
+			}
+			service := &app.Service{ReadApprovalFile: approvalfiles.Read, ResponseFormat: opts.ResponseFormat, Records: records, Work: work, QuestionBroker: questions, ContextBudget: min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024), ContextPaths: contextPaths.Current(), ContextPathSource: contextPaths, Skills: skillManager, Runner: runner, Store: store, Guard: guard, Workspace: cfg.Paths.Workspace, Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy"), MaxTokens: cfg.Int("limits.context_tokens"), LoadContext: contextfiles.Load, LoadImages: func(ctx context.Context, paths []string) ([]ai.ContentBlock, error) {
 				images, err := contextfiles.Images(ctx, cfg.Paths.Workspace, paths, visionProvider.Capabilities(cfg.String("model")).Vision, min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024))
 				if err == nil && len(images) != len(paths) {
 					return nil, errors.New("each /image path must reference a supported image")
@@ -406,8 +414,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 			service.ToolGeneration = fmt.Sprintf("%x", sha256.Sum256(append(descriptors, []byte(extensions.Digest())...)))
 			extensions.SafePoint = service.CheckReconfiguration
 			work.Service = service
-			service.Summarizer = summarizer{provider: provider.(providers.Provider), credential: opts.Credential, timeout: cfg.String("limits.process_timeout")}
-			application = service
+			service.Summarizer = summarizer{provider: visionProvider, credential: opts.Credential, timeout: cfg.String("limits.process_timeout")}
 			if err := scope.Track(service.Close); err != nil {
 				return err
 			}
@@ -415,7 +422,7 @@ func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, err
 		}),
 	}
 	if opts.Inspection {
-		definitions = append(definitions[:2], definition("inspection", []component.ServiceRef{component.Reference(serviceKey)}, []component.ServiceRef{component.Reference(storeKey), component.Reference(recordsKey)}, func(_ context.Context, scope *component.Scope) error {
+		definitions = append(definitions[:1], definition("inspection", []component.ServiceRef{component.Reference(serviceKey)}, []component.ServiceRef{component.Reference(storeKey), component.Reference(recordsKey)}, func(_ context.Context, scope *component.Scope) error {
 			store, err := component.Require(scope, storeKey)
 			if err != nil {
 				return err
