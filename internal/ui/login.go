@@ -51,22 +51,22 @@ func (m *model) openLoginProviders() {
 	delegate.Styles.SelectedDesc = m.theme().muted.PaddingLeft(2)
 	delegate.Styles.DimmedDesc = m.theme().muted.PaddingLeft(2)
 	m.openSelector("Connect a provider", items, delegate)
-	m.selectionKind = "login"
+	m.overlay.selectionKind = "login"
 	m.lastError = ""
 }
 
 func (m *model) openSelector(title string, items []list.Item, delegate list.DefaultDelegate) {
-	m.modelMenu = false
-	m.selector = list.New(items, delegate, max(1, m.contentWidth()-4), m.viewerHeight())
-	m.selector.Title = title
-	m.selector.Styles = list.DefaultStyles(m.dark)
-	m.selector.Styles.Title = m.theme().accent.Bold(true)
-	m.selector.SetShowTitle(false)
-	m.selector.SetShowStatusBar(false)
-	m.selector.SetShowHelp(false)
-	m.selecting = true
-	m.panelOpen = false
-	m.editor.Blur()
+	m.overlay.modelMenu = false
+	m.overlay.selector = list.New(items, delegate, max(1, m.contentWidth()-4), m.viewerHeight())
+	m.overlay.selector.Title = title
+	m.overlay.selector.Styles = list.DefaultStyles(m.dark)
+	m.overlay.selector.Styles.Title = m.theme().accent.Bold(true)
+	m.overlay.selector.SetShowTitle(false)
+	m.overlay.selector.SetShowStatusBar(false)
+	m.overlay.selector.SetShowHelp(false)
+	m.overlay.selecting = true
+	m.overlay.panelOpen = false
+	m.composer.editor.Blur()
 	m.resize()
 }
 
@@ -78,9 +78,9 @@ func (m *model) beginLogin(provider loginChoice) tea.Cmd {
 	ctx, cancel := context.WithCancel(m.ctx)
 	flow := &loginFlow{ctx: ctx, cancel: cancel, events: make(chan loginEvent, 1), name: provider.Name}
 	m.login = flow
-	m.selecting = false
+	m.overlay.selecting = false
 	m.actionPending = true
-	m.editor.Blur()
+	m.composer.editor.Blur()
 	m.status = "Connecting to " + provider.Name + "…"
 	m.activity.Start()
 	work := func() tea.Msg {
@@ -133,7 +133,7 @@ func (m model) updateLogin(event loginEvent) (tea.Model, tea.Cmd) {
 			delegate.Styles.NormalDesc = m.theme().muted.PaddingLeft(2)
 			delegate.Styles.SelectedDesc = m.theme().muted.PaddingLeft(2)
 			m.openSelector(m.loginPrompt.Title, items, delegate)
-			m.selectionKind = "login-storage"
+			m.overlay.selectionKind = "login-storage"
 			m.status = event.notice.Message
 			return m, awaitLogin(event.flow)
 		}
@@ -146,16 +146,16 @@ func (m model) updateLogin(event loginEvent) (tea.Model, tea.Cmd) {
 	m.login.cancel()
 	m.login = nil
 	m.loginPrompt = nil
-	m.selecting = false
+	m.overlay.selecting = false
 	m.actionPending = false
 	if event.err != nil {
 		if errors.Is(event.err, context.Canceled) {
 			m.status = "Login cancelled"
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		m.status = "Login failed · /login to try again"
 		m.lastError = event.err.Error()
-		return m, tea.Batch(m.editor.Focus(), tea.Println(m.errorBlock(event.err.Error())))
+		return m, tea.Batch(m.composer.editor.Focus(), tea.Println(m.errorBlock(event.err.Error())))
 	}
 	m.refreshContext()
 	m.code = 0
@@ -164,7 +164,7 @@ func (m model) updateLogin(event loginEvent) (tea.Model, tea.Cmd) {
 		m.actionPending = true
 		return m, func() tea.Msg { values, err := chooser.ModelChoices(m.ctx); return choicesMsg{values, err} }
 	}
-	return m, m.editor.Focus()
+	return m, m.composer.editor.Focus()
 }
 
 type loginStorageChoice struct{ app.LoginOption }
@@ -178,17 +178,17 @@ func (m model) updateLoginPrompt(message tea.Msg, key tea.KeyPressMsg) (tea.Mode
 	case "esc", "ctrl+c":
 		m.login.cancel()
 		m.loginPrompt = nil
-		m.selecting = false
+		m.overlay.selecting = false
 		m.status = "Cancelling login…"
 		return m, nil
 	case "enter":
-		selected, ok := m.selector.SelectedItem().(loginStorageChoice)
+		selected, ok := m.overlay.selector.SelectedItem().(loginStorageChoice)
 		if !ok {
 			return m, nil
 		}
 		prompt, ctx := m.loginPrompt, m.login.ctx
 		m.loginPrompt = nil
-		m.selecting = false
+		m.overlay.selecting = false
 		if selected.ID == "file" {
 			m.status = "Saving credentials to private local file…"
 		} else {
@@ -203,6 +203,6 @@ func (m model) updateLoginPrompt(message tea.Msg, key tea.KeyPressMsg) (tea.Mode
 		}
 	}
 	var command tea.Cmd
-	m.selector, command = m.selector.Update(message)
+	m.overlay.selector, command = m.overlay.selector.Update(message)
 	return m, command
 }

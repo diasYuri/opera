@@ -6,11 +6,22 @@ import (
 	"os"
 	"strings"
 
+	"charm.land/bubbles/v2/viewport"
 	"charm.land/glamour/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/diasYuri/opera/internal/app"
 )
+
+type conversationModel struct {
+	viewport.Model
+	entries []conversationEntry
+	entryIndexes map[string]int
+	nextMessage uint64
+	committed map[string]bool
+}
+
+func newConversationModel() conversationModel { return conversationModel{Model: viewport.New()} }
 
 type conversationKind string
 
@@ -96,24 +107,24 @@ type eventPayload struct {
 }
 
 func (m *model) appendEntry(entry conversationEntry) int {
-	if m.entryIndexes == nil {
-		m.entryIndexes = make(map[string]int)
+	if m.conversation.entryIndexes == nil {
+		m.conversation.entryIndexes = make(map[string]int)
 	}
-	if index, exists := m.entryIndexes[entry.id]; exists {
-		m.conversationEntries[index] = entry
+	if index, exists := m.conversation.entryIndexes[entry.id]; exists {
+		m.conversation.entries[index] = entry
 		return index
 	}
-	m.entryIndexes[entry.id] = len(m.conversationEntries)
-	m.conversationEntries = append(m.conversationEntries, entry)
-	return len(m.conversationEntries) - 1
+	m.conversation.entryIndexes[entry.id] = len(m.conversation.entries)
+	m.conversation.entries = append(m.conversation.entries, entry)
+	return len(m.conversation.entries) - 1
 }
 
 func (m *model) appendUser(text, label string) {
-	m.nextMessage++
+	m.conversation.nextMessage++
 	if label == "" {
 		label = "You"
 	}
-	m.appendEntry(conversationEntry{id: fmt.Sprintf("user:%d", m.nextMessage), kind: conversationUser, text: text, state: label})
+	m.appendEntry(conversationEntry{id: fmt.Sprintf("user:%d", m.conversation.nextMessage), kind: conversationUser, text: text, state: label})
 	m.refreshConversation()
 }
 
@@ -126,8 +137,8 @@ func (m *model) appendVisualEvent(id string, kind visualEventKind, title, body, 
 
 func (m *model) commitQueuedMessages() {
 	for _, text := range m.queuedMessages {
-		m.nextMessage++
-		m.appendEntry(conversationEntry{id: fmt.Sprintf("user:%d", m.nextMessage), kind: conversationUser, text: text, state: "You"})
+		m.conversation.nextMessage++
+		m.appendEntry(conversationEntry{id: fmt.Sprintf("user:%d", m.conversation.nextMessage), kind: conversationUser, text: text, state: "You"})
 	}
 	m.queuedMessages = nil
 	m.resize()
@@ -135,14 +146,14 @@ func (m *model) commitQueuedMessages() {
 
 func (m *model) refreshConversation() {
 	wasAtBottom := m.conversation.AtBottom()
-	if len(m.conversationEntries) == 0 {
+	if len(m.conversation.entries) == 0 {
 		wasAtBottom = true
 	}
 	m.conversation.SoftWrap = true
 	m.conversation.SetWidth(max(1, m.conversationWidth()))
 	_, noColor := os.LookupEnv("NO_COLOR")
-	for i := range m.conversationEntries {
-		entry := &m.conversationEntries[i]
+	for i := range m.conversation.entries {
+		entry := &m.conversation.entries[i]
 		if entry.kind == conversationAssistant && (entry.rendered == "" || entry.renderedWidth != m.conversationWidth() || entry.renderedDark != m.dark || entry.renderedNoColor != noColor) {
 			entry.rendered = m.renderMarkdown(entry.text)
 			entry.renderedWidth = m.conversationWidth()
@@ -191,10 +202,10 @@ func (m *model) updateConversationEvent(event *app.Event) {
 			if id == ":thinking" {
 				id = "thinking:" + event.RunID
 			}
-			index := m.entryIndexes[id]
+			index := m.conversation.entryIndexes[id]
 			text := payload.ThinkingDelta
-			if _, exists := m.entryIndexes[id]; exists {
-				text = m.conversationEntries[index].text + text
+			if _, exists := m.conversation.entryIndexes[id]; exists {
+				text = m.conversation.entries[index].text + text
 			}
 			m.appendEntry(conversationEntry{id: id, kind: conversationThinking, text: text, state: "Thinking"})
 		}
@@ -352,15 +363,15 @@ func (m *model) updateTypedVisualEvent(event *app.Event, payload eventPayload) (
 }
 
 func (m *model) entry(id string, fallback conversationEntry) conversationEntry {
-	if index, exists := m.entryIndexes[id]; exists {
-		return m.conversationEntries[index]
+	if index, exists := m.conversation.entryIndexes[id]; exists {
+		return m.conversation.entries[index]
 	}
 	return fallback
 }
 
 func (m model) renderConversation() string {
 	var blocks []string
-	for _, entry := range m.conversationEntries {
+	for _, entry := range m.conversation.entries {
 		blocks = append(blocks, m.renderEntry(entry))
 	}
 	return strings.Join(blocks, "\n")

@@ -26,10 +26,10 @@ type completionItem struct {
 }
 
 func (m *model) refreshCompletions() {
-	_, start, end, token := editorToken(m.editor.Value(), m.editor.Line(), m.editor.Column())
+	_, start, end, token := editorToken(m.composer.editor.Value(), m.composer.editor.Line(), m.composer.editor.Column())
 	m.completions = nil
 	m.completionIndex = 0
-	if token == "" || m.editor.HasSelection() {
+	if token == "" || m.composer.editor.HasSelection() {
 		return
 	}
 	if strings.HasPrefix(token, "/") && start == 0 {

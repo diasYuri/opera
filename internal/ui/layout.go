@@ -26,7 +26,7 @@ func newModel(ctx context.Context, service Executor, initial app.Request, noMoti
 	editor.KeyMap.InsertNewline = keys.newline
 	editor.Focus()
 	cwd, _ := os.Getwd()
-	m := model{ctx: ctx, service: service, editor: editor, conversation: viewport.New(), spinner: spinner.New(spinner.WithSpinner(spinner.Line)), keys: keys, workspace: filepath.Base(cwd), workspaceRoot: cwd, noMotion: noMotion, dark: true, systemDark: true, themeMode: "system", status: "Ready", resume: initial, mode: app.ModeDefault, width: 80, height: 24, actionPending: initial.ID != "" || initial.Prompt != ""}
+	m := model{ctx: ctx, service: service, composer: composerModel{editor: editor}, conversation: newConversationModel(), spinner: spinner.New(spinner.WithSpinner(spinner.Line)), keys: keys, workspace: filepath.Base(cwd), workspaceRoot: cwd, noMotion: noMotion, dark: true, systemDark: true, themeMode: "system", status: "Ready", resume: initial, mode: app.ModeDefault, width: 80, height: 24, actionPending: initial.ID != "" || initial.Prompt != ""}
 	if initial.Mode != "" {
 		m.mode = initial.Mode
 	}
@@ -58,51 +58,51 @@ func (m *model) refreshContext() {
 func (m model) contentWidth() int { return max(1, m.width-4) }
 func (m model) viewerHeight() int { return max(1, min(12, m.height-8)) }
 func (m *model) resize() {
-	m.editor.SetWidth(max(1, m.contentWidth()))
+	m.composer.editor.SetWidth(max(1, m.contentWidth()))
 	m.sizeEditor()
 	m.conversation.SetWidth(max(1, m.conversationWidth()))
 	menuHeight := 0
-	if m.selecting {
-		menuHeight = m.selector.Height() + 1
+	if m.overlay.selecting {
+		menuHeight = m.overlay.selector.Height() + 1
 	}
 	if m.approvalForm != nil && m.formKind != "approval" {
 		menuHeight += m.formHeight + 2
 	}
-	if m.selecting {
+	if m.overlay.selecting {
 		rowHeight := 2
-		if m.modelMenu {
+		if m.overlay.modelMenu {
 			rowHeight = 1
 		}
-		height := min(m.viewerHeight(), min(4, len(m.selector.Items()))*rowHeight+2, max(1, m.height-m.editor.Height()-10))
-		m.selector.SetSize(max(1, m.contentWidth()-4), height)
+		height := min(m.viewerHeight(), min(4, len(m.overlay.selector.Items()))*rowHeight+2, max(1, m.height-m.composer.editor.Height()-10))
+		m.overlay.selector.SetSize(max(1, m.contentWidth()-4), height)
 	}
-	if m.panelOpen {
-		m.panel.SetWidth(max(1, m.contentWidth()-4))
-		m.panel.SetHeight(m.viewerHeight())
+	if m.overlay.panelOpen {
+		m.overlay.panel.SetWidth(max(1, m.contentWidth()-4))
+		m.overlay.panel.SetHeight(m.viewerHeight())
 	}
 	if m.approvalForm != nil {
 		height := 5
 		if m.formKind != "approval" {
-			height = min(m.formHeight, max(1, m.height-m.editor.Height()-10))
+			height = min(m.formHeight, max(1, m.height-m.composer.editor.Height()-10))
 		}
 		m.approvalForm.WithWidth(max(1, m.contentWidth()-4)).WithHeight(height)
 	}
-	if !m.panelOpen && m.login == nil {
+	if !m.overlay.panelOpen && m.login == nil {
 		fixedLines := 0
 		for _, part := range m.defaultFixedParts() {
 			fixedLines += strings.Count(part, "\n") + 1
 		}
 		m.conversation.SetHeight(max(1, m.height-1-fixedLines))
 	} else {
-		m.conversation.SetHeight(max(1, m.height-m.editor.Height()-8-m.queuedStackHeight()-m.attachmentStackHeight()-m.extensionReservedHeight()-m.todoListHeight()-m.subagentListHeight()-menuHeight))
+		m.conversation.SetHeight(max(1, m.height-m.composer.editor.Height()-8-m.queuedStackHeight()-m.attachmentStackHeight()-m.extensionReservedHeight()-m.todoListHeight()-m.subagentListHeight()-menuHeight))
 	}
 	m.refreshConversation()
 }
 
 func (m *model) sizeEditor() {
 	width := max(1, m.contentWidth()-2)
-	lines := strings.Count(ansi.Hardwrap(m.editor.Value(), width, true), "\n") + 1
-	m.editor.SetHeight(min(5, max(1, m.height-8), lines))
+	lines := strings.Count(ansi.Hardwrap(m.composer.editor.Value(), width, true), "\n") + 1
+	m.composer.editor.SetHeight(min(5, max(1, m.height-8), lines))
 }
 
 func (m model) sessionLine() string {
@@ -136,12 +136,12 @@ func (m model) banner() string {
 }
 
 func (m *model) openPanel(title, text string) {
-	m.panelTitle = title
-	m.panel = viewport.New(viewport.WithWidth(max(1, m.contentWidth()-4)), viewport.WithHeight(m.viewerHeight()))
-	m.panel.SoftWrap = true
-	m.panel.SetContent(safeText(text))
-	m.panelOpen = true
-	m.editor.Blur()
+	m.overlay.panelTitle = title
+	m.overlay.panel = viewport.New(viewport.WithWidth(max(1, m.contentWidth()-4)), viewport.WithHeight(m.viewerHeight()))
+	m.overlay.panel.SoftWrap = true
+	m.overlay.panel.SetContent(safeText(text))
+	m.overlay.panelOpen = true
+	m.composer.editor.Blur()
 }
 
 func (m model) animate() tea.Cmd {
@@ -348,15 +348,15 @@ func (m model) defaultFixedParts() []string {
 		parts = append(parts, question)
 	}
 	composer := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, false, true, false).BorderForeground(t.border.GetForeground())
-	parts = append(parts, composer.Render(m.editor.View()))
+	parts = append(parts, composer.Render(m.composer.editor.View()))
 	if subagents := m.subagentListView(); subagents != "" {
 		parts = append(parts, subagents)
 	}
-	if m.selecting {
-		if !m.modelMenu && m.selector.Title != "" {
-			parts = append(parts, t.accent.Bold(true).Render(safeText(m.selector.Title)))
+	if m.overlay.selecting {
+		if !m.overlay.modelMenu && m.overlay.selector.Title != "" {
+			parts = append(parts, t.accent.Bold(true).Render(safeText(m.overlay.selector.Title)))
 		}
-		parts = append(parts, m.selector.View(), t.muted.Render("↑↓ scroll · Enter select · Esc close"))
+		parts = append(parts, m.overlay.selector.View(), t.muted.Render("↑↓ scroll · Enter select · Esc close"))
 	}
 	if len(m.completions) > 0 {
 		parts = append(parts, m.completionView())
@@ -378,7 +378,7 @@ func (m model) View() tea.View {
 	if m.login != nil && m.loginPrompt == nil {
 		keys := m.keyBindings()
 		parts = []string{m.header(), t.accent.Bold(true).Render("Connect to " + safeText(m.login.name)), m.statusLine(), t.muted.Render(keyLabel(keys.cancel, "Esc") + " or " + keyLabel(keys.quit, "Ctrl+C") + " cancel · session stays open")}
-	} else if m.panelOpen && m.approvalForm != nil && m.formKind != "approval" {
+	} else if m.overlay.panelOpen && m.approvalForm != nil && m.formKind != "approval" {
 		if header := m.extensionHeader(); header != "" {
 			parts = append(parts, header)
 		}
@@ -389,27 +389,27 @@ func (m model) View() tea.View {
 			parts = append(parts, m.statusLine())
 		}
 		composer := lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, false, true, false).BorderForeground(t.border.GetForeground())
-		parts = append(parts, composer.Render(m.editor.View()))
-		parts = append(parts, t.accent.Bold(true).Render(safeText(m.panelTitle)), m.approvalForm.View())
+		parts = append(parts, composer.Render(m.composer.editor.View()))
+		parts = append(parts, t.accent.Bold(true).Render(safeText(m.overlay.panelTitle)), m.approvalForm.View())
 		keys := m.keyBindings()
 		parts = append(parts, t.muted.Render(keyLabel(keys.submit, "Enter")+" select · "+keyLabel(keys.cancel, "Esc")+" back"))
 		if m.sessionLine() != "" {
 			parts = append(parts, t.muted.Render(ansi.Truncate(m.sessionLine(), width, "…")))
 		}
 		parts = append(parts, t.muted.Render(ansi.Truncate(m.helpLine(), width, "…")))
-	} else if m.panelOpen {
-		title, body := m.panelTitle, m.panel.View()
+	} else if m.overlay.panelOpen {
+		title, body := m.overlay.panelTitle, m.overlay.panel.View()
 		keys := m.keyBindings()
 		hint := "↑↓ scroll · " + keyLabel(keys.cancel, "Esc") + " back"
 		if m.approval != nil {
 			hint = "Esc back · then /approve or /deny · ↑↓ scroll"
 		}
-		if m.selecting {
+		if m.overlay.selecting {
 			hint = "/ filter · type to search · ↑↓ select · " + keyLabel(keys.submit, "Enter") + " open · " + keyLabel(keys.cancel, "Esc") + " back"
 			if m.width < 48 {
 				hint = "/ filter · ↑↓ · Enter · Esc"
 			}
-			title, body = m.selector.Title, m.selector.View()
+			title, body = m.overlay.selector.Title, m.overlay.selector.View()
 		}
 		parts = []string{m.header(), t.accent.Bold(true).Render(title), body, t.muted.Render(hint)}
 		if m.approvalForm != nil {

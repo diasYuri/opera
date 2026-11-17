@@ -13,7 +13,6 @@ import (
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
-	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
@@ -36,10 +35,9 @@ type ImageFollowUp interface {
 type model struct {
 	ctx          context.Context
 	service      Executor
-	editor       textarea.Model
-	selector     list.Model
-	panel        viewport.Model
-	conversation viewport.Model
+	composer     composerModel
+	overlay      overlayModel
+	conversation conversationModel
 	spinner      spinner.Model
 	keys         chatKeyMap
 	approvalForm *huh.Form
@@ -49,20 +47,16 @@ type model struct {
 	workspaceRoot          string
 	provider               string
 	modelName              string
-	panelTitle             string
 	lastError              string
 	runDetails             string
 	text, status, previous string
 	mode                   string
 	imageProtocol          imageProtocol
 	streamBuffer           *strings.Builder
-	conversationEntries    []conversationEntry
 	queuedMessages         []string
 	attachments            []AttachmentPreview
 	pastedImages           []string
 	activeImagePaths       []string
-	entryIndexes           map[string]int
-	nextMessage            uint64
 	runGeneration          uint64
 	currentAssistantID     string
 	todoTasks              []TaskItem
@@ -73,9 +67,6 @@ type model struct {
 	subagentGeneration     uint64
 	newConversationItems   bool
 	toolDetailsExpanded    bool
-	history                []string
-	historyIndex           int
-	committed              map[string]bool
 
 	stream        *app.Execution
 	approval      *app.Approval
@@ -87,9 +78,6 @@ type model struct {
 	retryPrevious                      bool
 	loginPrompt                        *app.LoginPrompt
 	login                              *loginFlow
-	selectionKind                      string
-	modelMenu                          bool
-	selecting, panelOpen               bool
 	formKind, formKey                  string
 	formValue                          string
 	formHeight                         int
@@ -225,7 +213,7 @@ func (m model) Init() tea.Cmd {
 	if m.resume.ID != "" || m.resume.Prompt != "" {
 		commands = append(commands, m.start(m.resume))
 	} else {
-		commands = append(commands, m.editor.Focus())
+		commands = append(commands, m.composer.editor.Focus())
 	}
 	sequence := tea.Sequence(commands...)
 	if len(background) == 0 {
@@ -248,7 +236,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.lastError = msg.err.Error()
 			m.status = summarizeError(msg.err.Error())
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		m.treeSelection = msg.tree
 		items := make([]list.Item, 0, len(msg.values))
@@ -257,7 +245,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if len(items) == 0 {
 			m.status = "No sessions are available for this workspace"
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		kind, title := "session-resume", "Resume a session"
 		if msg.tree {
@@ -267,14 +255,14 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			title += " · " + m.workspace
 		}
 		m.openSelector(title, items, m.modelDelegate())
-		m.selectionKind = kind
+		m.overlay.selectionKind = kind
 		return m, nil
 	case sessionViewMsg:
 		m.actionPending = false
 		if msg.err != nil {
 			m.lastError = msg.err.Error()
 			m.status = summarizeError(msg.err.Error())
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		m.loadSessionView(msg.value)
 		switch msg.mode {
@@ -306,13 +294,13 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.resume = app.Request{}
 			m.status = fmt.Sprintf("Viewing %s · checkpoint %d", msg.value.Summary.SessionID, msg.value.Summary.Checkpoint)
 		}
-		return m, m.editor.Focus()
+		return m, m.composer.editor.Focus()
 	case branchMsg:
 		m.actionPending = false
 		if msg.err != nil {
 			m.lastError = msg.err.Error()
 			m.status = summarizeError(msg.err.Error())
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		m.previous = msg.id
 		return m, m.loadSession(msg.id, 0, "branch-ready")
@@ -327,7 +315,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				m.status += " · check provider credentials and endpoint settings"
 			}
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		items := make([]list.Item, 0, len(msg.values))
 		for _, value := range msg.values {
@@ -335,15 +323,15 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if len(items) == 0 {
 			m.status = "No models available · connect a provider with /login or check credentials"
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		delegate := m.modelDelegate()
 		delegate.ShowDescription = false
 		delegate.SetHeight(1)
 		m.openSelector("", items, delegate)
-		m.modelMenu = true
-		m.selectionKind = "model-menu"
-		m.selector.SetSize(max(1, m.contentWidth()-4), min(m.viewerHeight(), len(items)))
+		m.overlay.modelMenu = true
+		m.overlay.selectionKind = "model-menu"
+		m.overlay.selector.SetSize(max(1, m.contentWidth()-4), min(m.viewerHeight(), len(items)))
 		m.resize()
 		return m, nil
 	case modelSelectionMsg:
@@ -351,19 +339,19 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.lastError = msg.err.Error()
 			m.status = summarizeError(msg.err.Error())
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		m.refreshContext()
 		m.lastError = ""
 		m.status = "Model selected"
-		return m, m.editor.Focus()
+		return m, m.composer.editor.Focus()
 	case settingResultMsg:
 		m.actionPending = false
 		if msg.err != nil {
 			m.lastError = msg.err.Error()
 			m.status = summarizeError(msg.err.Error())
 			m.resize()
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		m.refreshContext()
 		if msg.key == "ui.theme" {
@@ -375,9 +363,9 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.lastError = ""
 		m.resize()
 		if msg.key == "context.add" || msg.key == "context.remove" {
-			return m, tea.Batch(m.editor.Focus(), m.loadAttachmentPreviews())
+			return m, tea.Batch(m.composer.editor.Focus(), m.loadAttachmentPreviews())
 		}
-		return m, m.editor.Focus()
+		return m, m.composer.editor.Focus()
 	case settingsMsg:
 		m.actionPending = false
 		items := make([]list.Item, 0, len(msg.values))
@@ -385,7 +373,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			items = append(items, settingChoice{value})
 		}
 		m.openSelector("Workspace settings", items, m.modelDelegate())
-		m.selectionKind = "settings"
+		m.overlay.selectionKind = "settings"
 		return m, nil
 	case visualExtensionsMsg:
 		if msg.err != nil {
@@ -413,7 +401,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.status = summarizeError(msg.err.Error())
 			m.lastError = msg.err.Error()
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		items := make([]list.Item, 0, len(msg.values))
 		for _, v := range msg.values {
@@ -421,10 +409,10 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if len(items) == 0 {
 			m.status = "No models are available for this account · /login to reconnect"
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		m.openSelector("Models", items, m.modelDelegate())
-		m.selectionKind = "model"
+		m.overlay.selectionKind = "model"
 
 		return m, nil
 	case panelMsg:
@@ -442,8 +430,8 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case shellResultMsg:
 		m.actionPending = false
-		m.nextMessage++
-		id := fmt.Sprintf("shell:%d", m.nextMessage)
+		m.conversation.nextMessage++
+		id := fmt.Sprintf("shell:%d", m.conversation.nextMessage)
 		output := msg.output
 		state := "Completed"
 		if msg.err != nil {
@@ -461,13 +449,13 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.appendEntry(conversationEntry{id: id, kind: conversationTool, toolID: id, toolName: "bash", arguments: msg.command, text: output, state: state, failed: msg.err != nil})
 		m.refreshConversation()
 		m.resize()
-		return m, m.editor.Focus()
+		return m, m.composer.editor.Focus()
 	case sessionLifecycleMsg:
 		m.actionPending = false
 		if msg.err != nil {
 			m.lastError = msg.err.Error()
 			m.status = summarizeError(msg.err.Error())
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		m.clearConversation()
 		if msg.command == "/fork" {
@@ -477,7 +465,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.loadSession(msg.id, 0, "branch-ready")
 		}
 		m.status = "Started a new session"
-		return m, m.editor.Focus()
+		return m, m.composer.editor.Focus()
 	case started:
 		m.actionPending = false
 		m.stream = msg.execution
@@ -634,12 +622,12 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.text = ""
 			m.streamBuffer = nil
 			commands := []tea.Cmd{}
-			if m.committed == nil {
-				m.committed = map[string]bool{}
+			if m.conversation.committed == nil {
+				m.conversation.committed = map[string]bool{}
 			}
 			identity := fmt.Sprintf("%s:%d", result.ID, result.Checkpoint)
-			if !m.committed[identity] {
-				m.committed[identity] = true
+			if !m.conversation.committed[identity] {
+				m.conversation.committed[identity] = true
 				if text != "" {
 					id := m.currentAssistantID
 					if id == "" {
@@ -710,55 +698,55 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if nextModel, cmd, handled := m.updateQuestionKey(msg); handled {
 			return nextModel, cmd
 		}
-		if m.selecting {
+		if m.overlay.selecting {
 			switch {
 			case keyMatches(msg, keys.cancel):
-				m.selecting = false
-				m.modelMenu = false
-				m.selectionKind = ""
+				m.overlay.selecting = false
+				m.overlay.modelMenu = false
+				m.overlay.selectionKind = ""
 				m.resize()
-				return m, m.editor.Focus()
+				return m, m.composer.editor.Focus()
 			case keyMatches(msg, keys.quit):
 				return m, tea.Quit
 			case keyMatches(msg, keys.submit):
 				return m.selectCurrent()
 			}
 			var cmd tea.Cmd
-			m.selector, cmd = m.selector.Update(message)
+			m.overlay.selector, cmd = m.overlay.selector.Update(message)
 			return m, cmd
 		}
-		if m.panelOpen {
+		if m.overlay.panelOpen {
 			if keyMatches(msg, keys.quit) {
 				if m.approvalForm != nil {
 					m.approvalForm = nil
-					m.panelOpen = false
+					m.overlay.panelOpen = false
 					m.formKind = ""
 					m.formHeight = 0
 					m.resize()
-					return m, m.editor.Focus()
+					return m, m.composer.editor.Focus()
 				}
 				if m.stream != nil {
-					m.panelOpen = false
+					m.overlay.panelOpen = false
 					m.status = "Cancelling execution…"
-					m.editor.Focus()
+					m.composer.editor.Focus()
 					return m, func() tea.Msg { m.stream.Cancel(); return nil }
 				}
 				return m, tea.Quit
 			}
 			if keyMatches(msg, keys.cancel) {
-				m.panelOpen = false
+				m.overlay.panelOpen = false
 				m.approvalForm = nil
 				m.formKind = ""
 				m.formHeight = 0
 				m.resize()
-				return m, m.editor.Focus()
+				return m, m.composer.editor.Focus()
 			}
 			if keyMatches(msg, keys.pageUp) {
-				m.panel.PageUp()
+				m.overlay.panel.PageUp()
 				return m, nil
 			}
 			if keyMatches(msg, keys.pageDown) {
-				m.panel.PageDown()
+				m.overlay.panel.PageDown()
 				return m, nil
 			}
 			if m.approvalForm != nil {
@@ -769,19 +757,19 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				if form.State == huh.StateAborted {
 					m.approvalForm = nil
-					m.panelOpen = false
+					m.overlay.panelOpen = false
 					m.formKind = ""
 					m.formHeight = 0
 					m.resize()
-					return m, m.editor.Focus()
+					return m, m.composer.editor.Focus()
 				}
 				return m, cmd
 			}
 			var cmd tea.Cmd
-			m.panel, cmd = m.panel.Update(message)
+			m.overlay.panel, cmd = m.overlay.panel.Update(message)
 			return m, cmd
 		}
-		if keyMatches(msg, keys.submit) && strings.TrimSpace(m.editor.Value()) == "/login" {
+		if keyMatches(msg, keys.submit) && strings.TrimSpace(m.composer.editor.Value()) == "/login" {
 			m.completions = nil
 		}
 		if len(m.completions) > 0 {
@@ -838,19 +826,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.newConversationItems = false
 			return m, nil
 		case keyMatches(msg, keys.historyPrevious), keyMatches(msg, keys.historyNext):
-			if len(m.history) == 0 {
-				return m, nil
-			}
-			if keyMatches(msg, keys.historyPrevious) {
-				m.historyIndex = max(0, m.historyIndex-1)
-			} else {
-				m.historyIndex = min(len(m.history), m.historyIndex+1)
-			}
-			if m.historyIndex == len(m.history) {
-				m.editor.Reset()
-			} else {
-				m.editor.SetValue(m.history[m.historyIndex])
-			}
+			m.composer.navigateHistory(keyMatches(msg, keys.historyPrevious))
 			m.sizeEditor()
 			return m, nil
 		case keyMatches(msg, keys.quit):
@@ -860,7 +836,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, tea.Quit
 		case keyMatches(msg, keys.exit):
-			if m.editor.Value() == "" {
+			if m.composer.editor.Value() == "" {
 				if m.stream != nil {
 					m.quitting = true
 					m.status = "Cancelling execution…"
@@ -872,29 +848,28 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			if m.actionPending {
 				return m, nil
 			}
-			text := strings.TrimSpace(m.editor.Value())
+			text := strings.TrimSpace(m.composer.editor.Value())
 			if text == "" {
 				return m, nil
 			}
-			m.editor.Reset()
+			m.composer.editor.Reset()
 			m.sizeEditor()
-			m.history = append(m.history, text)
-			m.historyIndex = len(m.history)
+			m.composer.remember(text)
 			commandName, _, _ := strings.Cut(text, " ")
 			if strings.HasPrefix(text, "!") {
 				command := strings.TrimSpace(strings.TrimPrefix(text, "!"))
 				if command == "" {
 					m.status = "Usage: !<bash command>"
-					return m, m.editor.Focus()
+					return m, m.composer.editor.Focus()
 				}
 				if m.stream != nil || m.approval != nil {
 					m.status = "Resolve the active execution before running a shell command"
-					return m, m.editor.Focus()
+					return m, m.composer.editor.Focus()
 				}
 				shell, ok := m.service.(ShellExecutor)
 				if !ok {
 					m.status = "Shell commands are unavailable in this session"
-					return m, m.editor.Focus()
+					return m, m.composer.editor.Focus()
 				}
 				m.appendUser(text, "You")
 				m.actionPending = true
@@ -1149,7 +1124,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	var command tea.Cmd
-	m.editor, command = m.editor.Update(message)
+	m.composer.editor, command = m.composer.editor.Update(message)
 	m.sizeEditor()
 	m.refreshCompletions()
 	return m, command
@@ -1160,7 +1135,7 @@ func (m *model) acceptCompletion() {
 		return
 	}
 	completion := m.completions[m.completionIndex]
-	applyCompletion(&m.editor, completion)
+	applyCompletion(&m.composer.editor, completion)
 	m.completions = nil
 	m.completionIndex = 0
 	m.sizeEditor()
@@ -1193,7 +1168,7 @@ func (m *model) openModePicker() {
 		items = append(items, modeChoice{mode: mode})
 	}
 	m.openSelector("Agent mode", items, m.modelDelegate())
-	m.selectionKind = "agent-mode"
+	m.overlay.selectionKind = "agent-mode"
 }
 
 func (m *model) openSessionPicker(tree bool) tea.Cmd {
@@ -1223,7 +1198,7 @@ func (m *model) openSettingsPicker() tea.Cmd {
 
 func (m *model) openMessagePicker() {
 	items := make([]list.Item, 0)
-	for index, entry := range m.conversationEntries {
+	for index, entry := range m.conversation.entries {
 		if entry.kind == conversationUser {
 			items = append(items, messageChoice{index: index, entry: entry})
 		}
@@ -1233,7 +1208,7 @@ func (m *model) openMessagePicker() {
 		return
 	}
 	m.openSelector("Find a user message", items, m.modelDelegate())
-	m.selectionKind = "user-messages"
+	m.overlay.selectionKind = "user-messages"
 }
 
 func (m *model) loadSessionView(view SessionView) {
@@ -1242,8 +1217,8 @@ func (m *model) loadSessionView(view SessionView) {
 	m.lastError = ""
 	m.runDetails = fmt.Sprintf("Session: %s\nRun: %s\nState: %s\nCheckpoint: %d", view.Summary.SessionID, view.Summary.ID, view.Summary.State, view.Summary.Checkpoint)
 	m.newConversationItems = false
-	m.conversationEntries = nil
-	m.entryIndexes = make(map[string]int)
+	m.conversation.entries = nil
+	m.conversation.entryIndexes = make(map[string]int)
 	m.queuedMessages = nil
 	m.text = ""
 	m.streamBuffer = nil
@@ -1268,7 +1243,7 @@ func (m *model) loadSession(id string, version uint64, mode string) tea.Cmd {
 		m.status = "Session navigation is unavailable in this chat"
 		return nil
 	}
-	m.selecting = false
+	m.overlay.selecting = false
 	m.actionPending = true
 	m.status = "Loading saved conversation…"
 	return func() tea.Msg {
@@ -1287,8 +1262,8 @@ func (m *model) clearConversation() {
 	m.runDetails = ""
 	m.text = ""
 	m.streamBuffer = nil
-	m.conversationEntries = nil
-	m.entryIndexes = make(map[string]int)
+	m.conversation.entries = nil
+	m.conversation.entryIndexes = make(map[string]int)
 	m.queuedMessages = nil
 	m.currentAssistantID = ""
 	m.lastSequence = 0
@@ -1300,10 +1275,10 @@ func (m *model) clearConversation() {
 	m.subagentRunID = ""
 	m.subagentGeneration++
 	m.selectedSession = nil
-	m.panelOpen = false
-	m.panelTitle = ""
+	m.overlay.panelOpen = false
+	m.overlay.panelTitle = ""
 	m.newConversationItems = false
-	m.editor.Reset()
+	m.composer.editor.Reset()
 	m.refreshContext()
 	m.resize()
 }
@@ -1325,7 +1300,7 @@ func (m *model) openSessionActions(summary SessionSummary) {
 		items = append(items, sessionActionChoice{key: "checkpoints", title: "Browse checkpoints", description: "Select a saved checkpoint to inspect or branch from"})
 	}
 	m.openSelector("Session · "+summary.Title, items, m.modelDelegate())
-	m.selectionKind = "session-actions"
+	m.overlay.selectionKind = "session-actions"
 }
 
 func (m *model) openCheckpointPicker(summary SessionSummary) {
@@ -1338,7 +1313,7 @@ func (m *model) openCheckpointPicker(summary SessionSummary) {
 		return
 	}
 	m.openSelector("Checkpoints · "+summary.SessionID, items, m.modelDelegate())
-	m.selectionKind = "checkpoint-list"
+	m.overlay.selectionKind = "checkpoint-list"
 }
 
 func (m *model) openBranchConfirmation(summary SessionSummary, version uint64) tea.Cmd {
@@ -1351,9 +1326,9 @@ func (m *model) openBranchConfirmation(summary SessionSummary, version uint64) t
 }
 
 func (m *model) openForm(title string, form *huh.Form, kind, keyName, value string) tea.Cmd {
-	m.panelTitle = title
-	m.panel = viewport.New(viewport.WithWidth(max(1, m.contentWidth()-4)), viewport.WithHeight(m.viewerHeight()))
-	m.panel.SetContent("")
+	m.overlay.panelTitle = title
+	m.overlay.panel = viewport.New(viewport.WithWidth(max(1, m.contentWidth()-4)), viewport.WithHeight(m.viewerHeight()))
+	m.overlay.panel.SetContent("")
 	m.formHeight = m.viewerHeight()
 	switch kind {
 	case "thinking":
@@ -1367,9 +1342,9 @@ func (m *model) openForm(title string, form *huh.Form, kind, keyName, value stri
 	}
 	m.approvalForm = form.WithWidth(max(1, m.contentWidth()-4)).WithHeight(m.formHeight).WithTheme(approvalTheme(m.dark))
 	m.formKind, m.formKey, m.formValue = kind, keyName, value
-	m.panelOpen = true
-	m.selecting = false
-	m.editor.Blur()
+	m.overlay.panelOpen = true
+	m.overlay.selecting = false
+	m.composer.editor.Blur()
 	m.resize()
 	return m.approvalForm.Init()
 }
@@ -1404,7 +1379,7 @@ func (m *model) openSetting(setting SettingItem) tea.Cmd {
 			items = append(items, option)
 		}
 		m.openSelector("Interface theme", items, m.modelDelegate())
-		m.selectionKind = "theme"
+		m.overlay.selectionKind = "theme"
 		return nil
 	case "policy":
 		options := []huh.Option[string]{
@@ -1426,7 +1401,7 @@ func (m *model) openModelPicker() tea.Cmd {
 	if ok {
 		m.actionPending = true
 		m.status = "Loading available models…"
-		m.editor.Blur()
+		m.composer.editor.Blur()
 		return func() tea.Msg {
 			type catalogResult struct {
 				index  int
@@ -1490,7 +1465,7 @@ func (m *model) openContextInput() tea.Cmd {
 func (m model) finishForm() (tea.Model, tea.Cmd) {
 	form, kind, keyName, value := m.approvalForm, m.formKind, m.formKey, m.formValue
 	m.approvalForm = nil
-	m.panelOpen = false
+	m.overlay.panelOpen = false
 	m.formKind, m.formKey, m.formValue = "", "", ""
 	m.formHeight = 0
 	m.resize()
@@ -1506,7 +1481,7 @@ func (m model) finishForm() (tea.Model, tea.Cmd) {
 		selected := form.GetString("value")
 		if selected == value {
 			m.status = "Policy is unchanged"
-			return m, m.editor.Focus()
+			return m, m.composer.editor.Focus()
 		}
 		return m, m.openPolicyConfirmation(selected)
 	case "policy-confirm":
@@ -1520,7 +1495,7 @@ func (m model) finishForm() (tea.Model, tea.Cmd) {
 			return m, m.branch(*m.selectedSession, m.selectedCheckpoint)
 		}
 	}
-	return m, m.editor.Focus()
+	return m, m.composer.editor.Focus()
 }
 
 func (m *model) applySetting(keyName, value string) tea.Cmd {
@@ -1552,17 +1527,17 @@ func (m *model) branch(summary SessionSummary, version uint64) tea.Cmd {
 }
 
 func (m model) selectCurrent() (tea.Model, tea.Cmd) {
-	item := m.selector.SelectedItem()
-	kind := m.selectionKind
-	m.selecting = false
-	m.modelMenu = false
-	m.selectionKind = ""
+	item := m.overlay.selector.SelectedItem()
+	kind := m.overlay.selectionKind
+	m.overlay.selecting = false
+	m.overlay.modelMenu = false
+	m.overlay.selectionKind = ""
 	m.resize()
 	switch selected := item.(type) {
 	case loginChoice:
 		return m, m.beginLogin(selected)
 	case choice:
-		m.editor.Focus()
+		m.composer.editor.Focus()
 		if commander, ok := m.service.(Commander); ok {
 			m.actionPending = true
 			return m, func() tea.Msg {
@@ -1572,7 +1547,7 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 		}
 	case modeChoice:
 		if kind == "agent-mode" {
-			m.editor.Focus()
+			m.composer.editor.Focus()
 			if err := m.selectMode(selected.mode.ID); err != nil {
 				m.status = err.Error()
 			}
@@ -1582,7 +1557,7 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 		if providers, ok := m.service.(ProviderModelChooser); ok {
 			m.selectedProvider = selected.ID
 			m.actionPending = true
-			m.editor.Blur()
+			m.composer.editor.Blur()
 			return m, func() tea.Msg {
 				values, err := providers.ModelCatalog(m.ctx, selected.ID)
 				return modelCatalogMsg{provider: selected.ID, values: values, err: err}
@@ -1591,7 +1566,7 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 	case modelChoice:
 		if commander, ok := m.service.(Commander); ok {
 			m.actionPending = true
-			m.editor.Blur()
+			m.composer.editor.Blur()
 			command := "/model " + selected.Provider + " " + selected.ID
 			return m, func() tea.Msg {
 				_, err := commander.Command(m.ctx, command)
@@ -1644,11 +1619,11 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 			sessionActionChoice{key: "checkpoint-branch", title: "Create branch from this checkpoint", description: fmt.Sprintf("Create a new session based on run %s at checkpoint %d", selected.ID, selected.Version)},
 		}
 		m.openSelector(fmt.Sprintf("Checkpoint %d", selected.Version), items, m.modelDelegate())
-		m.selectionKind = "checkpoint-actions"
+		m.overlay.selectionKind = "checkpoint-actions"
 		return m, nil
 	case messageChoice:
 		m.jumpToEntry(selected.index)
-		return m, m.editor.Focus()
+		return m, m.composer.editor.Focus()
 	case settingChoice:
 		if strings.HasPrefix(selected.Key, "context.remove:") {
 			return m, m.applySetting("context.remove", strings.TrimPrefix(selected.Key, "context.remove:"))
@@ -1657,18 +1632,18 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 	case themeChoice:
 		return m, m.applySetting("ui.theme", selected.value)
 	}
-	m.editor.Focus()
+	m.composer.editor.Focus()
 	return m, nil
 }
 
 func (m *model) jumpToEntry(index int) {
-	if index < 0 || index >= len(m.conversationEntries) {
+	if index < 0 || index >= len(m.conversation.entries) {
 		return
 	}
 	offset := 0
 	width := max(1, m.conversationWidth())
 	for i := 0; i < index; i++ {
-		wrapped := ansi.Hardwrap(m.renderEntry(m.conversationEntries[i]), width, true)
+		wrapped := ansi.Hardwrap(m.renderEntry(m.conversation.entries[i]), width, true)
 		offset += strings.Count(wrapped, "\n") + 1
 	}
 	m.conversation.SetYOffset(offset)
@@ -1687,12 +1662,12 @@ func approvalText(view *app.Approval) string {
 }
 
 func (m *model) openApproval(view *app.Approval) tea.Cmd {
-	m.panelTitle = "Review operation"
-	m.panel = viewport.New(viewport.WithWidth(max(1, m.contentWidth()-4)), viewport.WithHeight(m.viewerHeight()))
-	m.panel.SoftWrap = true
-	m.panel.SetContent(approvalPanelContent(view, m.contentWidth()-4, m.theme()))
-	m.panelOpen = true
-	m.editor.Blur()
+	m.overlay.panelTitle = "Review operation"
+	m.overlay.panel = viewport.New(viewport.WithWidth(max(1, m.contentWidth()-4)), viewport.WithHeight(m.viewerHeight()))
+	m.overlay.panel.SoftWrap = true
+	m.overlay.panel.SetContent(approvalPanelContent(view, m.contentWidth()-4, m.theme()))
+	m.overlay.panelOpen = true
+	m.composer.editor.Blur()
 	decision := huh.NewSelect[string]().
 		Key("decision").
 		Title("Operation decision").
@@ -1720,7 +1695,7 @@ func (m *model) resolveApproval(allow bool) tea.Cmd {
 	}
 	m.approval = nil
 	m.approvalForm = nil
-	m.panelOpen = false
+	m.overlay.panelOpen = false
 	m.formKind = ""
 	m.actionPending = true
 	if allow {
@@ -1728,7 +1703,7 @@ func (m *model) resolveApproval(allow bool) tea.Cmd {
 	} else {
 		m.status = "Approval denied · recording decision"
 	}
-	return tea.Batch(m.editor.Focus(), m.start(request))
+	return tea.Batch(m.composer.editor.Focus(), m.start(request))
 }
 
 func approvalPanelContent(view *app.Approval, width int, t palette) string {

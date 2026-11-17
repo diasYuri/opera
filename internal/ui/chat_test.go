@@ -15,7 +15,7 @@ import (
 
 func TestInlineViewKeepsCompletedConversationAndStaysBounded(t *testing.T) {
 	streamText := strings.Repeat("é界", 50000)
-	m := model{editor: textarea.New(), text: streamText, width: 40, height: 12}
+	m := model{composer: composerModel{editor: textarea.New()}, text: streamText, width: 40, height: 12}
 	view := m.View()
 	if view.AltScreen || strings.Count(view.Content, "\n") > 12 {
 		t.Fatal("inline dynamic view exceeded terminal height or entered alternate screen")
@@ -28,7 +28,7 @@ func TestInlineViewKeepsCompletedConversationAndStaysBounded(t *testing.T) {
 	result := app.Result{ID: "run", Text: "SCROLLBACK_ONLY_MARKER", State: "completed"}
 	next, command := m.Update(updateMsg{update: app.Update{Result: &result}, open: true})
 	m = next.(model)
-	if m.text != "" || command != nil || len(m.conversationEntries) != 1 || m.conversationEntries[0].text != streamText {
+	if m.text != "" || command != nil || len(m.conversation.entries) != 1 || m.conversation.entries[0].text != streamText {
 		t.Fatal("completed assistant message was not retained in the conversation viewport ledger")
 	}
 }
@@ -130,7 +130,7 @@ func TestSessionResumeBranchAndSettingsActions(t *testing.T) {
 
 	resumeModel := newModel(ctx, e, app.Request{}, true)
 	resumeModel.openSelector("Resume a session", []list.Item{sessionChoice{e.summary}}, resumeModel.modelDelegate())
-	resumeModel.selectionKind = "session-resume"
+	resumeModel.overlay.selectionKind = "session-resume"
 	selected, command := resumeModel.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if command == nil {
 		t.Fatal("keyboard selection of a saved session did not schedule a read")
@@ -175,30 +175,30 @@ func TestSessionResumeBranchAndSettingsActions(t *testing.T) {
 func TestPasteHistoryAndCheckpointCommitIdentity(t *testing.T) {
 	editor := textarea.New()
 	editor.Focus()
-	m := model{editor: editor, width: 60, height: 16}
+	m := model{composer: composerModel{editor: editor}, width: 60, height: 16}
 	next, _ := m.Update(tea.PasteMsg{Content: "first\n/approve\n界"})
 	m = next.(model)
-	if m.stream != nil || !strings.Contains(m.editor.Value(), "/approve") {
+	if m.stream != nil || !strings.Contains(m.composer.editor.Value(), "/approve") {
 		t.Fatal("paste executed or lost text")
 	}
-	m.history = []string{"old", "new"}
-	m.historyIndex = 2
+	m.composer.history = []string{"old", "new"}
+	m.composer.historyIndex = 2
 	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModAlt})
 	m = next.(model)
-	if m.editor.Value() != "new" {
-		t.Fatal("history navigation", m.editor.Value())
+	if m.composer.editor.Value() != "new" {
+		t.Fatal("history navigation", m.composer.editor.Value())
 	}
 	for _, checkpoint := range []uint64{1, 2} {
 		result := app.Result{ID: "same-run", Checkpoint: checkpoint, Text: "block"}
 		next, _ = m.Update(updateMsg{update: app.Update{Result: &result}, open: true})
 		m = next.(model)
 	}
-	if len(m.committed) != 2 {
+	if len(m.conversation.committed) != 2 {
 		t.Fatal("approval continuation suppressed a later response")
 	}
 	next, _ = m.Update(updateMsg{update: app.Update{Result: &app.Result{ID: "same-run", Checkpoint: 2, Text: "block"}}, open: true})
 	m = next.(model)
-	if len(m.committed) != 2 {
+	if len(m.conversation.committed) != 2 {
 		t.Fatal("replay duplicated checkpoint identity")
 	}
 }

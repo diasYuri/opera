@@ -19,7 +19,7 @@ func TestLayoutFitsTerminalAcrossStates(t *testing.T) {
 				m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
 				updated, _ := m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 				m = updated.(model)
-				m.editor.SetValue("a multiline\nmessage 界🙂")
+				m.composer.editor.SetValue("a multiline\nmessage 界🙂")
 				m.sizeEditor()
 				switch state {
 				case "streaming":
@@ -79,15 +79,15 @@ func TestErrorSummaryKeepsDiagnosticsAndCommitsOnce(t *testing.T) {
 	if duplicate != nil {
 		t.Fatal("replayed result duplicated the error block")
 	}
-	m.editor.SetValue("/details")
+	m.composer.editor.SetValue("/details")
 	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(model)
-	if !m.panelOpen || !strings.Contains(m.panel.GetContent(), "POST") {
+	if !m.overlay.panelOpen || !strings.Contains(m.overlay.panel.GetContent(), "POST") {
 		t.Fatal("raw diagnostics not inspectable")
 	}
 	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = updated.(model)
-	if m.panelOpen || !m.editor.Focused() {
+	if m.overlay.panelOpen || !m.composer.editor.Focused() {
 		t.Fatal("Escape did not restore composer focus")
 	}
 }
@@ -109,7 +109,7 @@ func TestNoColorCoversBannerMessagesAndViewers(t *testing.T) {
 
 func TestActivityStopsAtIdleAndWithNoMotion(t *testing.T) {
 	idle := newModel(context.Background(), terminalExecutor{}, app.Request{}, false)
-	if idle.editor.Styles().Cursor.Blink || idle.editor.Focus() != nil {
+	if idle.composer.editor.Styles().Cursor.Blink || idle.composer.editor.Focus() != nil {
 		t.Fatal("idle cursor scheduled a blink timer")
 	}
 	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, false)
@@ -140,17 +140,17 @@ func TestActivityStopsAtIdleAndWithNoMotion(t *testing.T) {
 
 func TestComposerGrowsForPasteAndShrinksAfterSend(t *testing.T) {
 	m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
-	if m.editor.ShowLineNumbers || m.editor.Height() != 1 {
+	if m.composer.editor.ShowLineNumbers || m.composer.editor.Height() != 1 {
 		t.Fatal("composer should start with a single plain line")
 	}
 	updated, _ := m.Update(tea.PasteMsg{Content: "one\ntwo\nthree"})
 	m = updated.(model)
-	if m.editor.Height() != 3 || m.actionPending {
+	if m.composer.editor.Height() != 3 || m.actionPending {
 		t.Fatal("paste did not grow composer safely")
 	}
 	updated, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = updated.(model)
-	if m.editor.Height() != 1 || !m.actionPending {
+	if m.composer.editor.Height() != 1 || !m.actionPending {
 		t.Fatal("send did not reset composer")
 	}
 }
@@ -162,7 +162,7 @@ func TestCompletionsAppearBelowComposer(t *testing.T) {
 			m := newModel(context.Background(), terminalExecutor{}, app.Request{}, true)
 			m.width = width
 			m.resize()
-			m.editor.SetValue("/")
+			m.composer.editor.SetValue("/")
 			m.refreshCompletions()
 			if len(m.completions) == 0 {
 				t.Fatal("expected slash command suggestions")

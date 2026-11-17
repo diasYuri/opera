@@ -80,7 +80,7 @@ func (m *model) styleEditor() {
 			styles.Cursor.Color = lipgloss.Color("75")
 		}
 	}
-	m.editor.SetStyles(styles)
+	m.composer.editor.SetStyles(styles)
 }
 
 func (m model) modelDelegate() list.DefaultDelegate {
