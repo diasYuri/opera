@@ -90,7 +90,7 @@ func (m *model) resize() {
 		m.approvalForm.WithWidth(max(1, m.contentWidth()-4)).WithHeight(height)
 	}
 	if !m.overlay.panelOpen && m.login == nil {
-		m.conversation.SetHeight(max(0, m.height-m.historyTop()-blockRows(m.defaultFixedParts())))
+		m.conversation.SetHeight(max(0, m.height-m.historyTop()-blockRows(m.defaultFixedParts())-historyComposerGap()))
 	} else {
 		m.conversation.SetHeight(max(0, m.height-m.composer.editor.Height()-8-m.queuedStackHeight()-m.attachmentStackHeight()-m.extensionReservedHeight()-m.todoListHeight()-m.subagentListHeight()-menuHeight))
 	}
@@ -458,6 +458,9 @@ func (m model) View() tea.View {
 		if m.conversation.Height() > 0 {
 			parts = append(parts, m.conversation.View())
 		}
+		if m.conversation.Height() > 0 && len(m.defaultFixedParts()) > 0 {
+			parts = append(parts, "")
+		}
 		parts = append(parts, m.defaultFixedParts()...)
 	}
 	// A terminal can shrink below the minimum useful editor. Clip each dimension
@@ -573,3 +576,6 @@ func fitComposerParts(parts []string, editor, budget int) []string {
 	}
 	return result
 }
+
+// Keep a single blank terminal row between scrollable history and fixed controls.
+func historyComposerGap() int { return 1 }

@@ -273,7 +273,7 @@ func TestHistoryResizeAndStreamingPreserveReadingPosition(t *testing.T) {
 	if m.conversation.YOffset() != offset || m.composer.editor.Height() != 3 || !m.composer.editor.Focused() {
 		t.Fatal("editing changed history or focus")
 	}
-	if m.historyTop()+m.conversation.Height()+blockRows(m.defaultFixedParts()) != m.height {
+	if m.historyTop()+m.conversation.Height()+historyComposerGap()+blockRows(m.defaultFixedParts()) != m.height {
 		t.Fatal("regions do not fill viewport")
 	}
 	next, _ = m.Update(tea.MouseWheelMsg{Y: m.height - 1, Button: tea.MouseWheelDown})
