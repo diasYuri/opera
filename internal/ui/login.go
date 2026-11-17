@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
 	"github.com/diasYuri/opera/internal/app"
 )
 
@@ -122,6 +124,18 @@ func (m model) updateLogin(event loginEvent) (tea.Model, tea.Cmd) {
 		}
 		if event.notice.Prompt != nil {
 			m.loginPrompt = event.notice.Prompt
+			if m.loginPrompt.Kind == "secret" {
+				input := huh.NewInput().Key("value").Title(m.loginPrompt.Message).Placeholder(m.loginPrompt.Placeholder).EchoMode(huh.EchoModePassword).Validate(func(value string) error {
+					if strings.TrimSpace(value) == "" {
+						return errors.New("a value is required")
+					}
+					return nil
+				})
+				form := huh.NewForm(huh.NewGroup(input)).WithShowHelp(true)
+				cmd := m.openForm(m.loginPrompt.Title, form, "login-secret", "", "")
+				m.status = event.notice.Message
+				return m, tea.Batch(awaitLogin(event.flow), cmd)
+			}
 			items := make([]list.Item, 0, len(m.loginPrompt.Options))
 			for _, option := range m.loginPrompt.Options {
 				items = append(items, loginStorageChoice{option})
@@ -175,6 +189,41 @@ func (c loginStorageChoice) Description() string { return safeText(c.LoginOption
 func (c loginStorageChoice) FilterValue() string { return c.Name + " " + c.LoginOption.Description }
 
 func (m model) updateLoginPrompt(message tea.Msg, key tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.loginPrompt != nil && m.loginPrompt.Kind == "secret" {
+		if key.String() == "esc" || key.String() == "ctrl+c" {
+			if m.login != nil {
+				m.login.cancel()
+			}
+			m.approvalForm = nil
+			m.loginPrompt = nil
+			m.formKind = ""
+			m.formHeight = 0
+			m.overlay.dismissPanel()
+			m.resize()
+			return m, m.composer.editor.Focus()
+		}
+		if m.approvalForm == nil {
+			return m, nil
+		}
+		form := m.approvalForm
+		_, cmd := form.Update(message)
+		if form.State == huh.StateCompleted {
+			return m.finishForm()
+		}
+		if form.State == huh.StateAborted {
+			if m.login != nil {
+				m.login.cancel()
+			}
+			m.approvalForm = nil
+			m.loginPrompt = nil
+			m.formKind = ""
+			m.formHeight = 0
+			m.overlay.dismissPanel()
+			m.resize()
+			return m, m.composer.editor.Focus()
+		}
+		return m, cmd
+	}
 	switch key.String() {
 	case "esc", "ctrl+c":
 		m.login.cancel()

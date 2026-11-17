@@ -1,12 +1,25 @@
 # OAuth configuration and credentials
 
-For ChatGPT plan usage, use `opera auth login openai-subscription` with no
-endpoint environment configuration. See [ChatGPT subscription](chatgpt-subscription.md).
-The generic configuration below applies to separately registered OAuth clients.
+In interactive chat, `/login` lists the six built-in providers. OpenAI offers
+ChatGPT subscription OAuth or an API key; Anthropic offers Claude Pro/Max OAuth
+or an API key; OpenRouter offers its OAuth key exchange or an API key. Google
+Gemini, Groq and DeepSeek use API keys. API keys entered in `/login` are masked
+and saved to the selected credential store under `<provider>.<credential_ref>`.
+An existing provider environment key is used directly. In accessible mode,
+Opera does not echo secret input: pipe a key to `opera auth set <provider>.<credential_ref>`,
+then run `/login` again.
 
-`opera auth login <provider>` uses the public Y OAuth client. Opera supplies UI
-notifications and secret storage; the SDK never reads stdin, prints a URL or
-starts a browser. Login works through PKCE/loopback or device authorization.
+OpenAI ChatGPT subscription credentials use the separate
+`openai-subscription` execution provider. See
+[ChatGPT subscription](chatgpt-subscription.md). The generic configuration
+below applies to separately registered OAuth clients.
+
+`opera auth login <provider>` uses the public Y OAuth client for a separately
+configured OAuth client. Opera supplies UI notifications and secret storage;
+the SDK never reads stdin, prints a URL or starts a browser. Login works through
+PKCE/loopback or device authorization. Provider-specific `/login` OAuth flows
+for ChatGPT, Claude and OpenRouter use their respective protocol endpoints and
+are independent of this generic command.
 
 Set these environment values for a client registered or permitted by your provider:
 
@@ -25,19 +38,25 @@ opera auth login openai
 opera auth login google --store file --format jsonl
 ```
 
-The CLI displays the authorization URL and device user code where applicable,
-without starting a browser. The user completes authorization externally while
-the process waits with cancellation and a bounded timeout. Headless mode emits
-`auth.authorization` and `auth.status` JSONL records, without forms. HTTPS is
-required for endpoints, with HTTP allowed only on loopback. PKCE validates state;
-token-bearing HTTP redirects cannot leave the original endpoint origin.
+The generic CLI displays the authorization URL and device user code where
+applicable, without starting a browser. The user completes authorization
+externally while the process waits with cancellation and a bounded timeout.
+Headless mode emits `auth.authorization` and `auth.status` JSONL records, without
+forms. HTTPS is required for endpoints, with HTTP allowed only on loopback. PKCE
+validates state; token-bearing HTTP redirects cannot leave the original endpoint
+origin.
 
 API-key environment variables are resolved first, so headless CI does not unlock a
-desktop keyring: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`/`ANTHROPIC_OAUTH_TOKEN`,
-`GEMINI_API_KEY`/`GOOGLE_API_KEY`, or `OPENAI_COMPATIBLE_API_KEY`. Otherwise Opera
-tries the configured `credential_ref` API key, then `<provider>.<reference>.oauth`
-in the selected secret store. Expired OAuth records are refreshed and persisted;
-an omitted refresh-token rotation preserves the existing token.
+desktop keyring: `OPENAI_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+`ANTHROPIC_OAUTH_TOKEN`/`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`/`GOOGLE_API_KEY`,
+`OPENAI_COMPATIBLE_API_KEY`, `OPENROUTER_API_KEY`, `GROQ_API_KEY` or
+`DEEPSEEK_API_KEY`. Otherwise Opera checks `<provider>.<credential_ref>` for a
+provider-scoped key, then `<provider>.<reference>.oauth`, then the legacy global
+`credential_ref` key. Expired generic OAuth and Anthropic records are refreshed
+and persisted; an omitted refresh-token rotation preserves the existing token.
+
+Custom provider credentials are configured separately in the private
+`~/.agents/opera/providers.json`; see [custom providers](custom-providers.md).
 
 Token endpoint/client configuration is provider-specific. OAuth registration and
 provider account entitlements are external requirements; storing a token does not

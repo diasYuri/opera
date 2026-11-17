@@ -12,6 +12,7 @@ import (
 
 	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/credentials"
+	"github.com/diasYuri/opera/internal/provideradapters"
 	"github.com/diasYuri/y/pkg/providers/auth"
 	"github.com/diasYuri/y/pkg/providers/oauth"
 )
@@ -20,6 +21,7 @@ import (
 // snapshots, events, errors or session metadata.
 type oauthRecord struct {
 	Provider     string       `json:"provider"`
+	Flow         string       `json:"flow,omitempty"`
 	AccessToken  string       `json:"access_token"`
 	RefreshToken string       `json:"refresh_token"`
 	TokenType    string       `json:"token_type"`
@@ -91,6 +93,38 @@ func (a App) credentialLookup(cfg config.Resolved) func(context.Context, string)
 		if provider == "openai-subscription" {
 			return a.subscriptionCredential(ctx, cfg)
 		}
+		for _, custom := range cfg.CustomProviders {
+			if custom.ID() == provider {
+				return provideradapters.CustomAPIKey(ctx, custom)
+			}
+		}
+		if provider == "anthropic" {
+			for _, key := range []struct {
+				name   string
+				bearer bool
+			}{{"ANTHROPIC_AUTH_TOKEN", true}, {"ANTHROPIC_OAUTH_TOKEN", true}, {"ANTHROPIC_API_KEY", false}} {
+				if value, _ := a.Env(key.name); value != "" {
+					if key.bearer {
+						return "Bearer " + value, nil
+					}
+					return value, nil
+				}
+			}
+		}
+		var envKey string
+		switch provider {
+		case "openrouter":
+			envKey = "OPENROUTER_API_KEY"
+		case "groq":
+			envKey = "GROQ_API_KEY"
+		case "deepseek":
+			envKey = "DEEPSEEK_API_KEY"
+		}
+		if envKey != "" {
+			if value, _ := a.Env(envKey); value != "" {
+				return value, nil
+			}
+		}
 		// An explicit process environment key is usable in headless CI without
 		// accessing or unlocking a desktop keyring.
 		source := auth.NewEnvSource().WithLookup(func(key string) string { value, _ := a.Env(key); return value })
@@ -102,7 +136,7 @@ func (a App) credentialLookup(cfg config.Resolved) func(context.Context, string)
 		if err != nil {
 			return "", err
 		}
-		key, err = store.Get(cfg.String("credential_ref"))
+		key, err = store.Get(provider + "." + cfg.String("credential_ref"))
 		if err == nil {
 			return key, nil
 		}
@@ -110,28 +144,57 @@ func (a App) credentialLookup(cfg config.Resolved) func(context.Context, string)
 			return "", err
 		}
 		raw, err := store.Get(oauthReference(provider, cfg.String("credential_ref")))
-		if err != nil {
-			return "", errors.New("no credential configured; use auth set, auth login or the provider API-key environment variable")
-		}
-		var record oauthRecord
-		if json.Unmarshal([]byte(raw), &record) != nil || record.Provider != provider {
-			return "", errors.New("invalid stored OAuth credential")
-		}
-		credential := auth.Credential{ProviderID: provider, AccessToken: record.AccessToken, RefreshToken: record.RefreshToken, TokenType: record.TokenType, ExpiresAt: record.ExpiresAt}
-		if credential.Expired(time.Now()) {
-			credential, err = (oauth.Client{Config: record.Config}).Refresh(ctx, credential)
-			if err != nil {
-				return "", err
+		if err == nil {
+			var record oauthRecord
+			if json.Unmarshal([]byte(raw), &record) != nil || record.Provider != provider {
+				return "", errors.New("invalid stored OAuth credential")
 			}
-			record.AccessToken, record.RefreshToken, record.TokenType, record.ExpiresAt = credential.AccessToken, credential.RefreshToken, credential.TokenType, credential.ExpiresAt
-			encoded, err := json.Marshal(record)
-			if err != nil {
-				return "", errors.New("cannot encode refreshed credential")
+			if record.Flow == "openrouter" {
+				return record.AccessToken, nil
 			}
-			if err := store.Set(oauthReference(provider, cfg.String("credential_ref")), string(encoded)); err != nil {
-				return "", err
+			if record.Flow == "anthropic" {
+				if time.Now().After(record.ExpiresAt) {
+					record, err = refreshAnthropicToken(ctx, record)
+					if err != nil {
+						return "", err
+					}
+					encoded, err := json.Marshal(record)
+					if err != nil {
+						return "", errors.New("cannot encode refreshed credential")
+					}
+					if err := store.Set(oauthReference(provider, cfg.String("credential_ref")), string(encoded)); err != nil {
+						return "", err
+					}
+				}
+				return "Bearer " + record.AccessToken, nil
 			}
+			credential := auth.Credential{ProviderID: provider, AccessToken: record.AccessToken, RefreshToken: record.RefreshToken, TokenType: record.TokenType, ExpiresAt: record.ExpiresAt}
+			if credential.Expired(time.Now()) {
+				credential, err = (oauth.Client{Config: record.Config}).Refresh(ctx, credential)
+				if err != nil {
+					return "", err
+				}
+				record.AccessToken, record.RefreshToken, record.TokenType, record.ExpiresAt = credential.AccessToken, credential.RefreshToken, credential.TokenType, credential.ExpiresAt
+				encoded, err := json.Marshal(record)
+				if err != nil {
+					return "", errors.New("cannot encode refreshed credential")
+				}
+				if err := store.Set(oauthReference(provider, cfg.String("credential_ref")), string(encoded)); err != nil {
+					return "", err
+				}
+			}
+			return credential.Secret(), nil
 		}
-		return credential.Secret(), nil
+		if !errors.Is(err, credentials.ErrNotFound) {
+			return "", err
+		}
+		key, err = store.Get(cfg.String("credential_ref"))
+		if err == nil {
+			return key, nil
+		}
+		if !errors.Is(err, credentials.ErrNotFound) {
+			return "", err
+		}
+		return "", errors.New("no credential configured; use auth set, auth login or the provider API-key environment variable")
 	}
 }

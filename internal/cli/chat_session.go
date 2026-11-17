@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/diasYuri/opera/internal/app"
-	"github.com/diasYuri/opera/internal/chatgpt"
 	"github.com/diasYuri/opera/internal/config"
 	"github.com/diasYuri/opera/internal/contextfiles"
 	"github.com/diasYuri/opera/internal/harness"
@@ -26,8 +25,9 @@ import (
 
 type loginMethod struct {
 	app.LoginProvider
-	provider string
-	login    func(context.Context, config.Resolved, func(app.LoginNotice) error) error
+	provider   string
+	login      func(context.Context, config.Resolved, func(app.LoginNotice) error) error
+	descriptor *providercatalog.LoginDescriptor
 }
 
 // chatSession can show commands and sign-in before an execution runtime exists.
@@ -59,7 +59,16 @@ func newChatSession(a App, cfg config.Resolved, opts harness.Options, r *harness
 	}
 	opts.ResumeID = ""
 	s := &chatSession{app: a, cfg: cfg, opts: opts, runtime: r, openBrowser: openLoginBrowser}
-	s.methods = []loginMethod{{LoginProvider: app.LoginProvider{ID: "openai", Name: "OpenAI", Description: "Sign in with ChatGPT"}, provider: chatgpt.ProviderID, login: s.subscriptionLoginWithRecovery}}
+	if catalog, err := s.providerCatalog(); err == nil {
+		for _, descriptor := range catalog.Logins() {
+			copy := descriptor
+			copy.Methods = append([]providercatalog.LoginMethod(nil), descriptor.Methods...)
+			s.methods = append(s.methods, loginMethod{
+				LoginProvider: app.LoginProvider{ID: descriptor.ID, Name: descriptor.Name, Description: descriptor.Description},
+				descriptor:    &copy,
+			})
+		}
+	}
 	return s
 }
 
@@ -80,7 +89,8 @@ func (s *chatSession) Login(ctx context.Context, id string, notify func(app.Logi
 		if method.ID != id {
 			continue
 		}
-		if err := method.login(ctx, s.cfg, func(notice app.LoginNotice) error {
+		executionProvider := method.provider
+		notifyFlow := func(notice app.LoginNotice) error {
 			if notice.URL == "" {
 				return notify(notice)
 			}
@@ -97,7 +107,19 @@ func (s *chatSession) Login(ctx context.Context, id string, notify func(app.Logi
 				}
 			}
 			return nil
-		}); err != nil {
+		}
+		var err error
+		if method.descriptor != nil {
+			var selected providercatalog.LoginMethod
+			selected, err = chooseLoginMethod(ctx, notifyFlow, *method.descriptor)
+			if err == nil {
+				executionProvider = selected.ProviderID
+				err = s.runLoginMethod(ctx, selected, notifyFlow)
+			}
+		} else if method.login != nil {
+			err = method.login(ctx, s.cfg, notifyFlow)
+		}
+		if err != nil {
 			return err
 		}
 		if err := ctx.Err(); err != nil {
@@ -109,13 +131,55 @@ func (s *chatSession) Login(ctx context.Context, id string, notify func(app.Logi
 			}
 			s.runtime = nil
 		}
-		s.cfg.Values["provider"] = config.Value{Value: method.provider, Source: "interactive"}
+		s.cfg.Values["provider"] = config.Value{Value: executionProvider, Source: "interactive"}
 		// A model from another provider must never be reused after sign-in.
 		s.cfg.Values["model"] = config.Value{Value: "", Source: "interactive"}
 		s.cfg.Values["base_url"] = config.Value{Value: "", Source: "interactive"}
 		return nil
 	}
 	return errors.New("login provider is unavailable; use /login to see available providers")
+}
+
+func chooseLoginMethod(ctx context.Context, notify func(app.LoginNotice) error, descriptor providercatalog.LoginDescriptor) (providercatalog.LoginMethod, error) {
+	if len(descriptor.Methods) == 1 {
+		return descriptor.Methods[0], nil
+	}
+	options := make([]app.LoginOption, 0, len(descriptor.Methods))
+	for _, method := range descriptor.Methods {
+		options = append(options, app.LoginOption{ID: method.ID, Name: method.Name, Description: method.Description})
+	}
+	response := make(chan string, 1)
+	if err := notify(app.LoginNotice{Message: "Choose a sign-in method.", Prompt: &app.LoginPrompt{
+		Kind: "select", Title: descriptor.Name + " sign-in", Options: options, Response: response,
+	}}); err != nil {
+		return providercatalog.LoginMethod{}, err
+	}
+	select {
+	case id := <-response:
+		for _, method := range descriptor.Methods {
+			if method.ID == id {
+				return method, nil
+			}
+		}
+		return providercatalog.LoginMethod{}, errors.New("invalid sign-in method")
+	case <-ctx.Done():
+		return providercatalog.LoginMethod{}, ctx.Err()
+	}
+}
+
+func (s *chatSession) runLoginMethod(ctx context.Context, method providercatalog.LoginMethod, notify func(app.LoginNotice) error) error {
+	switch method.Kind {
+	case "api-key":
+		return s.apiKeyLogin(ctx, s.cfg, method.ProviderID, notify)
+	case "chatgpt-oauth":
+		return s.subscriptionLoginWithRecovery(ctx, s.cfg, notify)
+	case "anthropic-oauth":
+		return s.anthropicOAuthLogin(ctx, s.cfg, notify)
+	case "openrouter-oauth":
+		return s.openRouterOAuthLogin(ctx, s.cfg, notify)
+	default:
+		return errors.New("unsupported sign-in method")
+	}
 }
 
 func (s *chatSession) SessionInfo() (string, string, string) {
@@ -229,7 +293,7 @@ func (s *chatSession) providerCatalog() (*providercatalog.Catalog, error) {
 	if s.opts.ProviderCatalog != nil {
 		return s.opts.ProviderCatalog, nil
 	}
-	return provideradapters.DefaultCatalog()
+	return provideradapters.DefaultCatalog(s.cfg.CustomProviders...)
 }
 
 func (s *chatSession) ModelProviders() []ui.ProviderOption {

@@ -17,9 +17,12 @@ type LoginOption struct{ ID, Name, Description string }
 // LoginPrompt requests an explicit choice while a sign-in remains in progress.
 // Responses and credentials are never serialized into execution metadata.
 type LoginPrompt struct {
-	Title    string
-	Options  []LoginOption
-	Response chan<- string `json:"-"`
+	Kind        string `json:"-"`
+	Title       string
+	Message     string
+	Placeholder string
+	Options     []LoginOption
+	Response    chan<- string `json:"-"`
 }
 
 type Authenticator interface {

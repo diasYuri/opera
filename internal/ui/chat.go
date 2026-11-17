@@ -1513,6 +1513,21 @@ func (m model) finishForm() (tea.Model, tea.Cmd) {
 	m.formHeight = 0
 	m.resize()
 	switch kind {
+	case "login-secret":
+		prompt := m.loginPrompt
+		m.loginPrompt = nil
+		if prompt == nil || prompt.Response == nil {
+			return m, m.composer.editor.Focus()
+		}
+		secret := form.GetString("value")
+		m.status = "Saving credential in the configured secret store…"
+		return m, func() tea.Msg {
+			select {
+			case prompt.Response <- secret:
+			case <-m.ctx.Done():
+			}
+			return nil
+		}
 	case "approval":
 		decision := form.GetString("decision")
 		if decision == "allow" || decision == "deny" {

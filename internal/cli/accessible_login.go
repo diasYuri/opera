@@ -82,7 +82,18 @@ func loginResultText(event accessibleLoginEvent) string {
 
 func loginPromptText(prompt *app.LoginPrompt) string {
 	var text strings.Builder
-	text.WriteString(prompt.Title + "\nSystem keyring unavailable. Choose storage to continue:\n")
+	text.WriteString(prompt.Title + "\n")
+	if prompt.Message != "" {
+		text.WriteString(prompt.Message + "\n")
+	}
+	if prompt.Kind == "secret" {
+		text.WriteString("Secret input is unavailable in accessible mode. Set it through opera auth set from piped stdin.\nYou> ")
+		return text.String()
+	}
+	if len(prompt.Options) == 0 {
+		text.WriteString("No choices are available.\nYou> ")
+		return text.String()
+	}
 	for i, option := range prompt.Options {
 		fmt.Fprintf(&text, "%d. %s — %s\n", i+1, option.Name, option.Description)
 	}

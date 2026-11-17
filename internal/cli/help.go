@@ -51,7 +51,7 @@ Flags (accepted before or after a command):
   --help, -h                 Show help without reading configuration
   --version                  Show version without reading configuration
   --workspace <path>         Workspace directory (default: current directory)
-  --user-config <path>       Explicit user TOML file (must exist)
+  --user-config <path>       Explicit core settings file (JSON or TOML; must exist)
   --project-config <path>    Explicit project TOML file (must exist)
   --continue <run-id>        Continue a completed conversation in a new run
   --attach <path>            Add a bounded UTF-8 text or supported image attachment
