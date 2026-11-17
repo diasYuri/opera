@@ -20,7 +20,7 @@ import (
 func newModel(ctx context.Context, service Executor, initial app.Request, noMotion bool) model {
 	keys := defaultChatKeyMap()
 	editor := textarea.New()
-	editor.Placeholder = "Message Opera… · ⌘V attaches an image"
+	editor.Placeholder = "Ask Opera to do anything"
 	editor.Prompt = "› "
 	editor.ShowLineNumbers = false
 	editor.KeyMap.InsertNewline = keys.newline
@@ -106,29 +106,58 @@ func (m *model) sizeEditor() {
 }
 
 func (m model) sessionLine() string {
+	t := m.theme()
 	parts := []string{}
 	if m.modelName != "" {
-		parts = append(parts, safeText(m.provider)+"/"+safeText(m.modelName))
+		parts = append(parts, t.model.Render(safeText(m.provider)+"/"+safeText(m.modelName)))
 	}
 	if m.workspace != "" {
-		parts = append(parts, safeText(m.workspace))
+		parts = append(parts, t.success.Render(safeText(m.workspace)))
 	}
-	line := strings.Join(parts, " · ")
+	line := strings.Join(parts, t.muted.Render(" · "))
 	if m.mode != "" && m.mode != app.ModeDefault {
 		if mode, err := app.ResolveMode(m.mode); err == nil {
 			label := strings.ToLower(mode.Name)
 			if line != "" {
-				line += " · "
+				line += t.muted.Render(" · ")
 			}
-			line += m.theme().info.Render(safeText(label))
+			line += t.info.Render(safeText(label))
 		}
 	}
 	return line
 }
 
+// renderHelpLine keeps each shortcut readable while giving its action key a
+// stronger accent, similar to the compact context hints in Codex.
+func (m model) renderHelpLine() string {
+	t := m.theme()
+	parts := strings.Split(m.helpLine(), " · ")
+	for i, part := range parts {
+		key, action, hasAction := strings.Cut(part, " ")
+		if hasAction && isHelpKey(key) {
+			parts[i] = t.accent.Bold(true).Render(key) + " " + t.muted.Render(action)
+		} else {
+			parts[i] = t.muted.Render(part)
+		}
+	}
+	return strings.Join(parts, t.muted.Render(" · "))
+}
+
+func isHelpKey(value string) bool {
+	if strings.HasPrefix(value, "/") {
+		return true
+	}
+	switch value {
+	case "Enter", "Tab", "Alt+Enter", "PgUp/PgDn", "PgUp", "PgDn", "Ctrl+End", "Ctrl+O", "Ctrl+D", "Ctrl+C", "Esc", "↑↓":
+		return true
+	default:
+		return false
+	}
+}
+
 func (m model) banner() string {
 	t := m.theme()
-	text := "\n  " + t.text.Bold(true).Render("Opera") + "\n  " + m.sessionLine() + "\n  " + "/login connect · /model choose model · /help commands" + "\n"
+	text := "\n  " + t.text.Bold(true).Render("Opera") + "\n  " + m.sessionLine() + "\n  " + t.muted.Render("/login connect · /model choose model · /help commands") + "\n"
 	if _, disabled := os.LookupEnv("NO_COLOR"); disabled {
 		text = ansi.Strip(text)
 	}
@@ -212,12 +241,10 @@ func (m model) helpLine() string {
 	keys := m.keyBindings()
 	enter := keyLabel(keys.submit, "Enter")
 	complete := keyLabel(keys.complete, "Tab")
-	newline := keyLabel(keys.newline, "Alt+Enter")
 	pageUp := keyLabel(keys.pageUp, "PgUp")
 	pageDown := keyLabel(keys.pageDown, "PgDn")
 	bottom := keyLabel(keys.bottom, "Ctrl+End")
 	details := keyLabel(keys.details, "Ctrl+O")
-	exit := keyLabel(keys.exit, "Ctrl+D")
 	if m.approval != nil {
 		return "/approve allow · /deny reject · /details review"
 	}
@@ -246,7 +273,7 @@ func (m model) helpLine() string {
 		return "/login connect · /model choose · /resume sessions · /help"
 	}
 	if m.width < 48 {
-		return enter + " send · /mode · Shift+Tab plan · /resume · /help"
+		return enter + " send · /help"
 	}
 	if m.newConversationItems {
 		return pageUp + "/" + pageDown + " scroll · " + bottom + " latest messages · /messages find"
@@ -254,10 +281,7 @@ func (m model) helpLine() string {
 	if m.conversation.TotalLineCount() > 0 && m.width >= 48 {
 		return pageUp + "/" + pageDown + " scroll · " + bottom + " latest · " + details + " tool details · /messages find"
 	}
-	if m.width < 76 {
-		return enter + " send · " + complete + " complete · " + newline + " newline · /mode · Shift+Tab plan"
-	}
-	return enter + " send · " + complete + " complete · " + newline + " newline · /mode · Shift+Tab plan · /resume · /help · " + exit + " exit"
+	return enter + " send · " + complete + " complete · /help shortcuts"
 }
 
 func (m model) completionView() string {
@@ -360,10 +384,10 @@ func (m model) defaultFixedParts() []string {
 	if len(m.completions) > 0 {
 		parts = append(parts, m.completionView())
 	}
-	if m.sessionLine() != "" {
-		parts = append(parts, t.muted.Render(ansi.Truncate(m.sessionLine(), width, "…")))
+	if session := m.sessionLine(); session != "" {
+		parts = append(parts, ansi.Truncate(session, width, "…"))
 	}
-	parts = append(parts, t.muted.Render(ansi.Truncate(m.helpLine(), width, "…")))
+	parts = append(parts, ansi.Truncate(m.renderHelpLine(), width, "…"))
 	if footer := m.extensionFooter(); footer != "" {
 		parts = append(parts, footer)
 	}
@@ -392,10 +416,10 @@ func (m model) View() tea.View {
 		parts = append(parts, t.accent.Bold(true).Render(safeText(m.overlay.panelTitle)), m.approvalForm.View())
 		keys := m.keyBindings()
 		parts = append(parts, t.muted.Render(keyLabel(keys.submit, "Enter")+" select · "+keyLabel(keys.cancel, "Esc")+" back"))
-		if m.sessionLine() != "" {
-			parts = append(parts, t.muted.Render(ansi.Truncate(m.sessionLine(), width, "…")))
+		if session := m.sessionLine(); session != "" {
+			parts = append(parts, ansi.Truncate(session, width, "…"))
 		}
-		parts = append(parts, t.muted.Render(ansi.Truncate(m.helpLine(), width, "…")))
+		parts = append(parts, ansi.Truncate(m.renderHelpLine(), width, "…"))
 	} else if m.overlay.panelOpen {
 		title, body := m.overlay.panelTitle, m.overlay.panel.View()
 		keys := m.keyBindings()

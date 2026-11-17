@@ -479,11 +479,6 @@ func (m model) renderUserEntry(entry conversationEntry, t palette) string {
 		padding = 0
 	}
 	textWidth := max(1, width-2*padding)
-	longest := 0
-	for _, line := range strings.Split(text, "\n") {
-		longest = max(longest, ansi.StringWidth(line))
-	}
-	textWidth = min(textWidth, max(1, longest))
 	bubble := t.userBubble.Width(textWidth).Padding(0, padding).Render(ansi.Hardwrap(text, textWidth, true))
 	return "\n" + lipgloss.PlaceHorizontal(width, lipgloss.Right, bubble)
 }

@@ -35,9 +35,12 @@ The terminal owns the font, foreground and background. Hierarchy comes from whit
 
 Color is a sparse foreground aid. `internal/ui/theme.go` is authoritative for ANSI palette indexes; these are terminal colors, not CSS colors, so the frontmatter deliberately has no invented hex palette.
 
-- **Primary — clear blue:** accent foreground, Opera author labels, composer rules and selected model. ANSI 25 for light terminals; ANSI 75 for dark terminals.
-- **Neutral — secondary gray:** session context, shortcuts and placeholders. ANSI 240 for light terminals; ANSI 248 for dark terminals. Body text inherits the terminal foreground.
-- **Warning — warm amber:** approval and failure state foregrounds. ANSI 130 for light terminals; ANSI 215 for dark terminals. States also have explicit text.
+- **Primary — muted blue:** accent foreground, Opera author labels, composer rules, shortcuts and selection. ANSI 67 for light terminals; ANSI 110 for dark terminals.
+- **Model — soft gold:** the active provider/model in session context. ANSI 137 for light terminals; ANSI 222 for dark terminals.
+- **Workspace — green:** the active workspace in session context, using the success token.
+- **Mode — secondary accent:** the active mode uses the info token and follows the selected theme.
+- **Neutral — secondary gray:** context separators, shortcut descriptions and placeholders. ANSI 240 for light terminals; ANSI 248 for dark terminals. Body text inherits the terminal foreground.
+- **Warning — warm amber:** approval state foregrounds. ANSI 137 for light terminals; ANSI 180 for dark terminals. States also have explicit text.
 
 **The Terminal Ownership Rule.** Use inherited terminal background and foreground; do not paint an application background.
 
