@@ -7,10 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/diasYuri/opera/internal/adapters/credentials"
 	"github.com/diasYuri/opera/internal/adapters/platform"
 	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/opera/internal/modules/configuration"
 	"github.com/diasYuri/opera/internal/modules/execution"
+	providercatalog "github.com/diasYuri/opera/internal/modules/providers/catalog"
 )
 
 func sessionConfig(t *testing.T) config.Resolved {
@@ -43,11 +45,11 @@ func TestChatLoginRegistryAndSelection(t *testing.T) {
 	if openai == nil {
 		t.Fatal("OpenAI login method was not registered")
 	}
-	openai.descriptor = nil // replace the interactive provider flow with this test double
-	openai.provider = "openai-subscription"
-	openai.login = func(_ context.Context, _ config.Resolved, notify func(execution.LoginNotice) error) error {
-		return notify(execution.LoginNotice{URL: "https://example.test/authorize"})
-	}
+	s.cfg.Values["credentials.store"] = config.Value{Value: "file"}
+	s.app.OpenStore = credentials.Open
+	openai.descriptor = &providercatalog.LoginDescriptor{ID: "openai", Name: "OpenAI", Methods: []providercatalog.LoginMethod{{ID: "fixture", Name: "Fixture", Kind: "oauth", ProviderID: "openai-subscription", Authenticator: loginHandler{run: func(_ context.Context, io providercatalog.AuthIO) error {
+		return io.Notify(context.Background(), providercatalog.LoginNotice{URL: "https://example.test/authorize"})
+	}}}}}
 	var opened string
 	s.openBrowser = func(_ context.Context, u string) error { opened = u; return errors.New("no browser installed") }
 	var notices []execution.LoginNotice
@@ -85,10 +87,9 @@ func TestChatLoginFailurePreservesSelectionAndFirstRunNeedsNoRuntime(t *testing.
 	if openai == nil {
 		t.Fatal("OpenAI login method was not registered")
 	}
-	openai.descriptor = nil // replace the interactive provider flow with this test double
-	openai.login = func(context.Context, config.Resolved, func(execution.LoginNotice) error) error {
-		return context.Canceled
-	}
+	s.cfg.Values["credentials.store"] = config.Value{Value: "file"}
+	s.app.OpenStore = credentials.Open
+	openai.descriptor = &providercatalog.LoginDescriptor{ID: "openai", Name: "OpenAI", Methods: []providercatalog.LoginMethod{{ID: "fixture", Name: "Fixture", Kind: "oauth", ProviderID: "openai-subscription", Authenticator: loginHandler{run: func(context.Context, providercatalog.AuthIO) error { return context.Canceled }}}}}
 	if err := s.Login(context.Background(), "openai", func(execution.LoginNotice) error { return nil }); !errors.Is(err, context.Canceled) {
 		t.Fatal(err)
 	}
@@ -104,6 +105,18 @@ func TestChatLoginFailurePreservesSelectionAndFirstRunNeedsNoRuntime(t *testing.
 	if len(s.LoginProviders()) != providerCount+1 {
 		t.Fatal("menu registry did not discover a newly registered provider")
 	}
+}
+
+type loginHandler struct {
+	run func(context.Context, providercatalog.AuthIO) error
+}
+
+func (loginHandler) Supports(string) bool { return true }
+func (h loginHandler) Authenticate(ctx context.Context, _ string, io providercatalog.AuthIO) (providercatalog.AuthResult, error) {
+	return providercatalog.AuthResult{}, h.run(ctx, io)
+}
+func (loginHandler) Credential(context.Context, providercatalog.AuthIO) (string, error) {
+	return "", nil
 }
 
 func (s *chatSession) loginMethod(id string) *loginMethod {

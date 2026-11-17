@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"charm.land/huh/v2"
+	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/opera/internal/modules/configuration"
 )
 
@@ -16,18 +17,17 @@ func (a App) onboard(ctx context.Context, cfg config.Resolved) (config.Resolved,
 	if provider == "" {
 		provider = "openai"
 	}
-	providerOptions := []huh.Option[string]{
-		huh.NewOption("OpenAI (API key)", "openai"),
-		huh.NewOption("ChatGPT subscription (OAuth)", "openai-subscription"),
-		huh.NewOption("Anthropic", "anthropic"),
-		huh.NewOption("Google", "google"),
-		huh.NewOption("OpenRouter", "openrouter"),
-		huh.NewOption("Groq", "groq"),
-		huh.NewOption("DeepSeek", "deepseek"),
-		huh.NewOption("OpenAI-compatible", "openai-compatible"),
+	providerCatalog, err := core.DefaultCatalog(cfg.CustomProviders...)
+	if err != nil {
+		return cfg, err
 	}
-	for _, custom := range cfg.CustomProviders {
-		providerOptions = append(providerOptions, huh.NewOption(custom.Name+" (custom)", custom.ID()))
+	providerOptions := make([]huh.Option[string], 0, len(providerCatalog.Entries()))
+	for _, entry := range providerCatalog.Entries() {
+		name := entry.Name
+		if entry.Login != nil {
+			name = entry.Login.Name
+		}
+		providerOptions = append(providerOptions, huh.NewOption(name, entry.ID))
 	}
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewSelect[string]().Title("Provider").Options(providerOptions...).Value(&provider),

@@ -11,8 +11,18 @@ import (
 	"time"
 
 	"github.com/diasYuri/opera/internal/adapters/credentials"
-	"github.com/diasYuri/opera/internal/core"
 )
+
+type subscriptionCredentialFixture struct {
+	ClientID     string    `json:"client_id"`
+	Subject      string    `json:"subject"`
+	Email        string    `json:"email,omitempty"`
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	IDToken      string    `json:"id_token"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	Scope        string    `json:"scope"`
+}
 
 func TestOAuthDeviceNotificationAndSeparateSecretStore(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -47,7 +57,7 @@ func TestOAuthDeviceNotificationAndSeparateSecretStore(t *testing.T) {
 func TestSubscriptionAccountStatusAndLogout(t *testing.T) {
 	f := newFixture(t)
 	store := credentials.FileStore{Directory: filepath.Join(f.root, "data", "credentials")}
-	record := core.SubscriptionRecord{ClientID: "oaiapp_work", Subject: "verified-user", Email: "work@example.test", AccessToken: "private-access", IDToken: "private-identity", ExpiresAt: time.Now().Add(time.Hour)}
+	record := subscriptionCredentialFixture{ClientID: "oaiapp_work", Subject: "verified-user", Email: "work@example.test", AccessToken: "private-access", IDToken: "private-identity", ExpiresAt: time.Now().Add(time.Hour)}
 	raw, err := json.Marshal(record)
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +84,7 @@ func TestSubscriptionAccountStatusAndLogout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var signedOut core.SubscriptionRecord
+	var signedOut subscriptionCredentialFixture
 	if err := json.Unmarshal([]byte(rawRecord), &signedOut); err != nil {
 		t.Fatal(err)
 	}

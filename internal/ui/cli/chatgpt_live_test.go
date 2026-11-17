@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,44 +13,33 @@ import (
 	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/opera/internal/modules/configuration"
 	"github.com/diasYuri/opera/internal/modules/execution"
-	"github.com/diasYuri/y/pkg/ai"
-	"github.com/diasYuri/y/pkg/providers"
 )
 
 // Opt-in: two tiny text-only requests using the selected subscription account.
 // No workspace files, tools, credentials or generated text are printed/sent.
 func TestLiveSubscriptionConversationHistory(t *testing.T) {
 	a, cfg := subscriptionLiveConfig(t)
-	p := core.NewSubscriptionProvider(a.credentialLookup(cfg))
-	defer func() { _ = p.Close() }()
+	for key, value := range map[string]string{"provider": "openai-subscription", "base_url": "", "policy": "read-only", "extensions.file": "", "accounting.prices_file": ""} {
+		cfg.Values[key] = config.Value{Value: value, Source: "live-test"}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	conversation := ai.Context{}
+	runtime, err := core.Open(ctx, cfg, core.Options{Credential: a.credentialLookup(cfg)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := runtime.Close(context.Background()); err != nil {
+			t.Error(err)
+		}
+	}()
+	previous := ""
 	for _, prompt := range []string{"Reply with only: first", "Reply with only: second"} {
-		conversation.Messages = append(conversation.Messages, ai.Message{Role: ai.RoleUser, Content: []ai.ContentBlock{{Type: ai.ContentText, Text: prompt}}})
-		stream, err := p.Stream(ctx, providers.StreamRequest{Model: ai.Model{ID: cfg.String("model")}, Context: conversation})
-		if err != nil {
-			t.Fatal(err)
-		}
-		var text strings.Builder
-		for {
-			event, err := stream.Next(ctx)
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if err != nil {
-				_ = stream.Close()
-				t.Fatal(err)
-			}
-			if delta, ok := event.(ai.TextDelta); ok {
-				text.WriteString(delta.Text)
-			}
-		}
-		_ = stream.Close()
-		if text.Len() == 0 {
+		result, err := runtime.Service.Execute(ctx, execution.Request{Prompt: prompt, ContinueFrom: previous}, nil)
+		if err != nil || result.ExitCode != 0 || strings.TrimSpace(result.Text) == "" {
 			t.Fatal("subscription returned no text")
 		}
-		conversation.Messages = append(conversation.Messages, ai.Message{Role: ai.RoleAssistant, Content: []ai.ContentBlock{{Type: ai.ContentText, Text: text.String()}}})
+		previous = result.ID
 	}
 }
 
@@ -84,7 +72,7 @@ func TestLiveSubscriptionHarnessConversation(t *testing.T) {
 	if err := os.Mkdir(cfg.Paths.Workspace, 0700); err != nil {
 		t.Fatal(err)
 	}
-	for key, value := range map[string]string{"provider": core.SubscriptionProviderID, "policy": "read-only", "extensions.file": "", "accounting.prices_file": "", "base_url": ""} {
+	for key, value := range map[string]string{"provider": "openai-subscription", "policy": "read-only", "extensions.file": "", "accounting.prices_file": "", "base_url": ""} {
 		cfg.Values[key] = config.Value{Value: value, Source: "live-test"}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

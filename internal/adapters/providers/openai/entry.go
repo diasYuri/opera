@@ -16,7 +16,7 @@ func Entries() []providercatalog.Entry {
 	login := &providercatalog.LoginDescriptor{
 		ID: "openai", Name: "OpenAI", Description: "OpenAI API key or ChatGPT subscription",
 		Methods: []providercatalog.LoginMethod{
-			{ID: "chatgpt", Name: "Sign in with ChatGPT", Description: "ChatGPT subscription OAuth", Kind: "chatgpt-oauth", ProviderID: subscription.ProviderID},
+			{ID: "chatgpt", Name: "Sign in with ChatGPT", Description: "ChatGPT subscription OAuth", Kind: "chatgpt-oauth", ProviderID: subscription.ProviderID, Authenticator: subscription.Authenticator()},
 			{ID: "api-key", Name: "OpenAI API key", Description: "Use an OpenAI API key", Kind: "api-key", ProviderID: "openai"},
 		},
 	}

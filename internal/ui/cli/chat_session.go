@@ -24,8 +24,6 @@ import (
 
 type loginMethod struct {
 	execution.LoginProvider
-	provider   string
-	login      func(context.Context, config.Resolved, func(execution.LoginNotice) error) error
 	descriptor *providercatalog.LoginDescriptor
 }
 
@@ -88,7 +86,7 @@ func (s *chatSession) Login(ctx context.Context, id string, notify func(executio
 		if method.ID != id {
 			continue
 		}
-		executionProvider := method.provider
+		executionProvider := ""
 		notifyFlow := func(notice execution.LoginNotice) error {
 			if notice.URL == "" {
 				return notify(notice)
@@ -115,8 +113,6 @@ func (s *chatSession) Login(ctx context.Context, id string, notify func(executio
 				executionProvider = selected.ProviderID
 				err = s.runLoginMethod(ctx, selected, notifyFlow)
 			}
-		} else if method.login != nil {
-			err = method.login(ctx, s.cfg, notifyFlow)
 		}
 		if err != nil {
 			return err
@@ -167,17 +163,59 @@ func chooseLoginMethod(ctx context.Context, notify func(execution.LoginNotice) e
 }
 
 func (s *chatSession) runLoginMethod(ctx context.Context, method providercatalog.LoginMethod, notify func(execution.LoginNotice) error) error {
-	switch method.Kind {
-	case "api-key":
+	if method.Kind == "api-key" {
 		return s.apiKeyLogin(ctx, s.cfg, method.ProviderID, notify)
-	case "chatgpt-oauth":
-		return s.subscriptionLoginWithRecovery(ctx, s.cfg, notify)
-	case "anthropic-oauth":
-		return s.anthropicOAuthLogin(ctx, s.cfg, notify)
-	case "openrouter-oauth":
-		return s.openRouterOAuthLogin(ctx, s.cfg, notify)
-	default:
+	}
+	if method.Authenticator == nil {
 		return errors.New("unsupported sign-in method")
+	}
+	return s.runProviderAuthentication(ctx, "login", method.Authenticator, notify)
+}
+
+func (s *chatSession) runProviderAuthentication(ctx context.Context, action string, handler providercatalog.Authenticator, notify func(execution.LoginNotice) error) error {
+	store, err := s.openLoginStore(ctx, s.cfg, s.cfg.String("credentials.store"), s.cfg.Paths.Credentials, notify)
+	if err != nil {
+		return err
+	}
+	io := providercatalog.AuthIO{Store: store, Reference: s.cfg.String("credential_ref"), Accessible: s.cfg.Bool("ui.accessible"), Now: time.Now}
+	io.Prompt = func(promptCtx context.Context, p providercatalog.LoginPrompt) (string, error) {
+		options := make([]execution.LoginOption, len(p.Options))
+		for i, v := range p.Options {
+			options[i] = execution.LoginOption{ID: v.ID, Name: v.Name, Description: v.Description}
+		}
+		return promptLoginInput(promptCtx, notify, execution.LoginPrompt{Kind: p.Kind, Title: p.Title, Message: p.Message, Placeholder: p.Placeholder, Options: options})
+	}
+	io.Notify = func(noticeCtx context.Context, n providercatalog.LoginNotice) error {
+		return notify(execution.LoginNotice{URL: n.URL, Message: n.Message})
+	}
+	io.Callback = func(callbackCtx context.Context, address, path, state string) (string, func(context.Context, time.Duration) (string, error), func(), error) {
+		cb, err := startLoopbackOAuthCallback(callbackCtx, address, path, state)
+		if err != nil {
+			return "", nil, nil, err
+		}
+		return cb.RedirectURI, func(waitCtx context.Context, d time.Duration) (string, error) {
+			value, err := cb.WaitBefore(waitCtx, d)
+			if errors.Is(err, errOAuthCallbackTimeout) {
+				return "", context.DeadlineExceeded
+			}
+			return value, err
+		}, cb.Close, nil
+	}
+	_, err = handler.Authenticate(ctx, action, io)
+	return err
+}
+
+func promptLoginInput(ctx context.Context, notify func(execution.LoginNotice) error, prompt execution.LoginPrompt) (string, error) {
+	response := make(chan string, 1)
+	prompt.Response = response
+	if err := notify(execution.LoginNotice{Message: prompt.Message, Prompt: &prompt}); err != nil {
+		return "", err
+	}
+	select {
+	case value := <-response:
+		return value, nil
+	case <-ctx.Done():
+		return "", ctx.Err()
 	}
 }
 
@@ -319,16 +357,16 @@ func (s *chatSession) ModelCatalog(ctx context.Context, provider string) ([]ui.M
 	if provider == "" {
 		provider = currentProvider
 	}
-	cfg.Values["provider"] = config.Value{Value: provider, Source: "interactive"}
-	if provider == "openai-subscription" {
-		cfg.Values["base_url"] = config.Value{Value: "", Source: "interactive"}
-	}
-	catalogCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
 	providers, err := s.providerCatalog()
 	if err != nil {
 		return nil, err
 	}
+	cfg.Values["provider"] = config.Value{Value: provider, Source: "interactive"}
+	if providers.FixedEndpoint(provider) {
+		cfg.Values["base_url"] = config.Value{Value: "", Source: "interactive"}
+	}
+	catalogCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 	catalog, err := core.ModelCatalog(catalogCtx, cfg, s.app.credentialLookup(cfg), providers)
 	if err != nil {
 		return nil, err
@@ -865,7 +903,11 @@ func (s *chatSession) Command(ctx context.Context, text string) (string, error) 
 		}
 		candidate.Values["provider"] = config.Value{Value: parts[1], Source: "interactive"}
 		candidate.Values["model"] = config.Value{Value: parts[2], Source: "interactive"}
-		if parts[1] == "openai-subscription" {
+		providers, err := s.providerCatalog()
+		if err != nil {
+			return "", err
+		}
+		if providers.FixedEndpoint(parts[1]) {
 			candidate.Values["base_url"] = config.Value{Value: "", Source: "interactive"}
 		}
 		// Validate the selection before changing the runtime.

@@ -126,9 +126,8 @@ func (b *compositionBuilder) runner() component.Definition {
 	})
 }
 
-// ThinkingBudgets translates Opera's ordered levels to provider-neutral token
-// budgets. Keep the largest budget below the runner's 4096-token output limit,
-// as Anthropic requires its thinking budget to be smaller than max_tokens.
+// ThinkingBudgets translates Opera's ordered levels to token budgets below
+// the runner's 4096-token output limit.
 func defaultThinkingBudgets() map[ai.ThinkingLevel]int64 {
 	return map[ai.ThinkingLevel]int64{
 		ai.ThinkingMinimal: 1024,

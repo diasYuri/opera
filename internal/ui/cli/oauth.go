@@ -13,21 +13,12 @@ import (
 	"github.com/diasYuri/opera/internal/adapters/credentials"
 	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/opera/internal/modules/configuration"
-	"github.com/diasYuri/y/pkg/providers/auth"
+	providercatalog "github.com/diasYuri/opera/internal/modules/providers/catalog"
 	"github.com/diasYuri/y/pkg/providers/oauth"
 )
 
-// This record is serialized ONLY into the separate secret store, never config,
-// snapshots, events, errors or session metadata.
-type oauthRecord struct {
-	Provider     string       `json:"provider"`
-	Flow         string       `json:"flow,omitempty"`
-	AccessToken  string       `json:"access_token"`
-	RefreshToken string       `json:"refresh_token"`
-	TokenType    string       `json:"token_type"`
-	ExpiresAt    time.Time    `json:"expires_at"`
-	Config       oauth.Config `json:"config"`
-}
+// oauthRecord is serialized ONLY into the separate secret store.
+type oauthRecord = core.OAuthCredentialRecord
 
 func (a App) oauthConfig(provider string) (oauth.Config, error) {
 	get := func(key string) string { v, _ := a.Env("OPERA_OAUTH_" + key); return v }
@@ -46,9 +37,6 @@ func (a App) oauthLogin(args []string, cfg config.Resolved, jsonl bool) int {
 		return a.fail(2, errors.New("usage: opera auth login <provider>"), jsonl)
 	}
 	provider := args[0]
-	if provider != "openai" && provider != "anthropic" && provider != "google" && provider != "openai-compatible" {
-		return a.fail(2, errors.New("unsupported provider"), jsonl)
-	}
 	oauthConfig, err := a.oauthConfig(provider)
 	if err != nil {
 		return a.fail(2, err, jsonl)
@@ -90,45 +78,14 @@ func oauthReference(provider, ref string) string { return provider + "." + ref +
 
 func (a App) credentialLookup(cfg config.Resolved) func(context.Context, string) (string, error) {
 	return func(ctx context.Context, provider string) (string, error) {
-		if provider == "openai-subscription" {
-			return a.subscriptionCredential(ctx, cfg)
-		}
 		for _, custom := range cfg.CustomProviders {
 			if custom.ID() == provider {
 				return core.CustomAPIKey(ctx, custom)
 			}
 		}
-		if provider == "anthropic" {
-			for _, key := range []struct {
-				name   string
-				bearer bool
-			}{{"ANTHROPIC_AUTH_TOKEN", true}, {"ANTHROPIC_OAUTH_TOKEN", true}, {"ANTHROPIC_API_KEY", false}} {
-				if value, _ := a.Env(key.name); value != "" {
-					if key.bearer {
-						return "Bearer " + value, nil
-					}
-					return value, nil
-				}
-			}
-		}
-		var envKey string
-		switch provider {
-		case "openrouter":
-			envKey = "OPENROUTER_API_KEY"
-		case "groq":
-			envKey = "GROQ_API_KEY"
-		case "deepseek":
-			envKey = "DEEPSEEK_API_KEY"
-		}
-		if envKey != "" {
-			if value, _ := a.Env(envKey); value != "" {
-				return value, nil
-			}
-		}
-		// An explicit process environment key is usable in headless CI without
-		// accessing or unlocking a desktop keyring.
-		source := auth.NewEnvSource().WithLookup(func(key string) string { value, _ := a.Env(key); return value })
-		key, err := source.Resolve(ctx, provider)
+		// Provider environment conventions are resolved by composition so the
+		// command-line package remains unaware of provider-specific key names.
+		key, err := core.EnvironmentAPIKey(ctx, provider, func(name string) string { value, _ := a.Env(name); return value })
 		if err != nil || key != "" {
 			return key, err
 		}
@@ -145,48 +102,29 @@ func (a App) credentialLookup(cfg config.Resolved) func(context.Context, string)
 		}
 		raw, err := store.Get(oauthReference(provider, cfg.String("credential_ref")))
 		if err == nil {
-			var record oauthRecord
-			if json.Unmarshal([]byte(raw), &record) != nil || record.Provider != provider {
-				return "", errors.New("invalid stored OAuth credential")
+			var secret, updated string
+			var changed bool
+			var resolveErr error
+			if handler := a.authenticator(cfg, provider); handler != nil {
+				secret, resolveErr = handler.Credential(ctx, providercatalog.AuthIO{Store: store, Reference: cfg.String("credential_ref"), CredentialDir: cfg.Paths.Credentials, Now: time.Now})
+			} else {
+				secret, updated, changed, resolveErr = core.ResolveOAuthCredential(ctx, provider, raw, time.Now())
 			}
-			if record.Flow == "openrouter" {
-				return record.AccessToken, nil
+			if resolveErr != nil {
+				return "", resolveErr
 			}
-			if record.Flow == "anthropic" {
-				if time.Now().After(record.ExpiresAt) {
-					record, err = refreshAnthropicToken(ctx, record)
-					if err != nil {
-						return "", err
-					}
-					encoded, err := json.Marshal(record)
-					if err != nil {
-						return "", errors.New("cannot encode refreshed credential")
-					}
-					if err := store.Set(oauthReference(provider, cfg.String("credential_ref")), string(encoded)); err != nil {
-						return "", err
-					}
-				}
-				return "Bearer " + record.AccessToken, nil
-			}
-			credential := auth.Credential{ProviderID: provider, AccessToken: record.AccessToken, RefreshToken: record.RefreshToken, TokenType: record.TokenType, ExpiresAt: record.ExpiresAt}
-			if credential.Expired(time.Now()) {
-				credential, err = (oauth.Client{Config: record.Config}).Refresh(ctx, credential)
-				if err != nil {
-					return "", err
-				}
-				record.AccessToken, record.RefreshToken, record.TokenType, record.ExpiresAt = credential.AccessToken, credential.RefreshToken, credential.TokenType, credential.ExpiresAt
-				encoded, err := json.Marshal(record)
-				if err != nil {
-					return "", errors.New("cannot encode refreshed credential")
-				}
-				if err := store.Set(oauthReference(provider, cfg.String("credential_ref")), string(encoded)); err != nil {
+			if changed {
+				if err := store.Set(oauthReference(provider, cfg.String("credential_ref")), updated); err != nil {
 					return "", err
 				}
 			}
-			return credential.Secret(), nil
+			return secret, nil
 		}
 		if !errors.Is(err, credentials.ErrNotFound) {
 			return "", err
+		}
+		if handler := a.authenticator(cfg, provider); handler != nil {
+			return handler.Credential(ctx, providercatalog.AuthIO{Store: store, Reference: cfg.String("credential_ref"), CredentialDir: cfg.Paths.Credentials, Now: time.Now})
 		}
 		key, err = store.Get(cfg.String("credential_ref"))
 		if err == nil {

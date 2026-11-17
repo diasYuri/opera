@@ -134,8 +134,10 @@ func (a App) Run(args []string) int {
 	case "chat", "run", "worker", "retry", "resume", "onboarding", "reconcile":
 		return a.execution(command, opts, cfg, jsonl)
 	case "auth":
-		if len(opts.args) == 3 && opts.args[2] == "openai-subscription" {
-			return a.subscriptionAuth(opts.args[1], cfg, jsonl)
+		if len(opts.args) == 3 {
+			if handler := a.authenticator(cfg, opts.args[2]); handler != nil && handler.Supports(opts.args[1]) {
+				return a.providerAuth(opts.args[1], opts.args[2], cfg, jsonl, handler)
+			}
 		}
 		if len(opts.args) > 1 && opts.args[1] == "login" {
 			return a.oauthLogin(opts.args[2:], cfg, jsonl)

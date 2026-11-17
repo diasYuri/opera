@@ -143,24 +143,48 @@ func checkSource() error {
 			if err != nil {
 				return err
 			}
-			if err := validateImport(path, name); err != nil {
+			externalIntegrationTest := strings.HasSuffix(path, "_test.go") && strings.HasSuffix(file.Name.Name, "_test")
+			if err := validateImportForFile(path, name, externalIntegrationTest); err != nil {
 				return err
 			}
+		}
+		if err := validateCLIProviderAuth(path, string(data)); err != nil {
+			return err
 		}
 		return nil
 	})
 }
 
+func validateCLIProviderAuth(path, source string) error {
+	path = filepath.ToSlash(path)
+	if !strings.HasPrefix(path, "internal/ui/cli/") && !strings.HasPrefix(path, "internal/core/") {
+		return nil
+	}
+	for _, detail := range []string{"claude.ai/oauth/", "platform.claude.com/", "openrouter.ai/auth", "openrouter.ai/api/v1/auth/keys", "auth.openai.com/", "chatgpt.com/", "grant_type", "code_challenge_method", "code_verifier", "anthropic-oauth", "openrouter-oauth", "chatgpt-oauth", "AnthropicAuthorizationURL", "OpenRouterAuthorizationURL"} {
+		if strings.Contains(source, detail) {
+			return fmt.Errorf("provider-specific OAuth protocol belongs in its adapter (%s contains %q)", path, detail)
+		}
+	}
+	return nil
+}
+
 func validateImport(path, name string) error {
+	return validateImportForFile(path, name, false)
+}
+
+func validateImportForFile(path, name string, externalIntegrationTest bool) error {
 	path = filepath.ToSlash(path)
 	if strings.HasPrefix(name, "github.com/diasYuri/y/") && strings.Contains(name, "/internal/") {
 		return fmt.Errorf("private Y import in %s", path)
 	}
-	if strings.HasPrefix(path, "internal/modules/accounting/") && strings.HasPrefix(name, "github.com/diasYuri/opera/internal/adapters/persistence/sqlite") {
+	if !externalIntegrationTest && strings.HasPrefix(path, "internal/modules/accounting/") && strings.HasPrefix(name, "github.com/diasYuri/opera/internal/adapters/persistence/sqlite") {
 		return fmt.Errorf("accounting must write usage through its module contract (%s)", path)
 	}
 	if strings.HasPrefix(path, "internal/modules/") {
 		for _, blocked := range []string{"github.com/diasYuri/opera/internal/core", "github.com/diasYuri/opera/internal/ui", "github.com/diasYuri/opera/internal/ui/cli", "github.com/diasYuri/opera/internal/adapters/providers/"} {
+			if externalIntegrationTest && strings.HasPrefix(blocked, "github.com/diasYuri/opera/internal/adapters/providers/") {
+				continue
+			}
 			if strings.HasPrefix(name, blocked) {
 				return fmt.Errorf("modules must not depend on composition, UI, CLI, or concrete providers: %s (%s)", name, path)
 			}
@@ -169,11 +193,14 @@ func validateImport(path, name string) error {
 	if strings.HasPrefix(path, "internal/adapters/") && (strings.HasPrefix(name, "github.com/diasYuri/opera/internal/core") || strings.HasPrefix(name, "github.com/diasYuri/opera/internal/ui")) {
 		return fmt.Errorf("adapters must not depend on core or UI (%s)", path)
 	}
-	if strings.HasPrefix(name, "github.com/diasYuri/opera/internal/adapters/providers/") && !strings.HasPrefix(path, "internal/core/") && !strings.HasPrefix(path, "internal/adapters/providers/") {
+	if !externalIntegrationTest && strings.HasPrefix(name, "github.com/diasYuri/opera/internal/adapters/providers/") && !strings.HasPrefix(path, "internal/core/") && !strings.HasPrefix(path, "internal/adapters/providers/") {
 		return fmt.Errorf("providers may be imported only by core composition and their own modules, not %s (%s)", name, path)
 	}
 	if strings.HasPrefix(path, "internal/ui/tui/") {
 		for _, blocked := range []string{"github.com/diasYuri/opera/internal/adapters/", "github.com/diasYuri/opera/internal/core", "github.com/diasYuri/opera/internal/ui/cli", "github.com/diasYuri/y/pkg/providers", "github.com/diasYuri/y/pkg/agent", "github.com/diasYuri/y/pkg/tools", "os/exec"} {
+			if externalIntegrationTest && blocked == "github.com/diasYuri/opera/internal/adapters/" && strings.HasPrefix(name, "github.com/diasYuri/opera/internal/adapters/providers/") {
+				continue
+			}
 			if strings.HasPrefix(name, blocked) {
 				return fmt.Errorf("TUI must depend on product actions/events, not %s (%s)", name, path)
 			}
@@ -181,6 +208,12 @@ func validateImport(path, name string) error {
 	}
 	if strings.HasPrefix(path, "internal/ui/cli/") {
 		for _, blocked := range []string{"github.com/diasYuri/opera/internal/adapters/providers/", "github.com/diasYuri/y/pkg/agent", "github.com/diasYuri/y/pkg/tools"} {
+			if externalIntegrationTest && strings.HasPrefix(blocked, "github.com/diasYuri/opera/internal/adapters/providers/") {
+				continue
+			}
+			if externalIntegrationTest && blocked == "github.com/diasYuri/y/pkg/agent" && strings.HasPrefix(name, "github.com/diasYuri/y/pkg/agent/agenttest") {
+				continue
+			}
 			if strings.HasPrefix(name, blocked) {
 				return fmt.Errorf("CLI must use core composition and product modules, not %s (%s)", name, path)
 			}

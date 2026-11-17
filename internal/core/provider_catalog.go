@@ -44,16 +44,18 @@ func (r CredentialResolver) ResolveAPIKey(ctx context.Context, request auth.Reso
 	return r.Lookup(ctx, request.ProviderID)
 }
 
-// SubscriptionRecord and its factory keep CLI authentication flows behind core's
-// provider composition boundary while preserving the provider-owned protocol.
-type SubscriptionRecord = subscription.Record
-
-const SubscriptionProviderID = subscription.ProviderID
-
-func NewSubscriptionClient() *subscription.Client { return subscription.NewClient() }
-
-func NewSubscriptionProvider(lookup func(context.Context, string) (string, error)) *subscription.Provider {
-	return subscription.NewProvider(lookup)
+// EnvironmentAPIKey resolves standard SDK environment variables and provider-owned
+// conventions through the composed catalog.
+func EnvironmentAPIKey(ctx context.Context, provider string, lookup func(string) string) (string, error) {
+	catalog, err := DefaultCatalog()
+	if err != nil {
+		return "", err
+	}
+	if value := catalog.EnvironmentCredential(provider, lookup); value != "" {
+		return value, nil
+	}
+	source := auth.NewEnvSource().WithLookup(lookup)
+	return source.Resolve(ctx, provider)
 }
 
 func CustomAPIKey(ctx context.Context, provider config.CustomProvider) (string, error) {

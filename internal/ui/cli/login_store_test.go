@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -12,6 +13,14 @@ import (
 	"github.com/diasYuri/opera/internal/modules/configuration"
 	"github.com/diasYuri/opera/internal/modules/execution"
 )
+
+type subscriptionCredentialFixture struct {
+	ClientID     string    `json:"client_id"`
+	Subject      string    `json:"subject"`
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	ExpiresAt    time.Time `json:"expires_at"`
+}
 
 type fixtureKeyring struct {
 	values      map[string]string
@@ -65,8 +74,14 @@ func TestLoginRecoversFinalCredentialWriteWithoutRepeatingAuthorization(t *testi
 		t.Fatal(err)
 	}
 	// This record represents the already completed authorization-code exchange.
-	record := core.SubscriptionRecord{ClientID: "oaiapp_fixture", Subject: "verified-user", AccessToken: "private-access", RefreshToken: "private-refresh", ExpiresAt: time.Now().Add(time.Hour)}
-	if err := saveSubscription(store, s.cfg, record); err != nil {
+	record := subscriptionCredentialFixture{ClientID: "oaiapp_fixture", Subject: "verified-user", AccessToken: "private-access", RefreshToken: "private-refresh", ExpiresAt: time.Now().Add(time.Hour)}
+	if err := func() error {
+		raw, err := json.Marshal(record)
+		if err != nil {
+			return err
+		}
+		return store.Set("openai-subscription."+s.cfg.String("credential_ref")+".oauth", string(raw))
+	}(); err != nil {
 		t.Fatal(err)
 	}
 	if prompts != 1 {
@@ -76,14 +91,21 @@ func TestLoginRecoversFinalCredentialWriteWithoutRepeatingAuthorization(t *testi
 	if migrated, err := fileStore.Get("openai-subscription.host"); err != nil || migrated != host {
 		t.Fatal("host identity was not preserved", err)
 	}
-	saved, err := readSubscription(fileStore, s.cfg)
+	saved, err := func() (subscriptionCredentialFixture, error) {
+		raw, err := fileStore.Get("openai-subscription." + s.cfg.String("credential_ref") + ".oauth")
+		var value subscriptionCredentialFixture
+		if err == nil {
+			err = json.Unmarshal([]byte(raw), &value)
+		}
+		return value, err
+	}()
 	if err != nil || saved.AccessToken != record.AccessToken || saved.RefreshToken != record.RefreshToken {
 		t.Fatal("exchanged tokens were lost", err)
 	}
 	if s.cfg.String("credentials.store") != "file" {
 		t.Fatal("current session still uses failed keyring")
 	}
-	token, err := s.opts.Credential(context.Background(), core.SubscriptionProviderID)
+	token, err := s.opts.Credential(context.Background(), "openai-subscription")
 	if err != nil || token != record.AccessToken {
 		t.Fatal("execution resolver still uses failed keyring", err)
 	}

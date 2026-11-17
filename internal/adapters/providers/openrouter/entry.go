@@ -6,8 +6,10 @@ import (
 )
 
 func Entry() providercatalog.Entry {
-	return openai_compatible.NamedEntry("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", &providercatalog.LoginDescriptor{ID: "openrouter", Name: "OpenRouter", Description: "OpenRouter account or API key", Methods: []providercatalog.LoginMethod{
-		{ID: "oauth", Name: "Sign in with OpenRouter", Description: "OpenRouter OAuth", Kind: "openrouter-oauth", ProviderID: "openrouter"},
+	entry := openai_compatible.NamedEntry("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", &providercatalog.LoginDescriptor{ID: "openrouter", Name: "OpenRouter", Description: "OpenRouter account or API key", Methods: []providercatalog.LoginMethod{
+		{ID: "oauth", Name: "Sign in with OpenRouter", Description: "OpenRouter OAuth", Kind: "openrouter-oauth", ProviderID: "openrouter", Authenticator: authenticator{}},
 		{ID: "api-key", Name: "OpenRouter API key", Description: "Use an OpenRouter API key", Kind: "api-key", ProviderID: "openrouter"},
 	}})
+	entry.EnvironmentCredential = EnvironmentCredential
+	return entry
 }

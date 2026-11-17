@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/diasYuri/opera/internal/modules/configuration"
 	"github.com/diasYuri/y/pkg/providers"
@@ -13,13 +14,47 @@ import (
 
 type Factory func(context.Context, config.Resolved, func(context.Context, string) (string, error)) (providers.Provider, error)
 
+// CredentialStore and AuthIO expose only effects needed by provider-owned
+// authentication handlers. UI supplies prompts and notifications.
+type CredentialStore interface {
+	Get(string) (string, error)
+	Set(string, string) error
+	Delete(string) error
+}
+type LoginOption struct{ ID, Name, Description string }
+type LoginPrompt struct {
+	Kind, Title, Message, Placeholder string
+	Options                           []LoginOption
+}
+type LoginNotice struct{ URL, Message string }
+type AuthIO struct {
+	Store         CredentialStore
+	Reference     string
+	CredentialDir string
+	Accessible    bool
+	Now           func() time.Time
+	Prompt        func(context.Context, LoginPrompt) (string, error)
+	Notify        func(context.Context, LoginNotice) error
+	Callback      func(context.Context, string, string, string) (string, func(context.Context, time.Duration) (string, error), func(), error)
+}
+type AuthResult struct {
+	Status string
+	Values map[string]string
+}
+type Authenticator interface {
+	Supports(string) bool
+	Authenticate(context.Context, string, AuthIO) (AuthResult, error)
+	Credential(context.Context, AuthIO) (string, error)
+}
+
 // LoginMethod describes a credential flow that selects a provider in this catalog.
 type LoginMethod struct {
-	ID          string
-	Name        string
-	Description string
-	Kind        string
-	ProviderID  string
+	ID            string
+	Name          string
+	Description   string
+	Kind          string
+	ProviderID    string
+	Authenticator Authenticator
 }
 
 // LoginDescriptor groups credential methods into one user-facing provider choice.
@@ -31,14 +66,53 @@ type LoginDescriptor struct {
 }
 
 type Entry struct {
-	ID          string
-	Name        string
-	Description string
-	Factory     Factory
-	Login       *LoginDescriptor
+	ID                    string
+	Name                  string
+	Description           string
+	Factory               Factory
+	Login                 *LoginDescriptor
+	EnvironmentCredential func(func(string) string) string
+	FixedEndpoint         bool
 }
 
 type Catalog struct{ entries map[string]Entry }
+
+func (c *Catalog) Authenticator(provider string) Authenticator {
+	if c == nil {
+		return nil
+	}
+	for _, id := range c.IDs() {
+		entry := c.entries[id]
+		if entry.Login == nil {
+			continue
+		}
+		for _, method := range entry.Login.Methods {
+			if method.ProviderID == provider && method.Authenticator != nil {
+				return method.Authenticator
+			}
+		}
+	}
+	return nil
+}
+
+func (c *Catalog) EnvironmentCredential(provider string, lookup func(string) string) string {
+	if c == nil {
+		return ""
+	}
+	entry, ok := c.entries[provider]
+	if !ok || entry.EnvironmentCredential == nil {
+		return ""
+	}
+	return entry.EnvironmentCredential(lookup)
+}
+
+func (c *Catalog) FixedEndpoint(provider string) bool {
+	if c == nil {
+		return false
+	}
+	entry, ok := c.entries[provider]
+	return ok && entry.FixedEndpoint
+}
 
 func New(entries ...Entry) (*Catalog, error) {
 	items := make(map[string]Entry, len(entries))
@@ -124,7 +198,13 @@ func (c *Catalog) Entries() []Entry {
 	for _, id := range ids {
 		entry := c.entries[id]
 		entry.Factory = nil
+		entry.EnvironmentCredential = nil
 		entry.Login = cloneLoginDescriptor(entry.Login)
+		if entry.Login != nil {
+			for i := range entry.Login.Methods {
+				entry.Login.Methods[i].Authenticator = nil
+			}
+		}
 		out = append(out, entry)
 	}
 	return out

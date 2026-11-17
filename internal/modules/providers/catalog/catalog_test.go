@@ -68,6 +68,30 @@ func TestCatalogClosesPartialProviderAndPreservesErrors(t *testing.T) {
 	}
 }
 
+func TestCatalogAcceptsAuthenticationDoubleWithoutProviderImplementation(t *testing.T) {
+	handler := authDouble{}
+	catalog, err := New(Entry{ID: "fixture", FixedEndpoint: true, Factory: func(context.Context, config.Resolved, func(context.Context, string) (string, error)) (providers.Provider, error) {
+		return providertest.NewFakeProvider(), nil
+	}, Login: &LoginDescriptor{ID: "fixture", Name: "Fixture", Methods: []LoginMethod{{ID: "oauth", Name: "Fixture login", Kind: "oauth", ProviderID: "fixture", Authenticator: handler}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := catalog.Authenticator("fixture"); got != handler {
+		t.Fatalf("authentication handler = %#v", got)
+	}
+	if !catalog.FixedEndpoint("fixture") {
+		t.Fatal("fixed endpoint metadata was lost")
+	}
+}
+
+type authDouble struct{}
+
+func (authDouble) Supports(string) bool { return true }
+func (authDouble) Authenticate(context.Context, string, AuthIO) (AuthResult, error) {
+	return AuthResult{Status: "stored"}, nil
+}
+func (authDouble) Credential(context.Context, AuthIO) (string, error) { return "fixture", nil }
+
 type failedProvider struct {
 	*providertest.FakeProvider
 	closeError error

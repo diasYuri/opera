@@ -43,9 +43,6 @@ Configuration and inspection:
   auth status <reference>             Check presence without displaying a secret
   auth delete <reference>             Delete a stored secret
   auth login <provider>               OAuth device/PKCE login with URL notifications
-  auth login openai-subscription      Continue with ChatGPT (subscription OAuth)
-  auth status openai-subscription     Inspect the selected ChatGPT account
-  auth logout openai-subscription     Revoke session and clear local tokens
 
 Flags (accepted before or after a command):
   --help, -h                 Show help without reading configuration

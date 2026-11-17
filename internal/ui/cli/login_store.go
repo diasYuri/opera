@@ -101,17 +101,6 @@ func chooseLoginStore(ctx context.Context, notify func(execution.LoginNotice) er
 	}
 }
 
-func (s *chatSession) subscriptionLoginWithRecovery(ctx context.Context, cfg config.Resolved, notify func(execution.LoginNotice) error) error {
-	a := s.app
-	a.OpenStore = func(kind, directory string) (credentials.Store, error) {
-		return s.openLoginStore(ctx, cfg, kind, directory, notify)
-	}
-
-	return a.interactiveSubscriptionLogin(ctx, cfg, func(u string) error {
-		return notify(execution.LoginNotice{URL: u, Message: "Finish sign-in in your browser. The authorization link is above."})
-	})
-}
-
 func (s *chatSession) openLoginStore(ctx context.Context, cfg config.Resolved, kind, directory string, notify func(execution.LoginNotice) error) (credentials.Store, error) {
 	open := s.app.OpenStore
 	store, err := open(kind, directory)
