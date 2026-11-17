@@ -2,6 +2,10 @@
 
 Data da revisão: 2026-11-17.
 
+Status: implementação arquitetural concluída em 2026-11-17. O gate de race segue
+pendente de espaço temporário para repetir; os resultados estão registrados em
+`docs/refactoring-validation.md`. A estrutura abaixo descreve os packages atuais.
+
 Este plano substitui o arranjo genérico `app`/`harness` e a aplicação excessiva de
 ports and adapters a código interno. A arquitetura do Opera usa o runtime público
 Y como fundação acoplada ao core; módulos internos são coesos e podem colaborar
@@ -20,60 +24,60 @@ um submódulo próprio por provider. A UI traduz interação em operações do p
 O limite de um pacote deve seguir ownership e direção das dependências, não uma
 meta abstrata de desacoplamento.
 
-## Estrutura alvo
+## Estrutura concluída
 
 ```text
 cmd/opera/
 internal/
-  core/
-    runtime/                 # integração/lifecycle do Harness público Y
-    composition/             # definitions, keys, bindings e grafo Y
-    configuration/           # defaults e política de composição do produto
+  core/                       # runtime Y público, composição e lifecycle
   modules/
-    execution/               # execução, Work e estado que hoje é mutuamente ligado
-    sessions/                # somente quando possuir fluxo e estado independentes
-    approvals/               # política/decisão do produto, não o leitor de arquivos
-    context/                 # dados e regras de contexto independentes de I/O
-    skills/                  # catálogo/regras do produto para skills
-    extensions/              # gestão do produto sobre APIs públicas de extensões Y
-    workspace/               # identidade/regras de workspace
+    accounting/
+    configuration/
+    context/
+    diagnostics/
+    execution/                # Service e Work mantidos coesos
+    extensions/
+    providers/catalog/
+    records/
+    skills/catalog/
+    workspace/
   adapters/
+    approvals/filesystem/
+    context/filesystem/
+    credentials/
+    persistence/sqlite/
+    platform/
     providers/
       anthropic/
+      custom/
+      deepseek/
       google/
+      groq/
       openai/
         subscription/
       openai_compatible/
       openrouter/
-      custom/
-    persistence/sqlite/
-    credentials/{file,keyring}/
-    context/filesystem/
     skills/filesystem/
-    workspace/{filesystem,locks}/
-    platform/
   ui/
-    cli/                      # comandos, flags, stdin/stdout e bootstrap de entrega
-    tui/
-      chat/
-      composer/
-      conversation/
-      navigation/
-      approvals/
-      authentication/
-      theme/
+    cli/                      # processo, comandos, bootstrap e output
+    tui/                      # shell, submodelos de interação e tema
+  demo/
+  foundation/
 ```
 
-É um mapa de ownership, não uma obrigação de criar diretórios vazios. Criar ou
-dividir pacote quando existir comportamento, dono e benefício de navegação claros.
-O projeto continua com um único `go.mod`; os submódulos são packages Go, não módulos
+`core` permanece um package coeso: os builders separam responsabilidades de
+composição sem expor keys e tipos privados entre subpackages. `ui/tui` também
+mantém componentes e submodelos próximos ao shell Bubble Tea; arquivos separados
+expressam ownership sem criar uma hierarquia de packages sem dependência real. O
+projeto continua com um único `go.mod`; os submódulos são packages Go, não módulos
 Go independentes.
 
-`core/composition` é o composition root: conhece o Y, os módulos e os adapters
-concretos necessários para montar a configuração selecionada. `core/runtime`
-controla o Harness Y e seu lifecycle. `cmd/opera` permanece mínimo. `ui/cli` chama
-o core para iniciar e interagir com o produto. `ui/tui` apresenta dados e envia
-intenções; não importa adapters, providers ou implementação do Harness.
+`internal/core` é o composition root: conhece o Y, os módulos e os adapters
+concretos necessários para montar a configuração selecionada e controla o
+`runtime.Harness` público e seu lifecycle. `cmd/opera` permanece mínimo.
+`internal/ui/cli` chama o core para iniciar e interagir com o produto.
+`internal/ui/tui` apresenta dados e envia intenções; não importa adapters,
+providers ou implementação do Harness.
 
 ## Regras de dependência
 
@@ -92,6 +96,10 @@ intenções; não importa adapters, providers ou implementação do Harness.
   processos ficam em `adapters/` no submódulo que os possui. Cada provider reúne
   seu cliente, autenticação, metadados e factory. A composição agrega factories;
   os adapters não importam o composition root.
+- Handlers de autenticação pertencem ao provider e entram pelo método de login do
+  catálogo. A CLI resolve o handler pelo ID do provider alvo e oferece somente
+  store, prompts, notificações e callback local genéricos; protocolos e ciclos de
+  credenciais não ficam no core nem na UI.
 - A UI depende de operações/dados de produto. Providers não conhecem UI e a UI
   não escolhe providers por switch ou por nome concreto.
 - Portas pequenas são reservadas a limites de efeito/substituição reais, como
@@ -130,29 +138,29 @@ emite comandos; efeitos voltam como mensagens e respostas obsoletas são descart
 Não criar DSL, bindings mutáveis nem framework UI paralelo. DESIGN.md determina a
 identidade visual terminal.
 
-## Sequência de migração
+## Etapas executadas
 
-1. Atualizar decisões e `AGENTS.md` para registrar core Y, módulos colaborativos,
+1. [x] Atualizar decisões e `AGENTS.md` para registrar core Y, módulos colaborativos,
 adapters externos e `ui/cli` + `ui/tui`.
-2. Fechar a migração dos providers em `internal/adapters/providers/<provider>`;
+2. [x] Fechar a migração dos providers em `internal/adapters/providers/<provider>`;
    resolver imports antigos, autenticação específica e catálogo padrão. Catálogo,
    login, descoberta e execução devem usar a mesma composição explícita.
-3. Mover a composição atual de `internal/harness` para `internal/core`, preservando
+3. [x] Mover a composição atual de `internal/harness` para `internal/core`, preservando
    chaves, grafo declarado, startup, rollback, fechamento inverso e runtime Y
    público. Separar arquivos por builder apenas quando ownership ficar claro.
-4. Migrar `internal/app` para `internal/modules/execution` junto com `Service` e
+4. [x] Migrar `internal/app` para `internal/modules/execution` junto com `Service` e
    `Work`, que colaboram diretamente. Atualizar consumidores na mesma etapa. Extrair
    sessions, approvals, context ou outras capabilities apenas quando o corte ficar
    acíclico sem interfaces artificiais.
-5. Agrupar adapters externos em submódulos coerentes e colocar regras/catálogos
+5. [x] Agrupar adapters externos em submódulos coerentes e colocar regras/catálogos
    internos no módulo que os possui. Remover caminhos e agregadores antigos quando
    não houver mais consumidores.
-6. Mover CLI e TUI para `internal/ui/cli` e `internal/ui/tui`; manter CLI como
+6. [x] Mover CLI e TUI para `internal/ui/cli` e `internal/ui/tui`; manter CLI como
    fronteira de processo e TUI como apresentação. Preservar comandos e contrato.
-7. Ampliar os checks arquiteturais para bloquear imports de providers fora de
+7. [x] Ampliar os checks arquiteturais para bloquear imports de providers fora de
    adapters/composição, imports de core por módulos, ciclos, dependências de UI em
    infraestrutura e restos dos pacotes antigos.
-8. Revisar o grafo completo, documentação e diffs; validar os gates abaixo e
+8. [ ] Revisar o grafo completo, documentação e diffs; validar os gates abaixo e
    registrar evidências em `docs/refactoring-validation.md`.
 
 Cada etapa é completa e compilável antes da próxima. Mudanças estruturais devem

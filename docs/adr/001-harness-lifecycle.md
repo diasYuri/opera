@@ -1,11 +1,12 @@
 # ADR 001 — Public harness composition and lifecycle
 
-Status: accepted in F0; full composition is F1.
+Status: accepted. Package organization is superseded by ADR 009; lifecycle guarantees remain active.
 
 Opera owns factories and product defaults over Y's public `runtime.Harness` and
-component service keys. `internal/app` owns execution use cases shared by chat,
-run and synchronous worker; delivery adapters depend on its actions/events.
-Do not import Y internals, invoke `y` as a backend or copy its agent loop.
+component service keys. `internal/modules/execution` owns use cases shared by
+chat, run and synchronous worker; `internal/ui/cli` adapts process I/O and
+`internal/ui/tui` presents its actions/events. Do not import Y internals, invoke
+`y` as a backend or copy its agent loop.
 
 Every resource belongs to a component scope: providers, processes, clients,
 subscriptions, registries, views and child tasks. Startup failure rolls back

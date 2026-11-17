@@ -33,19 +33,26 @@ retomada ou gerenciador de gerações. Não invoque o binário Y.
 - `internal/core`: integração acoplada ao runtime Y, composition root, definição
   do grafo, keys, bindings e configuração da composição.
 - `internal/modules/<capacidade>`: regras, estado e serviços coesos do produto,
-  como execution, sessions, approvals, context, skills e extensions. Módulos podem
+  como execution, accounting, configuration, context, diagnostics, extensions,
+  providers/catalog, records, skills/catalog e workspace. Sessions e approvals
+  permanecem em execution enquanto compartilham seu ciclo de vida. Módulos podem
   colaborar diretamente por dependências concretas acíclicas.
 - `internal/adapters`: integrações concretas externas e efeitos substituíveis.
   Cada provider externo tem seu próprio submódulo em
   `internal/adapters/providers/<provider>`.
-- `internal/ui/cli`: comandos, flags, stdin/stdout e fronteira do processo.
+- `internal/ui/cli`: comandos, flags, stdin/stdout, fronteira do processo e
+  bootstrap da composição. Pode abrir adapters genéricos de credencial/contexto e
+  encaminhar autenticação por handlers do catálogo, mas não importa provider
+  concreto nem implementa protocolo de autenticação.
 - `internal/ui/tui`: Bubble Tea, composição de tela e estado de interação.
 
 O core pode compor módulos e adapters; módulos não importam o core nem a UI.
 Módulos podem usar contratos públicos Y que façam parte da capacidade. O lifecycle
-de `runtime.Harness` e a montagem do grafo pertencem ao core. A UI depende de
-operações e dados de produto, não de provider, persistence, tool execution ou
-implementação concreta do runtime.
+de `runtime.Harness` e a montagem do grafo pertencem ao core. A TUI depende de
+operações e dados de produto, não de adapters, providers, persistence, tool
+execution ou implementação concreta do runtime. A CLI é a fronteira de processo:
+compõe o core, chama módulos e pode acessar adapters necessários aos comandos de
+configuração e credenciais, sem conhecer implementações de providers.
 
 Não aplique ports and adapters a toda chamada interna. Crie interface pequena
 quando delimitar efeito externo, substituição real ou consumidor isolado. Não
@@ -78,7 +85,10 @@ no catálogo da composição. A execução, configuração e descoberta usam o m
 catálogo. Não adicionar switches ou listas de providers no core/UI. Não usar
 registro por init, estado global mutável, fallback silencioso ou detecção de
 credencial que escape ao resolver configurado. Detalhes de OAuth/assinatura e
-transporte ficam no adapter apropriado; não se tornam regra do agente.
+transporte ficam no adapter apropriado; não se tornam regra do agente. Fluxos
+interativos publicam handlers via método de login do catálogo; a CLI só encaminha
+prompts, notificações e callback de loopback genéricos e resolve o handler pelo ID
+do provider alvo.
 
 Use `component.Definition`, `Descriptor`, `Key[T]` e serviços do Y para composição.
 Declare ID, versão do componente, serviços fornecidos/requeridos, bindings,
