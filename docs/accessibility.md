@@ -29,9 +29,9 @@ Temporary viewers take keyboard focus; Esc returns it to the composer.
 | Exit empty editor | Ctrl+D |
 
 `NO_COLOR` is honored by its presence, including an empty value. Status meaning
-uses words as well as color. The blue status accents use ANSI 25 on light terminals
-and 75 on dark terminals. Failures and approvals use ANSI 130 on light terminals
-and 215 on dark terminals, always with text labels; no red/green-only meaning.
+uses words as well as color. The blue-gray status accents use ANSI 67 on light terminals
+and 109 on dark terminals. Failures use muted rose (ANSI 131/167) and approvals
+muted ochre (ANSI 137/179), always with text labels; no red/green-only meaning.
 The terminal owns the background; Opera does not paint a separate app surface.
 The composer uses a steady cursor so idle chat does not redraw. `--no-motion`
 disables the activity spinner and spring animation.

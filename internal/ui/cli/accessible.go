@@ -60,7 +60,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 	var updates <-chan execution.Update
 	var pending *execution.Result
 	previous := ""
-	mode := execution.ModeDefault
+	mode := execution.RuntimeModeDefault
 	retryPrevious := false
 	lastCode := 0
 	closedInput, quitting, followUp := false, false, false
@@ -128,12 +128,12 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 					}
 					continue
 				}
-				if mode == execution.ModePlan {
-					mode = execution.ModeDefault
+				if mode == execution.RuntimeModePlan {
+					mode = execution.RuntimeModeDefault
 				} else {
-					mode = execution.ModePlan
+					mode = execution.RuntimeModePlan
 				}
-				if !write("Agent mode: " + mode + ".\nYou> ") {
+				if !write("Runtime mode: " + mode + ".\nYou> ") {
 					return 1
 				}
 				continue
@@ -149,7 +149,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				}
 				if len(fields) == 1 {
 					var options []string
-					for _, available := range execution.AvailableModes() {
+					for _, available := range execution.AvailableRuntimeModes() {
 						options = append(options, available.ID+" — "+available.Description)
 					}
 					if !write("Available modes:\n" + strings.Join(options, "\n") + "\nUse /mode <name>.\nYou> ") {
@@ -163,7 +163,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 					}
 					continue
 				}
-				selected, err := execution.ResolveMode(fields[1])
+				selected, err := execution.ResolveRuntimeMode(fields[1])
 				if err != nil {
 					if !write(err.Error() + "\nYou> ") {
 						return 1
@@ -171,7 +171,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 					continue
 				}
 				mode = selected.ID
-				if !write("Agent mode: " + mode + ".\nYou> ") {
+				if !write("Runtime mode: " + mode + ".\nYou> ") {
 					return 1
 				}
 				continue
@@ -415,6 +415,23 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				}
 				continue
 			}
+			if profile, task, recognized, err := execution.ParseAgentProfileCommand(text); recognized {
+				if err != nil {
+					if !write(err.Error() + "\nYou> ") {
+						return 1
+					}
+					continue
+				}
+				if currentExecution != nil || pending != nil || retryPrevious {
+					if !write("Resolve or retry the previous execution before invoking an agent profile.\nYou> ") {
+						return 1
+					}
+					continue
+				}
+				request := execution.Request{Prompt: task, ContinueFrom: previous, RuntimeMode: mode, AgentProfile: profile.ID}
+				start(request)
+				continue
+			}
 			if strings.HasPrefix(text, "/") {
 				if name == "/usage" || name == "/tasks" || name == "/agents" || name == "/compact" {
 					id := previous
@@ -442,7 +459,7 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				}
 				continue
 			}
-			request := execution.Request{Prompt: text, ContinueFrom: previous, Mode: mode}
+			request := execution.Request{Prompt: text, ContinueFrom: previous, RuntimeMode: mode}
 			if retryPrevious && previous != "" {
 				request.ID = previous
 				request.ContinueFrom = ""

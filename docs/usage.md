@@ -24,7 +24,7 @@ child totals. Branches inherit transcript context, never usage claims; new infer
 on a branch counts separately. Retry/resume count only new provider invocations.
 Compaction inference is recorded with kind `compaction`; rewriting a transcript
 never erases the ledger. Work admission's `limits.worker_tokens` reservation is a
-separate conservative budget, not a billing figure.
+separate conservative budget, unlimited by default, not a billing figure.
 
 Token status is `known` for normalized provider usage, `estimated` for a completed
 or interrupted stream without reported usage, and `unavailable` for a request

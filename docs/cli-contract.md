@@ -69,7 +69,10 @@ and Ctrl+D on an empty editor will exit. No job is detached from its CLI.
 - `compact <run-id>` requires a completed checkpoint and archives the original before
   replacing the live transcript. Failure preserves either the original or an auditable
   prepared archive; no external effect is repeated.
-- Chat adds `/tasks`, `/agents`, `/compact`, `/retry`. `/steer` is active-only;
+- Chat adds `/tasks`, `/agents`, `/compact`, `/retry` and `/review [task]`.
+  `/review` invokes the read-only reviewer AgentProfile inside the currently
+  selected RuntimeMode. `/mode` and `/plan` select RuntimeMode; profile
+  instructions do not grant tool permissions. `/steer` is active-only;
   ordinary messages remain ordered follow-ups. Active panels support cancellation.
 - Child events carry `parent_run_id`, source `run_id` and its own event sequence.
   Approval results identify agent and task. Parent resume walks its pending children

@@ -76,7 +76,8 @@ require a new scope. See [extension limits](extensions.md).
 | MCP startup failure | Inspect disabled configuration, credential references and server; explicitly refresh/enable |
 | Memory degraded | Repair filesystem readiness; fail-open does not swallow writes |
 | Model rejects JSON or thinking | Check `models` and the endpoint's actual supported contract |
-| Context/worker budget exhausted | Compact or explicitly adjust the documented limit; never infer that the billing total equals the budget |
+| Context budget exhausted | Compact or adjust the context limit; never infer that the billing total equals the budget |
+| Worker budget exhausted | Check for an explicit `limits.worker_tokens`; unset it or raise it |
 | Screen reader noise | Use `--accessible --no-motion`; optionally set `NO_COLOR` |
 
 The snapshot harness-version field is a stable checkpoint compatibility ID, not

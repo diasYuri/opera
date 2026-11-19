@@ -458,7 +458,7 @@ func (w *Work) Charge(ctx context.Context, id string, tokens int64) error {
 			return err
 		}
 	}
-	if used+tokens > w.MaxBudget {
+	if w.MaxBudget > 0 && used+tokens > w.MaxBudget {
 		return errors.New("shared worker token budget exhausted; increase limits.worker_tokens explicitly")
 	}
 	used += tokens

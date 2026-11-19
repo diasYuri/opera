@@ -154,8 +154,9 @@ See [F2 behavior and validation](docs/f2-validation.md).
 `/tasks`, `/agents`, `/compact` and `/retry` expose the same application state in
 chat. Workers create a persisted task objective and can refine it with task tools.
 Local children share policy, checkpoints and the workspace mutation queue. Defaults
-allow four concurrent children and one level; configure `agents.max_concurrent`,
-`agents.max_depth` and the shared `limits.worker_tokens` reservation budget.
+allow four concurrent children and one level with unlimited shared worker tokens;
+configure `agents.max_concurrent`, `agents.max_depth` and `limits.worker_tokens`
+to cap their usage.
 Headless approval exits 3; resume the parent using its displayed approval ID.
 Inspect a child session and reconcile uncertain operations explicitly before retry.
 

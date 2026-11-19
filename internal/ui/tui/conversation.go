@@ -482,7 +482,7 @@ func (m model) renderUserEntry(entry conversationEntry, t palette) string {
 		padding = 0
 	}
 	textWidth := max(1, width-2*padding)
-	bubble := t.userBubble.Width(textWidth).Padding(0, padding).Render(ansi.Hardwrap(text, textWidth, true))
+	bubble := t.userBubble.Width(textWidth).Padding(0, padding).Render(ansi.Wrap(text, textWidth, " "))
 	return "\n" + lipgloss.PlaceHorizontal(width, lipgloss.Right, bubble)
 }
 
@@ -548,21 +548,4 @@ func toolBody(entry conversationEntry, width int, expanded bool) string {
 	}
 	text := safeText(strings.Join(parts, "\n"))
 	return ansi.Hardwrap(text, max(1, width-6), true)
-}
-
-func approvalDiff(text string, width int, t palette) string {
-	if !strings.HasPrefix(text, "--- ") {
-		return ansi.Hardwrap(safeText(text), max(1, width), true)
-	}
-	lines := strings.Split(safeText(text), "\n")
-	for i, line := range lines {
-		switch {
-		case strings.HasPrefix(line, "+"):
-			lines[i] = t.added.Render(line)
-		case strings.HasPrefix(line, "-"):
-			lines[i] = t.removed.Render(line)
-		}
-		lines[i] = ansi.Truncate(lines[i], max(1, width), "…")
-	}
-	return strings.Join(lines, "\n")
 }

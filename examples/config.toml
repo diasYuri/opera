@@ -24,7 +24,7 @@ max_concurrent = 4
 max_depth = 1
 
 [limits]
-worker_tokens = 256000
+worker_tokens = 0 # 0 means unlimited; set a positive value to cap shared worker tokens.
 context_tokens = 64000
 output_bytes = 1048576
 attachment_bytes = 10485760

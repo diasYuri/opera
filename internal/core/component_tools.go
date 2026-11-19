@@ -40,7 +40,7 @@ func (b *compositionBuilder) tools() component.Definition {
 		}
 		limits := tools.ToolLimits{MaxOutputBytes: int64(cfg.Int("limits.output_bytes"))}
 		work := execution.NewWork(records, cfg.Int("agents.max_concurrent"), cfg.Int("agents.max_depth"))
-		work.MaxBudget = int64(cfg.Int("limits.worker_tokens"))
+		work.MaxBudget = int64(cfg.Int("limits.worker_tokens")) // 0 means unlimited.
 		if err := registerToolPacks(ctx, registry, ToolPackContext{Config: cfg, Policy: engine, Limits: limits, Guard: guard, Questions: questions, Skills: skillManager, Work: work}, opts.ToolPacks, opts.DisabledToolPacks); err != nil {
 			return err
 		}

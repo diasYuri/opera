@@ -57,6 +57,36 @@ func TestChatSubmissionAfterFailureResumesActualRun(t *testing.T) {
 	}
 }
 
+type requestCaptureExecutor struct {
+	terminalExecutor
+	request execution.Request
+}
+
+func (e *requestCaptureExecutor) Start(_ context.Context, request execution.Request) *execution.Execution {
+	e.request = request
+	return &execution.Execution{ID: "review-run"}
+}
+
+func TestReviewCommandSelectsProfileWithoutChangingRuntimeMode(t *testing.T) {
+	executor := &requestCaptureExecutor{}
+	m := newModel(context.Background(), executor, execution.Request{}, true)
+	m.runtimeMode = execution.RuntimeModePlan
+	m.previous = "prior-run"
+	m.composer.editor.SetValue("/review inspect parser")
+	next, command := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if command == nil {
+		t.Fatal("review command did not start an execution")
+	}
+	_ = command()
+	request := executor.request
+	if request.AgentProfile != execution.AgentProfileReview || request.RuntimeMode != execution.RuntimeModePlan || request.Prompt != "inspect parser" || request.ContinueFrom != "prior-run" {
+		t.Fatalf("review request lost one of its independent selections: %+v", request)
+	}
+	if next.(model).runtimeMode != execution.RuntimeModePlan {
+		t.Fatal("invoking a profile changed the selected runtime mode")
+	}
+}
+
 func TestCtrlCCancelsExecutionAndWaitsForCancelledResult(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

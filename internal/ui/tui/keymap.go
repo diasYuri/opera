@@ -30,8 +30,8 @@ func defaultChatKeyMap() chatKeyMap {
 		cancel:          key.NewBinding(key.WithKeys("esc"), key.WithHelp("Esc", "back")),
 		quit:            key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("Ctrl+C", "exit")),
 		exit:            key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("Ctrl+D", "exit")),
-		historyPrevious: key.NewBinding(key.WithKeys("alt+up"), key.WithHelp("Alt+↑", "previous prompt")),
-		historyNext:     key.NewBinding(key.WithKeys("alt+down"), key.WithHelp("Alt+↓", "next prompt")),
+		historyPrevious: key.NewBinding(key.WithKeys("up", "alt+up"), key.WithHelp("↑", "previous prompt")),
+		historyNext:     key.NewBinding(key.WithKeys("down", "alt+down"), key.WithHelp("↓", "next prompt")),
 	}
 }
 

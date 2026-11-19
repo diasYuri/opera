@@ -19,16 +19,68 @@ type Guard struct {
 	Queue            *workspace.Queue
 	mu               sync.Mutex
 	expected         map[string]*Approval
-	modes            map[string]Mode
+	modes            map[string]RuntimeMode
+	profiles         map[string]AgentProfile
 }
 
-func (g *Guard) SetMode(id string, mode Mode) {
+func (g *Guard) SetMode(id string, mode RuntimeMode) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.modes == nil {
-		g.modes = map[string]Mode{}
+		g.modes = map[string]RuntimeMode{}
 	}
 	g.modes[id] = mode
+}
+
+func (g *Guard) SetProfile(id string, profile AgentProfile) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.profiles == nil {
+		g.profiles = map[string]AgentProfile{}
+	}
+	profile.Tools.AllowedTools = append([]string(nil), profile.Tools.AllowedTools...)
+	profile.Tools.DeniedTools = append([]string(nil), profile.Tools.DeniedTools...)
+	g.profiles[id] = profile
+}
+
+func (g *Guard) ClearProfile(id string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.profiles, id)
+}
+
+// FilterTools returns the tool schemas advertised to one run after intersecting
+// its RuntimeMode and AgentProfile constraints. Middleware still enforces the
+// same constraints when a tool is invoked.
+func (g *Guard) FilterTools(runID string, advertised []ai.Tool) []ai.Tool {
+	g.mu.Lock()
+	mode, hasMode := g.modes[runID]
+	profile, hasProfile := g.profiles[runID]
+	g.mu.Unlock()
+	if !hasMode && !hasProfile {
+		return advertised
+	}
+	filtered := make([]ai.Tool, 0, len(advertised))
+	for _, tool := range advertised {
+		if hasMode && !toolAllowed(mode.Tools, tool.Name) {
+			continue
+		}
+		if hasProfile && !toolAllowed(profile.Tools, tool.Name) {
+			continue
+		}
+		filtered = append(filtered, tool)
+	}
+	return filtered
+}
+
+func toolAllowed(access ToolAccess, name string) bool {
+	if len(access.AllowedTools) > 0 && !contains(access.AllowedTools, name) || contains(access.DeniedTools, name) {
+		return false
+	}
+	if !access.AllowMutations && mutation(name) || !access.AllowDelegation && isDelegationTool(name) || !access.AllowTaskManagement && isTaskTool(name) {
+		return false
+	}
+	return true
 }
 
 func (g *Guard) ClearMode(id string) {
@@ -53,20 +105,31 @@ func (g *Guard) Middleware(ctx context.Context, request tools.ToolRequest, _ too
 	ctx = context.WithValue(ctx, toolRequestKey{}, request)
 	g.mu.Lock()
 	mode, configured := g.modes[request.RunID]
+	profile, hasProfile := g.profiles[request.RunID]
 	g.mu.Unlock()
-	if configured {
-		if len(mode.Tools.AllowedTools) > 0 && !contains(mode.Tools.AllowedTools, request.Name) || contains(mode.Tools.DeniedTools, request.Name) {
-			return tools.ToolResponse{}, fmt.Errorf("tool %q is not available in %s mode", request.Name, mode.Name)
-		}
-		if !mode.Tools.AllowMutations && mutation(request.Name) {
-			return tools.ToolResponse{}, fmt.Errorf("tool %q cannot run in %s mode", request.Name, mode.Name)
-		}
-		if !mode.Tools.AllowDelegation && isDelegationTool(request.Name) {
-			return tools.ToolResponse{}, fmt.Errorf("delegation is disabled in %s mode", mode.Name)
-		}
-		if !mode.Tools.AllowTaskManagement && isTaskTool(request.Name) {
-			return tools.ToolResponse{}, fmt.Errorf("task management is disabled in %s mode", mode.Name)
-		}
+	if configured && !allowsTool(mode.Tools, request.Name) {
+		return tools.ToolResponse{}, fmt.Errorf("tool %q is not available in runtime mode %s", request.Name, mode.Name)
+	}
+	if hasProfile && !allowsTool(profile.Tools, request.Name) {
+		return tools.ToolResponse{}, fmt.Errorf("tool %q is not available to agent profile %s", request.Name, profile.Name)
+	}
+	if configured && !mode.Tools.AllowMutations && mutation(request.Name) {
+		return tools.ToolResponse{}, fmt.Errorf("tool %q cannot run in runtime mode %s", request.Name, mode.Name)
+	}
+	if hasProfile && !profile.Tools.AllowMutations && mutation(request.Name) {
+		return tools.ToolResponse{}, fmt.Errorf("tool %q cannot run in agent profile %s", request.Name, profile.Name)
+	}
+	if configured && !mode.Tools.AllowDelegation && isDelegationTool(request.Name) {
+		return tools.ToolResponse{}, fmt.Errorf("delegation is disabled in runtime mode %s", mode.Name)
+	}
+	if hasProfile && !profile.Tools.AllowDelegation && isDelegationTool(request.Name) {
+		return tools.ToolResponse{}, fmt.Errorf("delegation is disabled in agent profile %s", profile.Name)
+	}
+	if configured && !mode.Tools.AllowTaskManagement && isTaskTool(request.Name) {
+		return tools.ToolResponse{}, fmt.Errorf("task management is disabled in runtime mode %s", mode.Name)
+	}
+	if hasProfile && !profile.Tools.AllowTaskManagement && isTaskTool(request.Name) {
+		return tools.ToolResponse{}, fmt.Errorf("task management is disabled in agent profile %s", profile.Name)
 	}
 	if !mutation(request.Name) {
 		return next(ctx, request)
@@ -90,6 +153,13 @@ func (g *Guard) Middleware(ctx context.Context, request tools.ToolRequest, _ too
 		}
 	}
 	return next(ctx, request)
+}
+
+func allowsTool(access ToolAccess, tool string) bool {
+	if len(access.AllowedTools) > 0 && !contains(access.AllowedTools, tool) {
+		return false
+	}
+	return !contains(access.DeniedTools, tool)
 }
 
 func isDelegationTool(name string) bool { return strings.HasPrefix(name, "subagent_") }

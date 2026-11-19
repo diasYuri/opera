@@ -45,10 +45,11 @@ type model struct {
 	workspaceRoot          string
 	provider               string
 	modelName              string
+	reasoningLevel         string
 	lastError              string
 	runDetails             string
 	text, status, previous string
-	mode                   string
+	runtimeMode            string
 	imageProtocol          imageProtocol
 	streamBuffer           *strings.Builder
 	queuedMessages         []string
@@ -67,12 +68,13 @@ type model struct {
 	newConversationItems   bool
 	toolDetailsExpanded    bool
 
-	stream        *app.Execution
-	approval      *app.Approval
-	resume        app.Request
-	lastSequence  uint64
-	code          int
-	width, height int
+	stream            *app.Execution
+	approval          *app.Approval
+	approvalSelection int
+	resume            app.Request
+	lastSequence      uint64
+	code              int
+	width, height     int
 
 	retryPrevious                     bool
 	loginPrompt                       *app.LoginPrompt
@@ -126,7 +128,7 @@ func (c choice) Title() string       { return string(c) }
 func (c choice) Description() string { return "Select for the next run" }
 func (c choice) FilterValue() string { return string(c) }
 
-type modeChoice struct{ mode app.Mode }
+type modeChoice struct{ mode app.RuntimeMode }
 
 func (c modeChoice) Title() string       { return c.mode.Name }
 func (c modeChoice) Description() string { return c.mode.Description }
@@ -739,6 +741,9 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if nextModel, cmd, handled := m.updateApprovalKey(msg); handled {
+			return nextModel, cmd
+		}
 		if nextModel, cmd, handled := m.updateQuestionKey(msg); handled {
 			return nextModel, cmd
 		}
@@ -796,6 +801,15 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 				_, cmd := form.Update(message)
 				if form.State == huh.StateCompleted {
 					return m.finishForm()
+				}
+				// Commit the highlighted choice directly on Enter. The selected
+				// value is already updated by the select field as the user navigates.
+				if m.formKind == "thinking" && keyMatches(msg, keys.submit) {
+					if field := form.GetFocusedField(); field != nil {
+						if value, ok := field.GetValue().(string); ok {
+							return m.finishThinkingForm(value)
+						}
+					}
 				}
 				if form.State == huh.StateAborted {
 					m.approvalForm = nil
@@ -867,9 +881,16 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.conversation.GotoBottom()
 			m.newConversationItems = false
 			return m, nil
-		case keyMatches(msg, keys.historyPrevious), keyMatches(msg, keys.historyNext):
+		case keyMatches(msg, keys.historyPrevious) && (msg.Mod == tea.ModAlt || m.composer.shouldNavigateHistory(true)),
+			keyMatches(msg, keys.historyNext) && m.composer.shouldNavigateHistory(false):
 			m.composer.navigateHistory(keyMatches(msg, keys.historyPrevious))
 			m.sizeEditor()
+			return m, nil
+		case keyMatches(msg, keys.cancel):
+			if m.stream != nil {
+				m.status = "Cancelling execution…"
+				return m, func() tea.Msg { m.stream.Cancel(); return nil }
+			}
 			return m, nil
 		case keyMatches(msg, keys.quit):
 			if m.stream != nil {
@@ -981,6 +1002,21 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 					m.status = err.Error()
 				}
 				return m, nil
+			}
+			if profile, task, recognized, err := app.ParseAgentProfileCommand(text); recognized {
+				if err != nil {
+					m.status = err.Error()
+					return m, nil
+				}
+				if m.stream != nil || m.approval != nil || m.actionPending || m.retryPrevious {
+					m.status = "Resolve or retry the previous execution before invoking an agent profile"
+					return m, nil
+				}
+				request := m.chatRequest(task)
+				request.AgentProfile = profile.ID
+				m.appendUser(task, "You")
+				m.actionPending = true
+				return m, m.start(request)
 			}
 			if commandName == "/login" {
 				if m.stream != nil || m.approval != nil {
@@ -1185,32 +1221,32 @@ func (m *model) acceptCompletion() {
 }
 
 func (m *model) togglePlanMode() {
-	if m.mode == app.ModePlan {
-		m.mode = app.ModeDefault
+	if m.runtimeMode == app.RuntimeModePlan {
+		m.runtimeMode = app.RuntimeModeDefault
 	} else {
-		m.mode = app.ModePlan
+		m.runtimeMode = app.RuntimeModePlan
 	}
 	m.status = "Ready"
 	m.resize()
 }
 
 func (m *model) selectMode(id string) error {
-	mode, err := app.ResolveMode(id)
+	mode, err := app.ResolveRuntimeMode(id)
 	if err != nil {
 		return err
 	}
-	m.mode = mode.ID
+	m.runtimeMode = mode.ID
 	m.status = "Ready"
 	m.resize()
 	return nil
 }
 
 func (m *model) openModePicker() {
-	items := make([]list.Item, 0, len(app.AvailableModes()))
-	for _, mode := range app.AvailableModes() {
+	items := make([]list.Item, 0, len(app.AvailableRuntimeModes()))
+	for _, mode := range app.AvailableRuntimeModes() {
 		items = append(items, modeChoice{mode: mode})
 	}
-	m.openSelector("Agent mode", items, m.modelDelegate())
+	m.openSelector("Runtime mode", items, m.modelDelegate())
 	m.overlay.selectionKind = "agent-mode"
 }
 
@@ -1534,7 +1570,7 @@ func (m model) finishForm() (tea.Model, tea.Cmd) {
 			return m, m.resolveApproval(decision == "allow")
 		}
 	case "thinking":
-		return m, m.applySetting(keyName, form.GetString("value"))
+		return m.finishThinkingForm(form.GetString("value"))
 	case "policy-select":
 		selected := form.GetString("value")
 		if selected == value {
@@ -1554,6 +1590,17 @@ func (m model) finishForm() (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, m.composer.editor.Focus()
+}
+
+func (m model) finishThinkingForm(value string) (tea.Model, tea.Cmd) {
+	keyName := m.formKey
+	m.approvalForm = nil
+	m.overlay.dismissPanel()
+	m.formKind, m.formKey, m.formValue = "", "", ""
+	m.formHeight = 0
+	m.resize()
+	cmd := m.applySetting(keyName, value)
+	return m, cmd
 }
 
 func (m *model) applySetting(keyName, value string) tea.Cmd {
@@ -1598,9 +1645,10 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 		m.composer.editor.Focus()
 		if commander, ok := m.service.(Commander); ok {
 			m.actionPending = true
+			m.composer.editor.Blur()
 			return m, func() tea.Msg {
-				value, err := commander.Command(m.ctx, "/model "+string(selected))
-				return panelMsg{text: value, err: err, title: "Model"}
+				_, err := commander.Command(m.ctx, "/model "+string(selected))
+				return modelSelectionMsg{err: err}
 			}
 		}
 	case modeChoice:
@@ -1719,22 +1767,59 @@ func approvalText(view *app.Approval) string {
 	return fmt.Sprintf("Tool: %s\nPath: %s\n\nArguments\n%s\n\nChanges\n%s\n\nAgent: %s\nTask: %s\nApproval: %s\n\nEsc back · /approve allow · /deny reject", view.Tool, view.Path, arguments, view.Diff, view.Agent, view.TaskID, view.ID)
 }
 
-func (m *model) openApproval(view *app.Approval) tea.Cmd {
-	m.overlay.panelTitle = "Review operation"
-	m.overlay.panel = viewport.New(viewport.WithWidth(max(1, m.contentWidth()-4)), viewport.WithHeight(m.viewerHeight()))
-	m.overlay.panel.SoftWrap = true
-	m.overlay.panel.SetContent(approvalPanelContent(view, m.contentWidth()-4, m.theme()))
-	m.overlay.panelOpen = true
-	m.composer.editor.Blur()
-	decision := huh.NewSelect[string]().
-		Key("decision").
-		Title("Operation decision").
-		Description("Choose whether to authorize this exact pending operation").
-		Options(huh.NewOption("Allow operation", "allow"), huh.NewOption("Deny operation", "deny")).
-		Height(3)
-	m.approvalForm = huh.NewForm(huh.NewGroup(decision)).WithWidth(max(1, m.contentWidth()-4)).WithHeight(5).WithShowHelp(true).WithTheme(approvalTheme(m.dark))
-	m.formKind = "approval"
-	return m.approvalForm.Init()
+func (m *model) openApproval(_ *app.Approval) tea.Cmd {
+	m.approvalSelection = 0
+	m.approvalForm = nil
+	m.formKind = ""
+	m.overlay.dismissPanel()
+	m.resize()
+	return nil
+}
+
+func (m model) updateApprovalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
+	if m.approval == nil || m.overlay.panelOpen || m.overlay.selecting {
+		return m, nil, false
+	}
+	keys := m.keyBindings()
+	switch msg.String() {
+	case "up", "k", "left":
+		m.approvalSelection = 0
+		return m, nil, true
+	case "down", "j", "right":
+		m.approvalSelection = 1
+		return m, nil, true
+	}
+	if !keyMatches(msg, keys.submit) {
+		return m, nil, false
+	}
+	command := strings.TrimSpace(m.composer.editor.Value())
+	if strings.HasPrefix(command, "/") {
+		return m, nil, false
+	}
+	return m, m.resolveApproval(m.approvalSelection == 0), true
+}
+
+func (m model) approvalView() string {
+	if m.approval == nil {
+		return ""
+	}
+	t := m.theme()
+	rows := []string{
+		t.warning.Bold(true).Render("Approval required · " + safeText(m.approval.Tool)),
+	}
+	if m.approval.Path != "" {
+		rows = append(rows, t.muted.Render("Path: "+safeText(m.approval.Path)))
+	}
+	choices := []string{"Allow operation", "Deny operation"}
+	for i, choice := range choices {
+		marker, style := "  ", t.text
+		if i == m.approvalSelection {
+			marker, style = "› ", t.accent.Bold(true)
+		}
+		rows = append(rows, style.Render(marker+choice))
+	}
+	rows = append(rows, t.muted.Render("↑↓ choose · Enter confirm · /details review"))
+	return strings.Join(rows, "\n")
 }
 
 func approvalTheme(dark bool) huh.Theme {
@@ -1764,32 +1849,8 @@ func (m *model) resolveApproval(allow bool) tea.Cmd {
 	return tea.Batch(m.composer.editor.Focus(), m.start(request))
 }
 
-func approvalPanelContent(view *app.Approval, width int, t palette) string {
-	arguments := string(view.Arguments)
-	var value any
-	if json.Unmarshal(view.Arguments, &value) == nil {
-		if formatted, err := json.MarshalIndent(value, "", "  "); err == nil {
-			arguments = string(formatted)
-		}
-	}
-	lines := []string{
-		"Tool: " + safeText(view.Tool),
-		"Path: " + safeText(view.Path),
-		"Agent: " + safeText(view.Agent),
-		"Task: " + safeText(view.TaskID),
-		"Approval ID: " + safeText(view.ID),
-		"",
-		"Arguments",
-		safeText(arguments),
-		"",
-		"Changes",
-		approvalDiff(view.Diff, max(1, width-2), t),
-	}
-	return strings.Join(lines, "\n")
-}
-
 func (m model) chatRequest(text string) app.Request {
-	request := app.Request{Prompt: text, ContinueFrom: m.previous, Mode: m.mode}
+	request := app.Request{Prompt: text, ContinueFrom: m.previous, RuntimeMode: m.runtimeMode}
 	if m.retryPrevious && m.previous != "" {
 		request.ID = m.previous
 		request.ContinueFrom = ""

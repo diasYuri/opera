@@ -1,8 +1,10 @@
 package tui
 
 import (
-	"charm.land/bubbles/v2/textarea"
 	"context"
+	"strings"
+
+	"charm.land/bubbles/v2/textarea"
 )
 
 // composerModel owns the prompt editor and its submitted-prompt navigation.
@@ -13,11 +15,13 @@ type composerModel struct {
 	editor           textarea.Model
 	history          []string
 	historyIndex     int
+	historyDraft     string
 }
 
 func (c *composerModel) remember(text string) {
 	c.history = append(c.history, text)
 	c.historyIndex = len(c.history)
+	c.historyDraft = ""
 }
 
 func (c *composerModel) navigateHistory(previous bool) {
@@ -25,13 +29,29 @@ func (c *composerModel) navigateHistory(previous bool) {
 		return
 	}
 	if previous {
+		if c.historyIndex == len(c.history) {
+			c.historyDraft = c.editor.Value()
+		}
 		c.historyIndex = max(0, c.historyIndex-1)
 	} else {
 		c.historyIndex = min(len(c.history), c.historyIndex+1)
 	}
 	if c.historyIndex == len(c.history) {
-		c.editor.Reset()
+		c.editor.SetValue(c.historyDraft)
 	} else {
 		c.editor.SetValue(c.history[c.historyIndex])
 	}
+}
+
+// shouldNavigateHistory keeps normal cursor movement inside multiline drafts,
+// while making the boundary arrows behave like prompt history navigation.
+func (c composerModel) shouldNavigateHistory(previous bool) bool {
+	if len(c.history) == 0 {
+		return false
+	}
+	if previous {
+		return c.editor.Line() == 0
+	}
+	lastLine := strings.Count(c.editor.Value(), "\n")
+	return c.editor.Line() >= lastLine
 }

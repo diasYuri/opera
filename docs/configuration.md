@@ -119,12 +119,12 @@ session-local; use user settings or flags for persistent defaults. `--attach` ma
 repeat; `context`/`/context` show the loaded instruction and attachment sources.
 
 F3 enforces `agents.max_concurrent` (default 4), `agents.max_depth` (default 1)
-and `limits.worker_tokens` (default 256000). The latter is a durable shared
-reservation ledger across a parent and descendants: each provider request reserves
-estimated input plus its 4096-token output cap, including compaction. It is a
-conservative work budget, not billing/accounting. Exhaustion requires an explicit
-configuration increase. Child queues are bounded to 16 times concurrency and 64
-children per parent. Cancellation releases queued work and all held slots.
+and `limits.worker_tokens` (default 0, unlimited). Set a positive value to cap
+the durable shared reservation ledger across a parent and descendants: each
+provider request reserves estimated input plus its 4096-token output cap,
+including compaction. It is a conservative work budget, not billing/accounting.
+Child queues are bounded to 16 times concurrency and 64 children per parent.
+Cancellation releases queued work and all held slots.
 
 F4/F5 add the user-only `extensions.file` and `accounting.prices_file` paths.
 Projects cannot choose them. The former stores external capability consent outside

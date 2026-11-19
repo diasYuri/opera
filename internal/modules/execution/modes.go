@@ -20,12 +20,11 @@ type Runner interface {
 }
 
 const (
-	ModeDefault = "default"
-	ModePlan    = "plan"
+	RuntimeModeDefault = "default"
+	RuntimeModePlan    = "plan"
 )
 
-// OrchestrationProfile names the execution loop strategy a mode requests.
-// The app layer owns the profile; runtime adapters can map it to runner options.
+// OrchestrationProfile names the execution strategy selected by a RuntimeMode.
 type OrchestrationProfile string
 
 const (
@@ -33,9 +32,8 @@ const (
 	OrchestrationPlanOnly OrchestrationProfile = "plan-only"
 )
 
-// ToolAccess describes a mode's tool surface. An empty AllowedTools list means
-// the mode starts with the runtime's normal tool set, less explicit denials.
-// This leaves room for modes to expose additional tools or curated subsets.
+// ToolAccess describes tool capability constraints. An empty AllowedTools
+// list leaves the runtime's normal registered tool set, subject to denials.
 type ToolAccess struct {
 	AllowedTools        []string
 	DeniedTools         []string
@@ -44,9 +42,11 @@ type ToolAccess struct {
 	AllowTaskManagement bool
 }
 
-// Mode is the declarative behavior profile selected for an agent run.
-type Mode struct {
+// RuntimeMode describes how Opera executes an agent run. It is separate from
+// AgentProfile, which describes the specialist performing work inside that run.
+type RuntimeMode struct {
 	ID                 string
+	Version            string
 	Name               string
 	Description        string
 	PromptInstructions string
@@ -55,27 +55,26 @@ type Mode struct {
 	Orchestration      OrchestrationProfile
 }
 
-// RunOrchestrator owns the agent loop for one orchestration profile. Tool
-// policy and prompt composition stay in Service; profiles can choose a distinct
-// loop without adding mode-specific branches to the UI or request handlers.
-type RunOrchestrator interface {
+// RuntimeModeOrchestrator adapts a concrete execution strategy to Y's public
+// runner contract. The Y SDK continues to own the agent loop and lifecycle.
+type RuntimeModeOrchestrator interface {
 	Run(context.Context, Runner, agent.RunRequest) (agent.RunResponse, error)
 }
 
-type RunOrchestratorFunc func(context.Context, Runner, agent.RunRequest) (agent.RunResponse, error)
+type RuntimeModeOrchestratorFunc func(context.Context, Runner, agent.RunRequest) (agent.RunResponse, error)
 
-func (f RunOrchestratorFunc) Run(ctx context.Context, runner Runner, request agent.RunRequest) (agent.RunResponse, error) {
+func (f RuntimeModeOrchestratorFunc) Run(ctx context.Context, runner Runner, request agent.RunRequest) (agent.RunResponse, error) {
 	return f(ctx, runner, request)
 }
 
-var modeCatalog = []Mode{
+var runtimeModeCatalog = []RuntimeMode{
 	{
-		ID: ModeDefault, Name: "Default", Description: "Use the normal coding workflow",
+		ID: RuntimeModeDefault, Version: "1", Name: "Default", Description: "Use the normal coding workflow",
 		Tools:         ToolAccess{AllowMutations: true, AllowDelegation: true, AllowTaskManagement: true},
 		Orchestration: OrchestrationStandard,
 	},
 	{
-		ID: ModePlan, Name: "Plan", Description: "Inspect the workspace and propose a plan without implementing it",
+		ID: RuntimeModePlan, Version: "1", Name: "Plan", Description: "Inspect the workspace and propose a plan without implementing it",
 		PromptInstructions: "PLAN MODE IS ACTIVE: inspect the workspace as needed and return a clear, actionable plan only. Do not modify files, run commands that change state, create tasks or delegate work. Do not begin implementation.",
 		PromptPrefix:       "Plan the following request without implementing it:\n\n",
 		Tools:              ToolAccess{AllowMutations: false, AllowDelegation: false, AllowTaskManagement: false},
@@ -83,24 +82,26 @@ var modeCatalog = []Mode{
 	},
 }
 
-func ResolveMode(id string) (Mode, error) {
+func (m RuntimeMode) Digest() string { return definitionDigest(m) }
+
+func ResolveRuntimeMode(id string) (RuntimeMode, error) {
 	if id == "" {
-		id = ModeDefault
+		id = RuntimeModeDefault
 	}
-	for _, mode := range modeCatalog {
+	for _, mode := range runtimeModeCatalog {
 		if mode.ID == id {
 			mode.Tools.AllowedTools = slices.Clone(mode.Tools.AllowedTools)
 			mode.Tools.DeniedTools = slices.Clone(mode.Tools.DeniedTools)
 			return mode, nil
 		}
 	}
-	return Mode{}, errors.New("unknown agent mode: " + id)
+	return RuntimeMode{}, errors.New("unknown runtime mode: " + id)
 }
 
-func AvailableModes() []Mode {
-	modes := make([]Mode, 0, len(modeCatalog))
-	for _, mode := range modeCatalog {
-		resolved, _ := ResolveMode(mode.ID)
+func AvailableRuntimeModes() []RuntimeMode {
+	modes := make([]RuntimeMode, 0, len(runtimeModeCatalog))
+	for _, mode := range runtimeModeCatalog {
+		resolved, _ := ResolveRuntimeMode(mode.ID)
 		modes = append(modes, resolved)
 	}
 	return modes

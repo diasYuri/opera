@@ -17,6 +17,7 @@ import (
 func (b *compositionBuilder) runner() component.Definition {
 	cfg, opts := b.cfg, b.opts
 	contextPaths := b.contextPaths
+	guard := b.guard
 
 	return componentDefinition("runner", []component.ServiceRef{component.Reference(b.keys.runner)}, []component.ServiceRef{component.Reference(yruntime.ProviderKey), component.Reference(yruntime.ToolRegistryKey), component.Reference(b.keys.store), component.Reference(b.keys.work), component.Reference(b.keys.extensions)}, func(_ context.Context, scope *component.Scope) error {
 		provider, err := component.Require(scope, yruntime.ProviderKey)
@@ -55,6 +56,9 @@ func (b *compositionBuilder) runner() component.Definition {
 			}
 			if opts.Thinking != "" && opts.Thinking != "off" && !providerAdapter.Capabilities(request.Model.ID).Reasoning {
 				return nil, errors.New("thinking is unsupported by the selected model")
+			}
+			if guard != nil {
+				request.Context.Tools = guard.FilterTools(request.Options.RunID, request.Context.Tools)
 			}
 			request.Context.Messages = append([]ai.Message(nil), request.Context.Messages...)
 			var imagePaths []string

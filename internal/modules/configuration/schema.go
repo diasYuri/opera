@@ -35,7 +35,7 @@ func Schema() []Field {
 		{Key: "ui.theme", Kind: "string", Default: "system", Choices: []string{"system", "dark", "light", "midnight", "ocean", "forest", "sunset", "mono"}},
 		{Key: "agents.max_concurrent", Kind: "int", Default: 4, Min: 1, Max: 32},
 		{Key: "agents.max_depth", Kind: "int", Default: 1, Min: 0, Max: 8},
-		{Key: "limits.worker_tokens", Kind: "int", Default: 256000, Min: 1024, Max: 10000000},
+		{Key: "limits.worker_tokens", Kind: "int", Default: 0, Min: 0, Max: 10000000},
 		{Key: "limits.context_tokens", Kind: "int", Default: 64000, Min: 1024, Max: 2000000},
 		{Key: "limits.output_bytes", Kind: "int", Default: 1048576, Min: 1024, Max: 67108864},
 		{Key: "limits.attachment_bytes", Kind: "int", Default: 10485760, Min: 1024, Max: 104857600},

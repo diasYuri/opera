@@ -33,14 +33,14 @@ The terminal owns the font, foreground and background. Hierarchy comes from whit
 
 ## Colors
 
-Color is a sparse foreground aid. `internal/ui/tui/theme.go` is authoritative for ANSI palette indexes; these are terminal colors, not CSS colors, so the frontmatter deliberately has no invented hex palette.
+Color is a sparse, low-saturation foreground aid. `internal/ui/tui/theme.go` is authoritative for ANSI palette indexes; these are terminal colors, not CSS colors, so the frontmatter deliberately has no invented hex palette.
 
-- **Primary — muted blue:** accent foreground, Opera author labels, composer rules, shortcuts and selection. ANSI 67 for light terminals; ANSI 110 for dark terminals.
-- **Model — soft gold:** the active provider/model in session context. ANSI 137 for light terminals; ANSI 222 for dark terminals.
+- **Primary — washed blue-gray:** accent foreground, Opera author labels, composer rules, shortcuts and selection. ANSI 67 for light terminals; ANSI 109 for dark terminals.
+- **Model — muted ochre:** the active provider/model in session context. ANSI 137 for light terminals; ANSI 179 for dark terminals.
 - **Workspace — green:** the active workspace in session context, using the success token.
 - **Mode — secondary accent:** the active mode uses the info token and follows the selected theme.
-- **Neutral — secondary gray:** context separators, shortcut descriptions and placeholders. ANSI 240 for light terminals; ANSI 248 for dark terminals. Body text inherits the terminal foreground.
-- **Warning — warm amber:** approval state foregrounds. ANSI 137 for light terminals; ANSI 180 for dark terminals. States also have explicit text.
+- **Neutral — secondary gray:** context separators, shortcut descriptions and placeholders. ANSI 240 for light terminals; ANSI 245 for dark terminals. Body text inherits the terminal foreground.
+- **Warning — soft ochre:** approval state foregrounds. ANSI 137 for light terminals; ANSI 179 for dark terminals. States also have explicit text.
 
 **The Terminal Ownership Rule.** Use inherited terminal background and foreground; do not paint an application background.
 
@@ -73,10 +73,11 @@ The composer has thin horizontal rules above and below, without side borders or 
 ## Components
 
 - **Session banner:** compact persistent header; identifies Opera and current context without a persistent hero.
-- **Composer:** Bubbles textarea with the `›` prompt, one-to-five-row growth and a steady virtual cursor. Enter sends; Alt+Enter or Ctrl+J inserts a newline. Alt+Up/Down recalls input. Bracketed paste inserts without submitting.
+- **Composer:** Bubbles textarea with the `›` prompt, one-to-five-row growth and a steady virtual cursor. `↑` recalls the previous prompt at the first line; `↓` advances at the last line and restores the draft at the end. Enter sends; Alt+Enter or Ctrl+J inserts a newline. Bracketed paste inserts without submitting.
 - **Authored message:** bold `You` or accented `Opera` label, indented body and blank-line separation. Retain completed content once per checkpoint in the history viewport.
 - **Context footer:** current provider/model and workspace, then state-specific keyboard hints. Truncate context when needed.
 - **Activity status:** words identify running/tool/approval/failure states. During execution only, a spinner and Harmonica spring drive an indeterminate trace at 20 frames per second. `--no-motion` removes both; idle chat has no activity timer or blinking cursor. Never add simulated typing delays.
+- **Cancellation:** `Esc` in the main composer cancels an active response. In temporary selectors and viewers it closes the current surface and restores composer focus.
 - **Model selector and detail viewer:** Bubbles list/viewport, keyboard focus, bounded height of at most 12 rows. Arrows navigate or scroll; Esc restores the composer. Review approval arguments and changes before closing details and using `/approve` or `/deny`.
 - **Error summary:** short recovery text in the conversation; `/details` retains full diagnostics and available run/state/checkpoint metadata. Prefer useful provider messages over transport noise.
 - **Accessible chat:** append-only canonical input without raw-mode cursor movement or periodic redraw. Use `--accessible --no-motion`; preserve the documented command alternatives in [accessibility.md](docs/accessibility.md).

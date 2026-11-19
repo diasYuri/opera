@@ -26,9 +26,9 @@ func newModel(ctx context.Context, service Executor, initial execution.Request, 
 	editor.KeyMap.InsertNewline = keys.newline
 	editor.Focus()
 	cwd, _ := os.Getwd()
-	m := model{ctx: ctx, service: service, composer: composerModel{editor: editor}, conversation: newConversationModel(), spinner: spinner.New(spinner.WithSpinner(spinner.Line)), keys: keys, workspace: filepath.Base(cwd), workspaceRoot: cwd, noMotion: noMotion, dark: true, systemDark: true, themeMode: "system", status: "Ready", resume: initial, mode: execution.ModeDefault, width: 80, height: 24, actionPending: initial.ID != "" || initial.Prompt != ""}
-	if initial.Mode != "" {
-		m.mode = initial.Mode
+	m := model{ctx: ctx, service: service, composer: composerModel{editor: editor}, conversation: newConversationModel(), spinner: spinner.New(spinner.WithSpinner(spinner.Line)), keys: keys, workspace: filepath.Base(cwd), workspaceRoot: cwd, noMotion: noMotion, dark: true, systemDark: true, themeMode: "system", status: "Ready", resume: initial, runtimeMode: execution.RuntimeModeDefault, width: 80, height: 24, actionPending: initial.ID != "" || initial.Prompt != ""}
+	if initial.RuntimeMode != "" {
+		m.runtimeMode = initial.RuntimeMode
 	}
 	if initial.Prompt != "" {
 		m.appendUser(initial.Prompt, "You")
@@ -45,6 +45,15 @@ func (m *model) refreshContext() {
 		m.workspace, m.provider, m.modelName = filepath.Base(workspace), displayProvider(provider), name
 		if workspace != "" {
 			m.workspaceRoot = workspace
+		}
+	}
+	if settings, ok := m.service.(SettingsManager); ok {
+		m.reasoningLevel = ""
+		for _, setting := range settings.Settings() {
+			if setting.Key == "thinking" {
+				m.reasoningLevel = setting.Value
+				break
+			}
 		}
 	}
 	if preferences, ok := m.service.(ThemePreferenceProvider); ok {
@@ -115,12 +124,15 @@ func (m model) sessionLine() string {
 	if m.modelName != "" {
 		parts = append(parts, t.model.Render(safeText(m.provider)+"/"+safeText(m.modelName)))
 	}
+	if m.reasoningLevel != "" {
+		parts = append(parts, t.info.Render(safeText(m.reasoningLevel)))
+	}
 	if m.workspace != "" {
 		parts = append(parts, t.success.Render(safeText(m.workspace)))
 	}
 	line := strings.Join(parts, t.muted.Render(" · "))
-	if m.mode != "" && m.mode != execution.ModeDefault {
-		if mode, err := execution.ResolveMode(m.mode); err == nil {
+	if m.runtimeMode != "" && m.runtimeMode != execution.RuntimeModeDefault {
+		if mode, err := execution.ResolveRuntimeMode(m.runtimeMode); err == nil {
 			label := strings.ToLower(mode.Name)
 			if line != "" {
 				line += t.muted.Render(" · ")
@@ -250,7 +262,7 @@ func (m model) helpLine() string {
 	bottom := keyLabel(keys.bottom, "Ctrl+End")
 	details := keyLabel(keys.details, "Ctrl+O")
 	if m.approval != nil {
-		return "/approve allow · /deny reject · /details review"
+		return "↑↓ choose · Enter allow/deny · /approve · /deny · /details review"
 	}
 	if m.status == "Outcome uncertain · reconcile before retry" {
 		return "Inspect operations, then reconcile before retry · /details"
@@ -266,9 +278,9 @@ func (m model) helpLine() string {
 	}
 	if m.stream != nil {
 		if m.width < 64 {
-			return enter + " queue · Ctrl+C cancel · " + details + " details"
+			return enter + " queue · Esc cancel · " + details + " details"
 		}
-		return enter + " queue · /steer guide · Ctrl+C cancel · " + details + " tool details"
+		return enter + " queue · /steer guide · Esc cancel · " + details + " tool details"
 	}
 	if m.retryPrevious {
 		return enter + " retry · /retry resume · /details"
@@ -285,7 +297,7 @@ func (m model) helpLine() string {
 	if m.conversation.TotalLineCount() > 0 && m.width >= 48 {
 		return pageUp + "/" + pageDown + " scroll · " + bottom + " latest · " + details + " tool details · /messages find"
 	}
-	return enter + " send · " + complete + " complete · /help shortcuts"
+	return enter + " send · ↑↓ history · " + complete + " complete · /help shortcuts"
 }
 
 func (m model) completionView() string {
@@ -367,6 +379,9 @@ func (m model) defaultFixedParts() []string {
 	}
 	if attachments := m.attachmentPreviewView(); attachments != "" {
 		parts = append(parts, attachments)
+	}
+	if approval := m.approvalView(); approval != "" {
+		parts = append(parts, approval)
 	}
 	if question := m.questionView(); question != "" {
 		parts = append(parts, question)
