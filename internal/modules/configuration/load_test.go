@@ -61,7 +61,7 @@ func TestEmptyAndFalseAreExplicit(t *testing.T) {
 }
 
 func TestProjectCannotElevateOrSelectStore(t *testing.T) {
-	for _, project := range []string{"policy='trusted'", "[credentials]\nstore='file'", "[search]\nprovider='brave'"} {
+	for _, project := range []string{"policy='trusted'", "[credentials]\nstore='file'", "[search]\nprovider='brave'", "[search.options.brave]\nmax_results=5"} {
 		opts := fixture(t, "", project)
 		if _, err := config.Load(opts); err == nil {
 			t.Errorf("accepted privileged project configuration")
@@ -107,6 +107,32 @@ func TestSearchProviderIsExplicitUserSetting(t *testing.T) {
 	opts = fixture(t, "[search]\nprovider='unknown'", "")
 	if _, err := config.Load(opts); err == nil {
 		t.Fatal("unsupported search provider accepted")
+	}
+}
+
+func TestWebSearchOptionsAreValidatedAndResolvedPerProvider(t *testing.T) {
+	user := "[search]\nprovider='brave'\n[search.options.brave]\nmax_results=8\ncountry='br'\nlanguage='PT'\nallowed_domains='Brave.com, docs.brave.com'\nsafe_search='strict'\n[search.options.openai-subscription]\ncontext_size='low'"
+	cfg, err := config.Load(fixture(t, user, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	brave := cfg.WebSearchDefaults("brave")
+	if cfg.String("search.provider") != "brave" || brave.MaxResults != 8 || brave.Country != "BR" || brave.Language != "pt" || brave.SafeSearch != "strict" || strings.Join(brave.AllowedDomains, ",") != "brave.com,docs.brave.com" {
+		t.Fatalf("Brave search settings were not resolved: %#v", brave)
+	}
+	openai := cfg.WebSearchDefaults("openai-subscription")
+	if openai.ContextSize != "low" {
+		t.Fatalf("OpenAI context size = %q", openai.ContextSize)
+	}
+	for _, text := range []string{
+		"[search.options.brave]\nmax_results=21",
+		"[search.options.brave]\ncountry='BRA'",
+		"[search.options.brave]\nallowed_domains='https://example.com'",
+		"[search.options.brave]\nsafe_search='invalid'",
+	} {
+		if _, err := config.Load(fixture(t, text, "")); err == nil {
+			t.Errorf("accepted invalid search config %q", text)
+		}
 	}
 }
 

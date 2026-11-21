@@ -19,7 +19,7 @@ type Field struct {
 
 // Schema is also the source of truth for environment variables and --set.
 func Schema() []Field {
-	return []Field{
+	fields := []Field{
 		{Key: "accounting.prices_file", Kind: "string", Default: ""},
 		{Key: "extensions.file", Kind: "string", Default: ""},
 		{Key: "provider", Kind: "string", Default: ""},
@@ -43,6 +43,7 @@ func Schema() []Field {
 		{Key: "limits.process_timeout", Kind: "duration", Default: "2m"},
 		{Key: "limits.shutdown_timeout", Kind: "duration", Default: "10s"},
 	}
+	return append(fields, searchOptionFields()...)
 }
 
 func EnvironmentKey(key string) string {
@@ -67,7 +68,23 @@ func (f Field) parse(raw string) (any, error) {
 			return value.String(), nil
 		}
 	case "string":
-		if !strings.ContainsAny(raw, "\x00\r\n\x1b") && len(raw) <= 512 && (len(f.Choices) == 0 || containsChoice(f.Choices, raw)) {
+		if strings.ContainsAny(raw, "\x00\r\n\x1b") || len(raw) > 512 || (len(f.Choices) > 0 && !containsChoice(f.Choices, raw)) {
+			break
+		}
+		switch {
+		case strings.HasSuffix(f.Key, ".country"):
+			if raw != "" && !validTwoLetterCode(raw) {
+				break
+			}
+			return strings.ToUpper(raw), nil
+		case strings.HasSuffix(f.Key, ".language"):
+			if raw != "" && !validTwoLetterCode(raw) {
+				break
+			}
+			return strings.ToLower(raw), nil
+		case strings.HasSuffix(f.Key, ".allowed_domains"), strings.HasSuffix(f.Key, ".excluded_domains"):
+			return normalizeSearchDomains(raw)
+		default:
 			return raw, nil
 		}
 	}

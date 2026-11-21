@@ -24,3 +24,23 @@ func TestWorkspaceOnboardingIsScopedAndUserOwned(t *testing.T) {
 		t.Fatal("workspace trust leaked", err)
 	}
 }
+
+func TestWorkspaceWebSearchOptionsPersistOutsideTheProject(t *testing.T) {
+	root := t.TempDir()
+	workspace := filepath.Join(root, "workspace")
+	paths := platform.Paths{Workspace: workspace, Data: filepath.Join(root, "data"), UserConfig: filepath.Join(root, "missing-user"), ProjectConfig: filepath.Join(workspace, ".opera", "config.toml")}
+	if err := config.SaveWorkspacePreference(paths, "search.options.openai-subscription.context_size", "high"); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveWorkspacePreference(paths, "search.options.openai-subscription.allowed_domains", "OpenAI.com, docs.openai.com"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(config.Options{Paths: paths})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaults := cfg.WebSearchDefaults("openai-subscription")
+	if defaults.ContextSize != "high" || len(defaults.AllowedDomains) != 2 || defaults.AllowedDomains[0] != "openai.com" || defaults.AllowedDomains[1] != "docs.openai.com" || cfg.Values["search.options.openai-subscription.context_size"].Source != "user-workspace" {
+		t.Fatalf("workspace search preferences did not roundtrip: %#v", defaults)
+	}
+}

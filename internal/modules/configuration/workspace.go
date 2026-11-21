@@ -46,20 +46,10 @@ func SaveWorkspaceCredentialStore(paths platform.Paths, kind string) error {
 // writable here; credential and infrastructure settings stay on their own
 // configuration paths.
 func SaveWorkspacePreference(paths platform.Paths, key, raw string) error {
-	if key != "thinking" && key != "policy" && key != "ui.theme" {
+	if key != "thinking" && key != "policy" && key != "ui.theme" && !isWebSearchPreference(key) {
 		return fmt.Errorf("workspace preference is not editable here")
 	}
-	var selected *Field
-	for _, field := range Schema() {
-		if field.Key == key {
-			selected = &field
-			break
-		}
-	}
-	if selected == nil {
-		return fmt.Errorf("unknown workspace preference")
-	}
-	value, err := selected.parse(raw)
+	value, err := ParseWorkspacePreference(key, raw)
 	if err != nil {
 		return err
 	}
@@ -73,6 +63,31 @@ func SaveWorkspacePreference(paths platform.Paths, key, raw string) error {
 		}
 	}
 	return saveWorkspaceSettings(paths, updates)
+}
+
+func ParseWorkspacePreference(key, raw string) (any, error) {
+	if key != "thinking" && key != "policy" && key != "ui.theme" && !isWebSearchPreference(key) {
+		return nil, fmt.Errorf("workspace preference is not editable here")
+	}
+	return parsePreferenceValue(key, raw)
+}
+
+func parsePreferenceValue(key, raw string) (any, error) {
+	var selected *Field
+	for _, field := range Schema() {
+		if field.Key == key {
+			selected = &field
+			break
+		}
+	}
+	if selected == nil {
+		return nil, fmt.Errorf("unknown workspace preference")
+	}
+	value, err := selected.parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 
 func saveWorkspaceSettings(paths platform.Paths, updates map[string]any) error {

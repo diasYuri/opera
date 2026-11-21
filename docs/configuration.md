@@ -79,6 +79,32 @@ For Brave, store the key with `opera auth set brave-search.default` or set
 An approved search sends its query to the selected provider's search service;
 returned titles and URLs provide citation evidence.
 
+In the interactive chat, configure these choices at `/settings` → `Web search`:
+select the search backend, then open `Options` → a provider → `Config options`.
+OpenAI, Anthropic and Brave share defaults for maximum results, country and
+allowed/excluded domains. OpenAI also supports context size; Brave supports
+language and safe-search level. `max_results = 0` and empty values keep the
+provider default. A setting fills a search request only when that request does
+not specify the control, so an explicit per-search value takes precedence.
+These options are stored in private workspace settings; project configuration
+cannot set search selection or filters.
+
+```toml
+[search.options.openai-subscription]
+context_size = "low"
+max_results = 8
+country = "BR"
+allowed_domains = "openai.com, docs.openai.com"
+
+[search.options.anthropic]
+country = "BR"
+excluded_domains = "example.invalid"
+
+[search.options.brave]
+language = "pt"
+safe_search = "moderate"
+```
+
 ```sh
 opera config get policy --policy read-only
 opera config get ui.no_motion --no-motion=false
