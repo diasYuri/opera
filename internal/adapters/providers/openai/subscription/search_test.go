@@ -54,7 +54,7 @@ func TestHostedSearchUsesSupportedResponsesEndpointAndReturnsSources(t *testing.
 		if body.Store == nil || *body.Store || body.Stream == nil || !*body.Stream {
 			t.Fatalf("SIWC Responses requirements missing: store=%v stream=%v", body.Store, body.Stream)
 		}
-		if len(body.Include) != 1 || body.Include[0] != "web_search_call.action.sources" {
+		if len(body.Include) != 2 || body.Include[0] != "web_search_call.action.sources" || body.Include[1] != "web_search_call.results" {
 			t.Fatalf("web search sources were not requested: %#v", body.Include)
 		}
 		tool := body.Tools[0]
@@ -140,6 +140,35 @@ func TestHostedSearchDoesNotCompleteWithoutCiteableSources(t *testing.T) {
 	_, err := p.Search(context.Background(), search.Request{Query: "current price"})
 	if err == nil || !strings.Contains(err.Error(), "without citeable sources") || !strings.Contains(err.Error(), "model and account") {
 		t.Fatalf("empty search source set was not reported: %v", err)
+	}
+}
+
+func TestHostedSearchUsesRawResultsWhenActionSourcesAreMissing(t *testing.T) {
+	response := []byte(`{"output":[{"type":"web_search_call","status":"completed","action":{"type":"search","queries":["Google stock price"]},"results":[{"type":"web_search_result","title":"Alphabet Inc. (GOOG) Stock Price","url":"https://www.nasdaq.com/market-activity/stocks/goog","snippet":"Latest GOOG stock quote."}]}]}`)
+	results, err := parseResponsesSearchResults(response, search.Request{Query: "Google stock price"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].URL != "https://www.nasdaq.com/market-activity/stocks/goog" || results[0].Title != "Alphabet Inc. (GOOG) Stock Price" || results[0].Snippet != "Latest GOOG stock quote." {
+		t.Fatalf("raw web search results were not parsed: %#v", results)
+	}
+}
+
+func TestHostedSearchParsesDocumentedActionSourceURLs(t *testing.T) {
+	response := []byte(`{"output":[{"type":"web_search_call","status":"completed","action":{"type":"search","sources":[{"type":"url","url":"https://finance.yahoo.com/quote/GOOG/"}]}}]}`)
+	results, err := parseResponsesSearchResults(response, search.Request{Query: "Google stock price"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].URL != "https://finance.yahoo.com/quote/GOOG/" || results[0].Title != "finance.yahoo.com" {
+		t.Fatalf("documented web search source was not parsed: %#v", results)
+	}
+}
+
+func TestHostedSearchReportsFailedToolStatus(t *testing.T) {
+	response := []byte(`{"output":[{"type":"web_search_call","status":"failed","action":{"type":"search"}}]}`)
+	if _, err := parseResponsesSearchResults(response, search.Request{Query: "Google stock price"}); err == nil || !strings.Contains(err.Error(), "tool failed") || !strings.Contains(err.Error(), "account/workspace") {
+		t.Fatalf("failed web search status was not surfaced: %v", err)
 	}
 }
 

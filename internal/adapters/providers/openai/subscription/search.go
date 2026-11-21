@@ -147,7 +147,7 @@ func (p *SearchProvider) Search(ctx context.Context, request searchcontract.Requ
 		}},
 		Reasoning: responsesSearchReasoning{Effort: "low"},
 		Tools:     []responsesSearchTool{tool}, ToolChoice: "required",
-		Include: []string{"web_search_call.action.sources"},
+		Include: []string{"web_search_call.action.sources", "web_search_call.results"},
 		Store:   false, Stream: true,
 	})
 	if err != nil {
@@ -292,11 +292,13 @@ func consumeResponseEvent(data string) ([]byte, error) {
 }
 
 type responsesSearchResult struct {
-	Type    string `json:"type"`
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	Snippet string `json:"snippet"`
-	Text    string `json:"text"`
+	Type             string `json:"type"`
+	Title            string `json:"title"`
+	URL              string `json:"url"`
+	SourceWebsiteURL string `json:"source_website_url"`
+	Snippet          string `json:"snippet"`
+	Description      string `json:"description"`
+	Text             string `json:"text"`
 }
 
 type responsesSearchAnnotation struct {
@@ -314,9 +316,12 @@ type responsesSearchAnnotation struct {
 func parseResponsesSearchResults(data []byte, request searchcontract.Request) ([]searchcontract.Result, error) {
 	var response struct {
 		Output []struct {
-			Type   string `json:"type"`
-			Action struct {
+			Type    string                  `json:"type"`
+			Status  string                  `json:"status"`
+			Results []responsesSearchResult `json:"results"`
+			Action  struct {
 				Type    string                  `json:"type"`
+				URL     string                  `json:"url"`
 				Sources []responsesSearchResult `json:"sources"`
 			} `json:"action"`
 			Content []struct {
@@ -357,14 +362,26 @@ func parseResponsesSearchResults(data []byte, request searchcontract.Request) ([
 		sources = append(sources, candidate)
 	}
 	var answer string
+	var searchStatus string
 	for _, item := range response.Output {
 		if item.Type == "web_search_call" {
-			for _, found := range item.Action.Sources {
+			searchStatus = item.Status
+			for _, found := range append(item.Action.Sources, item.Results...) {
+				rawURL := found.URL
+				if rawURL == "" {
+					rawURL = found.SourceWebsiteURL
+				}
 				snippet := found.Snippet
 				if snippet == "" {
 					snippet = found.Text
 				}
-				addSource(source{title: found.Title, url: found.URL, snippet: snippet})
+				if snippet == "" {
+					snippet = found.Description
+				}
+				addSource(source{title: found.Title, url: rawURL, snippet: snippet})
+			}
+			if item.Action.Type == "open_page" || item.Action.Type == "find_in_page" {
+				addSource(source{url: item.Action.URL})
 			}
 		}
 		if item.Type != "message" {
@@ -405,6 +422,14 @@ func parseResponsesSearchResults(data []byte, request searchcontract.Request) ([
 		snippet = truncateUTF8(strings.TrimSpace(snippet), maxSearchSnippet)
 		if result, ok := searchadapter.Result(title, found.url, snippet, request); ok {
 			results = append(results, result)
+		}
+	}
+	if len(results) == 0 {
+		switch searchStatus {
+		case "failed":
+			return nil, errors.New("OpenAI Responses web search tool failed; check model and ChatGPT account/workspace web search access")
+		case "incomplete":
+			return nil, errors.New("OpenAI Responses web search tool ended incomplete")
 		}
 	}
 	return results, nil
