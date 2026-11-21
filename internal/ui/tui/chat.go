@@ -1289,6 +1289,64 @@ func (m *model) openSettingsPicker() tea.Cmd {
 	return func() tea.Msg { return settingsMsg{values: manager.Settings()} }
 }
 
+func (m *model) openWebSearchMenu(setting SettingItem) {
+	items := []list.Item{
+		settingChoice{SettingItem: SettingItem{Key: "search.provider", Label: "Provider", Value: setting.Value, DisplayValue: webSearchSelectionLabel(setting.Value), Source: setting.Source, Scope: setting.Scope, Description: "Automatic, hosted search, Brave Search, or disabled"}},
+		sessionActionChoice{key: "options", title: "Options", description: "Choose a search provider and edit its configuration defaults"},
+	}
+	m.openSelector("Web search", items, m.modelDelegate())
+	m.overlay.selectionKind = "web-search"
+}
+
+func webSearchSelectionLabel(selection string) string {
+	switch selection {
+	case "":
+		return "Automatic"
+	case "native":
+		return "Hosted search for active model provider"
+	case "brave":
+		return "Brave Search"
+	case "disabled":
+		return "Disabled"
+	default:
+		return selection
+	}
+}
+
+func (m *model) openWebSearchOptionsMenu() {
+	manager, ok := m.service.(WebSearchSettingsManager)
+	if !ok {
+		m.status = "Web search configuration is unavailable in this chat"
+		return
+	}
+	providers := manager.WebSearchProviders()
+	items := make([]list.Item, 0, len(providers))
+	for _, provider := range providers {
+		items = append(items, webSearchProviderChoice{WebSearchProviderOption: provider})
+	}
+	if len(items) == 0 {
+		m.status = "No web search providers expose configuration options"
+		return
+	}
+	m.openSelector("Web search · Options", items, m.modelDelegate())
+	m.overlay.selectionKind = "web-search-options"
+}
+
+func (m *model) openWebSearchProviderOptions(provider WebSearchProviderOption) {
+	manager, ok := m.service.(WebSearchSettingsManager)
+	if !ok {
+		m.status = "Web search configuration is unavailable in this chat"
+		return
+	}
+	settings := manager.WebSearchSettings(provider.ID)
+	items := make([]list.Item, 0, len(settings))
+	for _, setting := range settings {
+		items = append(items, webSearchOptionChoice{settingChoice: settingChoice{SettingItem: setting}})
+	}
+	m.openSelector("Web search · Config options · "+provider.Name, items, m.modelDelegate())
+	m.overlay.selectionKind = "web-search-provider-options"
+}
+
 func (m *model) openMessagePicker() {
 	items := make([]list.Item, 0)
 	for index, entry := range m.conversation.entries {
@@ -1446,9 +1504,25 @@ func (m *model) openSetting(setting SettingItem) tea.Cmd {
 	if strings.HasPrefix(setting.Key, "context.remove:") {
 		return m.applySetting("context.remove", strings.TrimPrefix(setting.Key, "context.remove:"))
 	}
+	if setting.Key == "web-search" {
+		m.openWebSearchMenu(setting)
+		return nil
+	}
+	if strings.HasPrefix(setting.Key, "search.options.") {
+		return m.openWebSearchOption(setting)
+	}
 	switch setting.Key {
 	case "provider", "model":
 		return m.openModelPicker()
+	case "search.provider":
+		options := []huh.Option[string]{
+			huh.NewOption("Automatic · use hosted search when available", ""),
+			huh.NewOption("Hosted search for the active model provider", "native"),
+			huh.NewOption("Brave Search · requires an API key", "brave"),
+			huh.NewOption("Disabled", "disabled"),
+		}
+		form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Key("value").Title("Web search provider").Description("Automatic follows the selected model provider when hosted search is available.").Options(options...).Value(&setting.Value).Height(5))).WithWidth(max(1, m.contentWidth()-4)).WithHeight(8).WithShowHelp(true)
+		return m.openForm("Web search provider", form, "search-provider", setting.Key, setting.Value)
 	case "thinking":
 		options := []huh.Option[string]{
 			huh.NewOption("Off", "off"), huh.NewOption("Minimal", "minimal"), huh.NewOption("Low", "low"),
@@ -1487,6 +1561,34 @@ func (m *model) openSetting(setting SettingItem) tea.Cmd {
 	default:
 		return nil
 	}
+}
+
+func (m *model) openWebSearchOption(setting SettingItem) tea.Cmd {
+	if setting.InputKind == "select" {
+		options := make([]huh.Option[string], 0, len(setting.Choices))
+		for _, value := range setting.Choices {
+			label := value
+			if value == "" {
+				label = "Provider default"
+			}
+			options = append(options, huh.NewOption(label, value))
+		}
+		form := huh.NewForm(huh.NewGroup(huh.NewSelect[string]().Key("value").Title(setting.Label).Description(setting.Description).Options(options...).Value(&setting.Value).Height(min(8, len(options))))).WithWidth(max(1, m.contentWidth()-4)).WithHeight(10).WithShowHelp(true)
+		return m.openForm("Web search · "+setting.Label, form, "search-option", setting.Key, setting.Value)
+	}
+	input := huh.NewInput().Key("value").Title(setting.Label).Description(setting.Description).Value(&setting.Value)
+	switch {
+	case strings.HasSuffix(setting.Key, ".max_results"):
+		input = input.Placeholder("0 for provider default; 1–20 to limit")
+	case strings.HasSuffix(setting.Key, ".country"):
+		input = input.Placeholder("BR")
+	case strings.HasSuffix(setting.Key, ".language"):
+		input = input.Placeholder("en")
+	case strings.HasSuffix(setting.Key, ".allowed_domains"), strings.HasSuffix(setting.Key, ".excluded_domains"):
+		input = input.Placeholder("example.com, docs.example.com")
+	}
+	form := huh.NewForm(huh.NewGroup(input)).WithWidth(max(1, m.contentWidth()-4)).WithHeight(7).WithShowHelp(true)
+	return m.openForm("Web search · "+setting.Label, form, "search-option", setting.Key, setting.Value)
 }
 
 func (m *model) openModelPicker() tea.Cmd {
@@ -1599,6 +1701,10 @@ func (m model) finishForm() (tea.Model, tea.Cmd) {
 		}
 	case "context-add":
 		return m, m.applySetting("context.add", form.GetString("path"))
+	case "search-provider":
+		return m, m.applySetting(keyName, form.GetString("value"))
+	case "search-option":
+		return m, m.applySetting(keyName, form.GetString("value"))
 	case "branch-confirm":
 		if form.GetBool("confirm") && m.selectedSession != nil {
 			return m, m.branch(*m.selectedSession, m.selectedCheckpoint)
@@ -1711,6 +1817,11 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 				return modelCatalogMsg{provider: selected.ID, values: values, err: err}
 			}
 		}
+	case webSearchProviderChoice:
+		if kind == "web-search-options" {
+			m.openWebSearchProviderOptions(selected.WebSearchProviderOption)
+			return m, nil
+		}
 	case modelChoice:
 		if commander, ok := m.service.(Commander); ok {
 			m.actionPending = true
@@ -1759,6 +1870,10 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 				return m, m.applySetting("context.remove", strings.TrimPrefix(selected.key, "context-remove:"))
 			}
 		}
+		if kind == "web-search" && selected.key == "options" {
+			m.openWebSearchOptionsMenu()
+			return m, nil
+		}
 	case checkpointChoice:
 		m.selectedSession = &selected.SessionSummary
 		m.selectedCheckpoint = selected.Version
@@ -1776,6 +1891,8 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 		if strings.HasPrefix(selected.Key, "context.remove:") {
 			return m, m.applySetting("context.remove", strings.TrimPrefix(selected.Key, "context.remove:"))
 		}
+		return m, m.openSetting(selected.SettingItem)
+	case webSearchOptionChoice:
 		return m, m.openSetting(selected.SettingItem)
 	case themeChoice:
 		return m, m.applySetting("ui.theme", selected.value)

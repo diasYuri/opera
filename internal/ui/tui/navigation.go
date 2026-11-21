@@ -42,12 +42,24 @@ type SessionBrowser interface {
 }
 
 type SettingItem struct {
-	Key, Value, Source, Scope, Description string
+	Key, Label, Value, DisplayValue, Source, Scope, Description string
+	InputKind                                                   string
+	Choices                                                     []string
 }
 
 type SettingsManager interface {
 	Settings() []SettingItem
 	SetSetting(context.Context, string, string) (string, error)
+}
+
+type WebSearchSettingsManager interface {
+	WebSearchProviders() []WebSearchProviderOption
+	WebSearchSettings(string) []SettingItem
+}
+
+type WebSearchProviderOption struct {
+	ID, Name, Description string
+	Current               bool
 }
 
 type ProviderOption struct {
@@ -132,13 +144,44 @@ func (c sessionActionChoice) FilterValue() string { return c.title + " " + c.des
 
 type settingChoice struct{ SettingItem }
 
-func (c settingChoice) Title() string { return safeText(c.Key + " · " + c.Value) }
+func (c settingChoice) Title() string {
+	label := c.Key
+	if c.Label != "" {
+		label = c.Label
+	}
+	value := c.Value
+	if c.DisplayValue != "" {
+		value = c.DisplayValue
+	}
+	if value == "" {
+		return safeText(label)
+	}
+	return safeText(label + " · " + value)
+}
 func (c settingChoice) Description() string {
 	return safeText(c.SettingItem.Description + " · " + c.Scope + " · from " + c.Source)
 }
 func (c settingChoice) FilterValue() string {
-	return c.Key + " " + c.Value + " " + c.SettingItem.Description + " " + c.Source
+	return c.Key + " " + c.Label + " " + c.Value + " " + c.DisplayValue + " " + c.SettingItem.Description + " " + c.Source
 }
+
+type webSearchProviderChoice struct{ WebSearchProviderOption }
+
+func (c webSearchProviderChoice) Title() string {
+	title := c.Name
+	if c.Current {
+		title += " · selected"
+	}
+	return safeText(title)
+}
+func (c webSearchProviderChoice) Description() string {
+	return safeText(c.WebSearchProviderOption.Description)
+}
+func (c webSearchProviderChoice) FilterValue() string {
+	return c.ID + " " + c.Name + " " + c.WebSearchProviderOption.Description
+}
+
+type webSearchOptionChoice struct{ settingChoice }
 
 type themeChoice struct {
 	value, name, description string
@@ -196,6 +239,8 @@ var _ list.Item = sessionChoice{}
 var _ list.Item = checkpointChoice{}
 var _ list.Item = sessionActionChoice{}
 var _ list.Item = settingChoice{}
+var _ list.Item = webSearchProviderChoice{}
+var _ list.Item = webSearchOptionChoice{}
 var _ list.Item = themeChoice{}
 var _ list.Item = providerChoice{}
 var _ list.Item = modelChoice{}

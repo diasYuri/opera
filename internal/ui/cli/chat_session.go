@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -411,6 +412,7 @@ func (s *chatSession) Settings() []ui.SettingItem {
 	items := []ui.SettingItem{
 		{Key: "provider", Value: value("provider"), Source: settingSource(s.cfg, "provider"), Scope: "workspace", Description: "Provider for new executions"},
 		{Key: "model", Value: value("model"), Source: settingSource(s.cfg, "model"), Scope: "workspace", Description: "Model used for new executions"},
+		{Key: "web-search", Label: "Web search", Value: value("search.provider"), DisplayValue: webSearchSelectionLabel(value("search.provider")), Source: settingSource(s.cfg, "search.provider"), Scope: "user workspace", Description: "Choose the web search backend and configure its defaults"},
 		{Key: "thinking", Value: thinking, Source: settingSource(s.cfg, "thinking"), Scope: "workspace", Description: "Reasoning level; supported by the selected model"},
 		{Key: "ui.theme", Value: value("ui.theme"), Source: settingSource(s.cfg, "ui.theme"), Scope: "user workspace", Description: "Color theme for the interactive terminal"},
 		{Key: "policy", Value: value("policy"), Source: settingSource(s.cfg, "policy"), Scope: "workspace", Description: "Tool permission policy; trusted allows effects without per-operation approval"},
@@ -418,6 +420,61 @@ func (s *chatSession) Settings() []ui.SettingItem {
 	}
 	for _, path := range contextPaths {
 		items = append(items, ui.SettingItem{Key: "context.remove:" + path, Value: path, Source: "current session", Scope: "session", Description: "Remove this attachment from future requests"})
+	}
+	return items
+}
+
+func webSearchSelectionLabel(selection string) string {
+	switch selection {
+	case "":
+		return "Automatic"
+	case "native":
+		return "Hosted search for the active model provider"
+	case "brave":
+		return "Brave Search"
+	case "disabled":
+		return "Disabled"
+	default:
+		return selection
+	}
+}
+
+func (s *chatSession) WebSearchProviders() []ui.WebSearchProviderOption {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current := ""
+	switch s.cfg.String("search.provider") {
+	case "brave":
+		current = "brave"
+	case "", "native":
+		current = s.cfg.String("provider")
+	}
+	providers := config.WebSearchProviders()
+	options := make([]ui.WebSearchProviderOption, 0, len(providers))
+	for _, provider := range providers {
+		options = append(options, ui.WebSearchProviderOption{ID: provider.ID, Name: provider.Name, Description: provider.Description, Current: provider.ID == current})
+	}
+	return options
+}
+
+func (s *chatSession) WebSearchSettings(providerID string) []ui.SettingItem {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	options := config.WebSearchOptions(providerID)
+	items := make([]ui.SettingItem, 0, len(options))
+	for _, option := range options {
+		value := ""
+		switch configured := s.cfg.Values[option.Key].Value.(type) {
+		case string:
+			value = configured
+		case int:
+			value = strconv.Itoa(configured)
+		}
+		displayValue := ""
+		if value == "" || (strings.HasSuffix(option.Key, ".max_results") && value == "0") {
+			displayValue = "Provider default"
+		}
+		items = append(items, ui.SettingItem{Key: option.Key, Label: option.Label, Value: value, DisplayValue: displayValue, InputKind: option.InputKind, Choices: append([]string(nil), option.Choices...), Source: settingSource(s.cfg, option.Key), Scope: "user workspace", Description: option.Description})
 	}
 	return items
 }
@@ -445,6 +502,9 @@ func (s *chatSession) SetSetting(ctx context.Context, key, value string) (string
 		return "", fmt.Errorf("%s is controlled by %s configuration", key, source)
 	}
 	s.mu.Unlock()
+	if key == "search.provider" || strings.HasPrefix(key, "search.options.") {
+		return s.setWebSearchPreference(ctx, key, value)
+	}
 	switch key {
 	case "ui.theme":
 		s.mu.Lock()
@@ -553,6 +613,49 @@ func (s *chatSession) SetSetting(ctx context.Context, key, value string) (string
 	default:
 		return "", fmt.Errorf("setting %s cannot be changed here", key)
 	}
+}
+
+func (s *chatSession) setWebSearchPreference(ctx context.Context, key, value string) (string, error) {
+	parsed, err := config.ParseWorkspacePreference(key, value)
+	if err != nil {
+		return "", err
+	}
+	s.mu.Lock()
+	runtime := s.runtime
+	paths := s.cfg.Paths
+	cfg := s.cfg
+	cfg.Values = cloneValues(s.cfg.Values)
+	if runtime != nil && runtime.Service.Active() {
+		s.mu.Unlock()
+		return "", errors.New("web search settings can only change while the execution is idle")
+	}
+	s.mu.Unlock()
+	if key == "search.provider" && value == "native" {
+		catalog, err := s.providerCatalog()
+		if err != nil {
+			return "", err
+		}
+		if catalog.SearchProvider(cfg.String("provider"), cfg, s.app.credentialLookup(cfg)) == nil {
+			return "", fmt.Errorf("hosted web search is unavailable for provider %q", cfg.String("provider"))
+		}
+	}
+	if runtime != nil {
+		if err := runtime.Close(ctx); err != nil {
+			return "", err
+		}
+		s.mu.Lock()
+		if s.runtime == runtime {
+			s.runtime = nil
+		}
+		s.mu.Unlock()
+	}
+	if err := config.SaveWorkspacePreference(paths, key, value); err != nil {
+		return "", err
+	}
+	s.mu.Lock()
+	s.cfg.Values[key] = config.Value{Value: parsed, Source: "user-workspace"}
+	s.mu.Unlock()
+	return "Web search setting saved for this workspace. New searches will use the updated defaults.", nil
 }
 
 func (s *chatSession) inspectionService(ctx context.Context) (*execution.Service, func(), error) {

@@ -14,8 +14,9 @@ replacement is needed; Opera still consumes published Y v1.3.1.
   provider catalog; `/model <provider> <model>` allows explicit IDs. `/thinking`
   validates levels and advertised support. Selection rebuilds the scoped backend
   while idle, preserving conversation IDs; approval must be resolved first.
-- `/context [path]` lists sources or adds a file. `/settings` inspects effective
-  settings. `/help` comes from the shared application command registry. CLI
+- `/context [path]` lists sources or adds a file. `/settings` opens editable
+  workspace settings, including per-provider web search defaults. `/help` comes
+  from the shared application command registry. CLI
   equivalents include `context`, `settings`, `--provider`, `--model`, `--thinking`,
   and repeatable `--attach`. Accessible chat supports the same textual commands.
 - Root AGENTS.md loads first, then ancestor AGENTS.md files from shallow to deep

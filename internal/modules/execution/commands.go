@@ -31,7 +31,7 @@ var Commands = []Command{
 	{"/thinking", "/thinking off|minimal|low|medium|high|xhigh|max", "Select supported reasoning level"},
 	{"/context", "/context [path]", "List sources or add a UTF-8 file attachment"},
 	{"/image", "/image <workspace-path> <message>", "Send a workspace image with this message"},
-	{"/settings", "/settings", "Edit model, thinking, context and workspace policy"},
+	{"/settings", "/settings", "Edit model, web search, thinking, context and workspace policy"},
 	{"/help", "/help", "Show command help"},
 	{"/approve", "/approve", "Approve the reviewed operation"},
 	{"/deny", "/deny", "Deny the reviewed operation"},
