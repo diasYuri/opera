@@ -164,7 +164,7 @@ func isHelpKey(value string) bool {
 		return true
 	}
 	switch value {
-	case "Enter", "Tab", "Alt+Enter", "PgUp/PgDn", "PgUp", "PgDn", "Ctrl+End", "Ctrl+O", "Ctrl+D", "Ctrl+C", "Esc", "↑↓":
+	case "Enter", "Tab", "Shift+Enter", "Alt+Enter", "PgUp/PgDn", "PgUp", "PgDn", "Ctrl+End", "Ctrl+O", "Ctrl+D", "Ctrl+C", "Esc", "↑↓":
 		return true
 	default:
 		return false
@@ -289,7 +289,7 @@ func (m model) helpLine() string {
 		return "/login connect · /model choose · /resume sessions · /help"
 	}
 	if m.width < 48 {
-		return enter + " send · /help"
+		return enter + " send · Shift+Enter newline"
 	}
 	if m.newConversationItems {
 		return pageUp + "/" + pageDown + " scroll · " + bottom + " latest messages · /messages find"
@@ -297,7 +297,11 @@ func (m model) helpLine() string {
 	if m.conversation.TotalLineCount() > 0 && m.width >= 48 {
 		return pageUp + "/" + pageDown + " scroll · " + bottom + " latest · " + details + " tool details · /messages find"
 	}
-	return enter + " send · ↑↓ history · " + complete + " complete · /help shortcuts"
+	historyHint := "↑↓ history"
+	if strings.ContainsRune(m.composer.editor.Value(), '\n') {
+		historyHint = "↑↓ edit text"
+	}
+	return enter + " send · Shift+Enter newline · " + historyHint + " · " + complete + " complete · /help shortcuts"
 }
 
 func (m model) completionView() string {

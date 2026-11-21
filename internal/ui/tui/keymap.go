@@ -19,7 +19,7 @@ type chatKeyMap struct {
 func defaultChatKeyMap() chatKeyMap {
 	return chatKeyMap{
 		submit:          key.NewBinding(key.WithKeys("enter"), key.WithHelp("Enter", "send")),
-		newline:         key.NewBinding(key.WithKeys("alt+enter", "ctrl+j"), key.WithHelp("Alt+Enter", "newline")),
+		newline:         key.NewBinding(key.WithKeys("shift+enter", "alt+enter", "ctrl+j"), key.WithHelp("Shift+Enter", "newline")),
 		complete:        key.NewBinding(key.WithKeys("tab"), key.WithHelp("Tab", "complete")),
 		pageUp:          key.NewBinding(key.WithKeys("pageup", "pgup"), key.WithHelp("PgUp", "scroll back")),
 		pageDown:        key.NewBinding(key.WithKeys("pagedown", "pgdown"), key.WithHelp("PgDn", "scroll forward")),

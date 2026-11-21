@@ -43,10 +43,12 @@ func (c *composerModel) navigateHistory(previous bool) {
 	}
 }
 
-// shouldNavigateHistory keeps normal cursor movement inside multiline drafts,
-// while making the boundary arrows behave like prompt history navigation.
+// shouldNavigateHistory reserves boundary arrows for prompt history only while
+// editing a single-line draft. Multiline drafts keep both arrows for moving
+// through their contents, including when the visible editor has reached its
+// five-row limit and must scroll internally.
 func (c composerModel) shouldNavigateHistory(previous bool) bool {
-	if len(c.history) == 0 {
+	if len(c.history) == 0 || strings.ContainsRune(c.editor.Value(), '\n') {
 		return false
 	}
 	if previous {

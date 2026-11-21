@@ -1,11 +1,15 @@
 package tui
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 func TestConversationOwnerKeepsStableIdentityAndCheckpointCommit(t *testing.T) {
@@ -54,5 +58,38 @@ func TestComposerOwnerNavigatesHistoryWithoutLosingDraftSlot(t *testing.T) {
 	composer.navigateHistory(false)
 	if composer.editor.Value() != "" || composer.historyIndex != 2 {
 		t.Fatal("next history did not return to the empty draft")
+	}
+}
+
+func TestComposerHistoryArrowsStayInMultilineDrafts(t *testing.T) {
+	composer := composerModel{editor: textarea.New(), history: []string{"older"}, historyIndex: 1}
+	composer.editor.SetValue("single-line draft")
+	if !composer.shouldNavigateHistory(true) || !composer.shouldNavigateHistory(false) {
+		t.Fatal("single-line boundary arrows should navigate prompt history")
+	}
+	composer.editor.SetValue("first line\nsecond line")
+	if composer.shouldNavigateHistory(true) || composer.shouldNavigateHistory(false) {
+		t.Fatal("multiline arrows should move through the draft, not prompt history")
+	}
+}
+
+func TestComposerShiftEnterInsertsNewline(t *testing.T) {
+	m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift})
+	if got := next.(model).composer.editor.Value(); got != "\n" {
+		t.Fatalf("Shift+Enter draft = %q, want newline", got)
+	}
+}
+
+func TestComposerHelpMatchesDraftNavigation(t *testing.T) {
+	m := newModel(context.Background(), terminalExecutor{}, execution.Request{}, true)
+	m.modelName, m.provider = "fixture", "openai"
+	m.composer.editor.SetValue("single line")
+	if !strings.Contains(m.helpLine(), "↑↓ history") {
+		t.Fatal("single-line composer help omitted history navigation")
+	}
+	m.composer.editor.SetValue("first line\nsecond line")
+	if !strings.Contains(m.helpLine(), "↑↓ edit text") {
+		t.Fatal("multiline composer help advertised history navigation")
 	}
 }
