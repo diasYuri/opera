@@ -69,7 +69,7 @@ func packages() error {
 			if err != nil {
 				return err
 			}
-			metadata, err := json.MarshalIndent(artifactMetadata{Version: version, GOOS: targetOS, GOARCH: arch, Go: toolchain, SDK: "v1.3.4", Source: "local source; unpublished", CGO: "0"}, "", "  ")
+			metadata, err := json.MarshalIndent(artifactMetadata{Version: version, GOOS: targetOS, GOARCH: arch, Go: toolchain, SDK: "v1.4.0", Source: "local source; unpublished", CGO: "0"}, "", "  ")
 			if err != nil {
 				return err
 			}
@@ -268,7 +268,7 @@ func packageSmoke() error {
 		if dep.Replace != nil {
 			return errors.New("package embeds dependency replacement")
 		}
-		if dep.Path == "github.com/diasYuri/y" && dep.Version == "v1.3.4" {
+		if dep.Path == "github.com/diasYuri/y" && dep.Version == "v1.4.0" {
 			sdk = true
 		}
 	}

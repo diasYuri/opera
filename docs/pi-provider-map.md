@@ -19,7 +19,7 @@ providers.
 PI source references: `packages/ai/src/providers/{openai,anthropic,google,openrouter,groq,deepseek}.ts`.
 PI's OpenRouter provider additionally supports Anthropic Messages, OAuth,
 personalized model catalogs, image generation and classifier APIs. Those
-capabilities are outside Y v1.3.4's OpenAI-compatible contract and are not
+capabilities are outside Y v1.4.0's OpenAI-compatible contract and are not
 claimed by Opera.
 
 ## Authentication flows in PI
@@ -91,7 +91,7 @@ credentials, and other PI providers remain outside this increment.
 
 ## Compatibility boundary
 
-Opera uses the published Y SDK v1.3.4. It provides native OpenAI Responses,
+Opera uses the published Y SDK v1.4.0. It provides native OpenAI Responses,
 Anthropic Messages, Gemini and generic OpenAI-compatible Chat Completions
 adapters. Consequently, the six providers above can be composed without adding
 another execution loop. The compatible route does not imply provider-specific
@@ -115,7 +115,7 @@ metadata; only conservative text, tools and streaming capability is exposed.
    callback handling and cancellation.
 6. Keep OpenAI Codex OAuth, GitHub Copilot OAuth/multi-protocol, Vertex ADC and
    Bedrock AWS signing out of this increment: they require provider-specific
-   auth/protocol implementations not published by Y v1.3.4.
+   auth/protocol implementations not published by Y v1.4.0.
 
 The acceptance boundary for this increment is one default catalog used for
 execution and discovery, distinct provider IDs and credentials, cancellable

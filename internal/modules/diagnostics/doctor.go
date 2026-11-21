@@ -10,7 +10,7 @@ import (
 )
 
 const GoVersion = "go1.27.4"
-const YVersion = "v1.3.4"
+const YVersion = "v1.4.0"
 
 type Check struct {
 	Name     string `json:"name"`

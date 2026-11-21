@@ -1,7 +1,7 @@
 {
   "module": "github.com/diasYuri/y",
-  "version": "v1.3.4",
-  "checksum": "h1:kvbffLLcfaxJ1TrI2zs2CdR3SaXIobWlXkxWNNf0pNU=",
+  "version": "v1.4.0",
+  "checksum": "h1:snEpSTQfYBkrU7XvW5DUBQyr/H7js+Yv2vtDvFNANgo=",
   "symbols": [
     {
       "package": "github.com/diasYuri/y/pkg/agent",
@@ -10885,6 +10885,125 @@
       "kind": "func"
     },
     {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 12,
+      "name": "ErrInvalidRequest",
+      "kind": "var"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 14,
+      "name": "ErrUnsupportedControl",
+      "kind": "var"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 16,
+      "name": "ErrInvalidResult",
+      "kind": "var"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 21,
+      "name": "ContextSize",
+      "kind": "type"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 24,
+      "name": "ContextSizeLow",
+      "kind": "const"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 25,
+      "name": "ContextSizeMedium",
+      "kind": "const"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 26,
+      "name": "ContextSizeHigh",
+      "kind": "const"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 31,
+      "name": "SafeSearch",
+      "kind": "type"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 35,
+      "name": "SafeSearchOff",
+      "kind": "const"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 37,
+      "name": "SafeSearchModerate",
+      "kind": "const"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 39,
+      "name": "SafeSearchStrict",
+      "kind": "const"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 45,
+      "name": "DateRange",
+      "kind": "type"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 55,
+      "name": "Capabilities",
+      "kind": "type"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 74,
+      "name": "Request",
+      "kind": "type"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 92,
+      "name": "Result",
+      "kind": "type"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 102,
+      "name": "Response",
+      "kind": "type"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/search",
+      "file": "pkg/search/search.go",
+      "line": 109,
+      "name": "Provider",
+      "kind": "type"
+    },
+    {
       "package": "github.com/diasYuri/y/pkg/session",
       "file": "pkg/session/branch.go",
       "line": 13,
@@ -12338,6 +12457,34 @@
       "file": "pkg/tools/validate.go",
       "line": 11,
       "name": "ValidateArguments",
+      "kind": "func"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/tools",
+      "file": "pkg/tools/web_search.go",
+      "line": 19,
+      "name": "CapabilityWebSearch",
+      "kind": "const"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/tools",
+      "file": "pkg/tools/web_search.go",
+      "line": 20,
+      "name": "WebSearchToolName",
+      "kind": "const"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/tools",
+      "file": "pkg/tools/web_search.go",
+      "line": 34,
+      "name": "NewWebSearchTool",
+      "kind": "func"
+    },
+    {
+      "package": "github.com/diasYuri/y/pkg/tools",
+      "file": "pkg/tools/web_search.go",
+      "line": 208,
+      "name": "RegisterWebSearchProvider",
       "kind": "func"
     }
   ]

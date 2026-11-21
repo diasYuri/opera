@@ -59,7 +59,7 @@ func New(ctx context.Context, cfg config.Resolved, registry *tools.Registry, sec
 	}
 	wasmCfg := wasm.DefaultConfig()
 	wasmCfg.ExtensionDirs = nil
-	wasmCfg.HostVersion = "v1.3.4"
+	wasmCfg.HostVersion = "v1.4.0"
 	wasmCfg.MaxLoadedModules = 16
 	wasmCfg.DefaultTimeoutMS = uint32(m.timeout().Milliseconds())
 	wasmCfg.AllowedCapabilities = []wasm.Capability{wasm.CapYTools, wasm.CapLogs}

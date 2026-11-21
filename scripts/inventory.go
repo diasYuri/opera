@@ -32,8 +32,8 @@ func inventory() error {
 	if err := json.Unmarshal(data, &module); err != nil {
 		return err
 	}
-	if module.Version != "v1.3.4" || module.Dir == "" {
-		return fmt.Errorf("inventory requires the pinned published Y v1.3.4")
+	if module.Version != "v1.4.0" || module.Dir == "" {
+		return fmt.Errorf("inventory requires the pinned published Y v1.4.0")
 	}
 	symbols := []apiSymbol{}
 	err = filepath.WalkDir(filepath.Join(module.Dir, "pkg"), func(path string, entry fs.DirEntry, walkErr error) error {

@@ -246,9 +246,9 @@ func checkModules() error {
 		return errors.New("module must pin the required Go patch and contain no replacements")
 	}
 	expected := map[string]string{
-		"charm.land/bubbletea/v2": "v2.1.1", "charm.land/bubbles/v2": "v2.2.1",
+		"charm.land/bubbletea/v2": "v2.1.2", "charm.land/bubbles/v2": "v2.2.2",
 		"charm.land/huh/v2": "v2.0.3", "charm.land/lipgloss/v2": "v2.1.1",
-		"github.com/charmbracelet/harmonica": "v0.2.0", "github.com/diasYuri/y": "v1.3.4",
+		"github.com/charmbracelet/harmonica": "v0.2.0", "github.com/diasYuri/y": "v1.4.0",
 	}
 	for _, dep := range mod.Require {
 		if want, ok := expected[dep.Path]; ok {
