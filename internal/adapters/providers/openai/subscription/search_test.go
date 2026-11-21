@@ -31,13 +31,14 @@ func TestHostedSearchUsesSupportedResponsesEndpointAndReturnsSources(t *testing.
 			t.Fatal("public Responses search headers missing")
 		}
 		var body struct {
-			Model      string                 `json:"model"`
-			Input      []responsesSearchInput `json:"input"`
-			Tools      []responsesSearchTool  `json:"tools"`
-			ToolChoice string                 `json:"tool_choice"`
-			Include    []string               `json:"include"`
-			Store      *bool                  `json:"store"`
-			Stream     *bool                  `json:"stream"`
+			Model      string                   `json:"model"`
+			Input      []responsesSearchInput   `json:"input"`
+			Reasoning  responsesSearchReasoning `json:"reasoning"`
+			Tools      []responsesSearchTool    `json:"tools"`
+			ToolChoice string                   `json:"tool_choice"`
+			Include    []string                 `json:"include"`
+			Store      *bool                    `json:"store"`
+			Stream     *bool                    `json:"stream"`
 		}
 		var raw map[string]json.RawMessage
 		if err := json.NewDecoder(req.Body).Decode(&raw); err != nil {
@@ -47,7 +48,7 @@ func TestHostedSearchUsesSupportedResponsesEndpointAndReturnsSources(t *testing.
 		if err := json.Unmarshal(encoded, &body); err != nil {
 			t.Fatal(err)
 		}
-		if body.Model != "gpt-5.1-codex" || len(body.Input) != 1 || body.Input[0].Role != "user" || !strings.Contains(body.Input[0].Content, "Anthropic public listing") || body.ToolChoice != "required" || len(body.Tools) != 1 || body.Tools[0].Type != "web_search" || !body.Tools[0].ExternalWebAccess {
+		if body.Model != "gpt-5.1-codex" || len(body.Input) != 1 || body.Input[0].Role != "user" || !strings.Contains(body.Input[0].Content, "Anthropic public listing") || body.Reasoning.Effort != "low" || body.ToolChoice != "required" || len(body.Tools) != 1 || body.Tools[0].Type != "web_search" || !body.Tools[0].ExternalWebAccess {
 			t.Fatalf("unexpected Responses request: %#v", body)
 		}
 		if body.Store == nil || *body.Store || body.Stream == nil || !*body.Stream {
@@ -128,6 +129,17 @@ func TestHostedSearchRejectsIncompleteResponse(t *testing.T) {
 	}
 	if _, err := readCompletedResponse(strings.NewReader("event: response.created\ndata: {\"type\":\"response.created\"}\n\n")); err == nil || !strings.Contains(err.Error(), "before response.completed") {
 		t.Fatalf("truncated stream error = %v", err)
+	}
+}
+
+func TestHostedSearchDoesNotCompleteWithoutCiteableSources(t *testing.T) {
+	p := NewSearchProvider("gpt-5.1-codex", func(context.Context, string) (string, error) { return "token", nil })
+	p.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return fixtureResponse("event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"web_search_call\",\"action\":{\"type\":\"search\",\"sources\":[]}}]}}\n\n"), nil
+	})
+	_, err := p.Search(context.Background(), search.Request{Query: "current price"})
+	if err == nil || !strings.Contains(err.Error(), "without citeable sources") || !strings.Contains(err.Error(), "model and account") {
+		t.Fatalf("empty search source set was not reported: %v", err)
 	}
 }
 

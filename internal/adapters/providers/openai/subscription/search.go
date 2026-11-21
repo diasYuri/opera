@@ -53,13 +53,18 @@ func (*SearchProvider) Capabilities() searchcontract.Capabilities {
 }
 
 type responsesSearchRequest struct {
-	Model      string                 `json:"model"`
-	Input      []responsesSearchInput `json:"input"`
-	Tools      []responsesSearchTool  `json:"tools"`
-	ToolChoice string                 `json:"tool_choice"`
-	Include    []string               `json:"include"`
-	Store      bool                   `json:"store"`
-	Stream     bool                   `json:"stream"`
+	Model      string                   `json:"model"`
+	Input      []responsesSearchInput   `json:"input"`
+	Reasoning  responsesSearchReasoning `json:"reasoning"`
+	Tools      []responsesSearchTool    `json:"tools"`
+	ToolChoice string                   `json:"tool_choice"`
+	Include    []string                 `json:"include"`
+	Store      bool                     `json:"store"`
+	Stream     bool                     `json:"stream"`
+}
+
+type responsesSearchReasoning struct {
+	Effort string `json:"effort"`
 }
 
 type responsesSearchInput struct {
@@ -144,7 +149,8 @@ func (p *SearchProvider) Search(ctx context.Context, request searchcontract.Requ
 		Input: []responsesSearchInput{{
 			Role: "user", Content: "Search the web for: " + query + ". Return concise factual findings and cite the sources used.",
 		}},
-		Tools: []responsesSearchTool{tool}, ToolChoice: "required",
+		Reasoning: responsesSearchReasoning{Effort: "low"},
+		Tools:     []responsesSearchTool{tool}, ToolChoice: "required",
 		Include: []string{"web_search_call.action.sources"},
 		Store:   false, Stream: true,
 	})
@@ -183,6 +189,9 @@ func (p *SearchProvider) Search(ctx context.Context, request searchcontract.Requ
 	results, err := parseResponsesSearchResults(completed, request)
 	if err != nil {
 		return searchcontract.Response{}, err
+	}
+	if len(results) == 0 {
+		return searchcontract.Response{}, errors.New("OpenAI Responses web search completed without citeable sources; verify that the selected model and account support web search")
 	}
 	for i := range results {
 		results[i].Metadata = map[string]string{"provider": "OpenAI Responses web search"}
