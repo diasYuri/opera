@@ -9,6 +9,7 @@ import (
 	"github.com/diasYuri/opera/internal/modules/configuration"
 	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/y/pkg/policy"
+	"github.com/diasYuri/y/pkg/search"
 	"github.com/diasYuri/y/pkg/tools"
 )
 
@@ -21,6 +22,7 @@ type ToolPackContext struct {
 	Questions *execution.QuestionBroker
 	Skills    *skills.Manager
 	Work      *execution.Work
+	Search    search.Provider
 }
 
 // ToolPack is an explicitly selected group of related tools.
@@ -49,6 +51,13 @@ func defaultToolPacks() []ToolPack {
 		{ID: "skills", Register: func(_ context.Context, r *tools.Registry, c ToolPackContext) error { return c.Skills.Register(r) }},
 		{ID: "work", Register: func(_ context.Context, r *tools.Registry, c ToolPackContext) error { return c.Work.Register(r) }},
 		{ID: "user-question", Register: func(_ context.Context, r *tools.Registry, c ToolPackContext) error { return c.Questions.Register(r) }},
+		{ID: "web-search", Register: func(_ context.Context, r *tools.Registry, c ToolPackContext) error {
+			if c.Search == nil {
+				return nil
+			}
+			_, err := tools.RegisterWebSearchProvider(r, c.Search)
+			return err
+		}},
 	}
 }
 

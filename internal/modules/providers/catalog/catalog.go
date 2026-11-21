@@ -10,9 +10,11 @@ import (
 
 	"github.com/diasYuri/opera/internal/modules/configuration"
 	"github.com/diasYuri/y/pkg/providers"
+	"github.com/diasYuri/y/pkg/search"
 )
 
 type Factory func(context.Context, config.Resolved, func(context.Context, string) (string, error)) (providers.Provider, error)
+type SearchFactory func(config.Resolved, func(context.Context, string) (string, error)) search.Provider
 
 // CredentialStore and AuthIO expose only effects needed by provider-owned
 // authentication handlers. UI supplies prompts and notifications.
@@ -70,6 +72,7 @@ type Entry struct {
 	Name                  string
 	Description           string
 	Factory               Factory
+	SearchFactory         SearchFactory
 	Login                 *LoginDescriptor
 	EnvironmentCredential func(func(string) string) string
 	FixedEndpoint         bool
@@ -188,6 +191,19 @@ func (c *Catalog) Create(ctx context.Context, cfg config.Resolved, lookup func(c
 	return provider, nil
 }
 
+// SearchProvider returns a provider-owned web search capability for the
+// selected model provider. Authentication is resolved when a search executes.
+func (c *Catalog) SearchProvider(provider string, cfg config.Resolved, lookup func(context.Context, string) (string, error)) search.Provider {
+	if c == nil {
+		return nil
+	}
+	entry, ok := c.entries[provider]
+	if !ok || entry.SearchFactory == nil {
+		return nil
+	}
+	return entry.SearchFactory(cfg, lookup)
+}
+
 // Entries returns provider selection metadata in stable ID order.
 func (c *Catalog) Entries() []Entry {
 	if c == nil {
@@ -198,6 +214,7 @@ func (c *Catalog) Entries() []Entry {
 	for _, id := range ids {
 		entry := c.entries[id]
 		entry.Factory = nil
+		entry.SearchFactory = nil
 		entry.EnvironmentCredential = nil
 		entry.Login = cloneLoginDescriptor(entry.Login)
 		if entry.Login != nil {

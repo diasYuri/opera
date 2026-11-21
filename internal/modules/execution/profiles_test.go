@@ -74,6 +74,9 @@ func TestBuildPromptSeparatesRuntimeModeAndAgentProfile(t *testing.T) {
 	if len(built.Sections) != 7 {
 		t.Fatalf("got %d prompt sections", len(built.Sections))
 	}
+	if !strings.Contains(built.SystemPrompt, "use web_search when it is available") || !strings.Contains(built.SystemPrompt, "without trying workspace search tools such as search_text or search_ast") {
+		t.Fatal("prompt does not guide web research or prevent a shell fallback")
+	}
 	if empty := BuildPrompt(PromptInput{RuntimeMode: mode, AgentProfile: profile}); empty.UserPrompt != "" {
 		t.Fatalf("empty task became prompt prefix %q", empty.UserPrompt)
 	}

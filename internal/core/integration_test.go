@@ -17,14 +17,29 @@ import (
 	"github.com/diasYuri/opera/internal/modules/providers/catalog"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/agent/agenttest"
+	"github.com/diasYuri/y/pkg/policy"
 	"github.com/diasYuri/y/pkg/providers"
 	"github.com/diasYuri/y/pkg/providers/providertest"
+	yruntime "github.com/diasYuri/y/pkg/runtime"
+	"github.com/diasYuri/y/pkg/search"
 	"github.com/diasYuri/y/pkg/tools"
 )
 
 type namedProvider struct{ *agenttest.ScriptProvider }
 
 func (namedProvider) ID() string { return "openai" }
+
+type subscriptionNamedProvider struct{ *agenttest.ScriptProvider }
+
+func (subscriptionNamedProvider) ID() string { return "openai-subscription" }
+
+type scriptedSearch struct{ calls int }
+
+func (*scriptedSearch) Capabilities() search.Capabilities { return search.Capabilities{} }
+func (p *scriptedSearch) Search(_ context.Context, request search.Request) (search.Response, error) {
+	p.calls++
+	return search.Response{Results: []search.Result{{Title: "Verified source", URL: "https://example.com/fact", Snippet: request.Query}}}, nil
+}
 
 func configuration(t *testing.T) config.Resolved {
 	t.Helper()
@@ -159,6 +174,207 @@ func closeRuntime(t *testing.T, runtime *core.Runtime) {
 	t.Helper()
 	if err := runtime.Close(context.Background()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestWebSearchIsRegisteredAndRunsAfterApproval(t *testing.T) {
+	ctx := context.Background()
+	cfg := configuration(t)
+	searchProvider := &scriptedSearch{}
+	provider := namedProvider{agenttest.NewScriptProvider(t,
+		agenttest.ToolTurn("web_search", `{"query":"current company information"}`),
+		agenttest.TextTurn("Verified [source](https://example.com/fact)."),
+	)}
+	runtime, err := core.Open(ctx, cfg, core.Options{
+		ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil },
+		Credential:      func(context.Context, string) (string, error) { return "fixture-secret-never-persist", nil },
+		SearchProvider:  searchProvider,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeRuntime(t, runtime)
+	first, err := runtime.Service.Execute(ctx, execmod.Request{Prompt: "Search the web for current company information and cite the sources."}, nil)
+	if err != nil || first.Approval == nil || first.Approval.Tool != "web_search" {
+		t.Fatalf("web search did not enter the approval flow: %#v %v", first, err)
+	}
+	if searchProvider.calls != 0 {
+		t.Fatal("external search ran before approval")
+	}
+	result, err := runtime.Service.Execute(ctx, execmod.Request{ID: first.ID, Approve: first.Approval.ID}, nil)
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("approved search result: %#v %v", result, err)
+	}
+	if searchProvider.calls != 1 {
+		t.Fatalf("search calls = %d, want 1", searchProvider.calls)
+	}
+}
+
+func TestConfiguredBraveSearchDefersCredentialUntilAnApprovedCall(t *testing.T) {
+	cfg := configuration(t)
+	cfg.Values["search.provider"] = config.Value{Value: "brave", Source: "user"}
+	provider := namedProvider{agenttest.NewScriptProvider(t)}
+	var resolved string
+	runtime, err := core.Open(context.Background(), cfg, core.Options{
+		ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil },
+		Credential: func(_ context.Context, name string) (string, error) {
+			resolved = name
+			return "", nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeRuntime(t, runtime)
+	if resolved != "" {
+		t.Fatalf("search credential was resolved during activation: %q", resolved)
+	}
+	registry, err := yruntime.Resolve(runtime.Harness, yruntime.ToolRegistryKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, descriptor := range registry.List() {
+		if descriptor.Name == "web_search" {
+			if !descriptor.Sensitive {
+				t.Fatal("web_search must retain the sensitive-operation approval policy")
+			}
+			_, err = registry.Handle(context.Background(), tools.ToolRequest{
+				Name: tools.WebSearchToolName, Arguments: json.RawMessage(`{"query":"current company information"}`),
+				Approval: &policy.ApprovalResolution{State: policy.ApprovalApproved},
+			})
+			if err == nil || !strings.Contains(err.Error(), "no Brave Search API key is available") {
+				t.Fatalf("search without configured key returned %v", err)
+			}
+			if resolved != "brave-search" {
+				t.Fatalf("approved search credential provider = %q", resolved)
+			}
+			return
+		}
+	}
+	t.Fatal("configured Brave Search did not register web_search")
+}
+
+func TestConfiguredBraveSearchDoesNotFailActivationWithoutCredential(t *testing.T) {
+	cfg := configuration(t)
+	cfg.Values["search.provider"] = config.Value{Value: "brave", Source: "user"}
+	provider := namedProvider{agenttest.NewScriptProvider(t)}
+	runtime, err := core.Open(context.Background(), cfg, core.Options{
+		ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil },
+		Credential:      func(context.Context, string) (string, error) { return "", nil },
+	})
+	if err != nil {
+		t.Fatalf("configured search without a credential failed activation: %v", err)
+	}
+	closeRuntime(t, runtime)
+}
+
+func TestCodexSearchResolvesItsCredentialOnlyAfterApproval(t *testing.T) {
+	ctx := context.Background()
+	cfg := configuration(t)
+	cfg.Values["provider"] = config.Value{Value: "openai-subscription", Source: "test"}
+	cfg.Values["model"] = config.Value{Value: "fixture-codex-model", Source: "test"}
+	provider := subscriptionNamedProvider{agenttest.NewScriptProvider(t,
+		agenttest.ToolTurn("web_search", `{"query":"current company information"}`),
+		agenttest.TextTurn("Search credential was checked after approval."),
+	)}
+	credentialLookups := 0
+	runtime, err := core.Open(ctx, cfg, core.Options{
+		ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) { return provider, nil },
+		Credential: func(_ context.Context, provider string) (string, error) {
+			credentialLookups++
+			if provider != "openai-subscription" {
+				t.Errorf("unexpected native search credential provider %q", provider)
+			}
+			// The agent resolves its inference credential once per model turn;
+			// the second lookup is the hosted search after approval.
+			if credentialLookups == 2 {
+				return "", nil
+			}
+			return "fixture-subscription-token", nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeRuntime(t, runtime)
+	first, err := runtime.Service.Execute(ctx, execmod.Request{Prompt: "Search the web for current company information."}, nil)
+	if err != nil || first.Approval == nil || first.Approval.Tool != "web_search" {
+		t.Fatalf("native web search did not enter approval: %#v %v", first, err)
+	}
+	if credentialLookups != 1 {
+		t.Fatalf("credential lookups before approval = %d, want only the agent inference credential", credentialLookups)
+	}
+	_, err = runtime.Service.Execute(ctx, execmod.Request{ID: first.ID, Approve: first.Approval.ID}, nil)
+	if err != nil {
+		t.Fatalf("approved search turn failed: %v", err)
+	}
+	if credentialLookups != 3 {
+		t.Fatalf("credential lookups after approved search = %d, want inference + hosted search + next inference", credentialLookups)
+	}
+}
+
+func TestNativeSearchCanBeDisabledExplicitly(t *testing.T) {
+	cfg := configuration(t)
+	cfg.Values["provider"] = config.Value{Value: "openai-subscription", Source: "test"}
+	cfg.Values["model"] = config.Value{Value: "fixture-codex-model", Source: "test"}
+	cfg.Values["search.provider"] = config.Value{Value: "disabled", Source: "test"}
+	runtime, err := core.Open(context.Background(), cfg, core.Options{
+		ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+			return subscriptionNamedProvider{agenttest.NewScriptProvider(t)}, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeRuntime(t, runtime)
+	registry, err := yruntime.Resolve(runtime.Harness, yruntime.ToolRegistryKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, descriptor := range registry.List() {
+		if descriptor.Name == "web_search" {
+			t.Fatal("web_search remained available while explicitly disabled")
+		}
+	}
+}
+
+func TestProjectProviderSelectionCannotEnableNativeSearchByItself(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		selection string
+		want      bool
+	}{
+		{name: "automatic", want: false},
+		{name: "user opt-in", selection: "native", want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := configuration(t)
+			cfg.Values["provider"] = config.Value{Value: "openai-subscription", Source: "project"}
+			cfg.Values["model"] = config.Value{Value: "fixture-codex-model", Source: "project"}
+			if test.selection != "" {
+				cfg.Values["search.provider"] = config.Value{Value: test.selection, Source: "user"}
+			}
+			runtime, err := core.Open(context.Background(), cfg, core.Options{
+				ProviderFactory: func(context.Context, config.Resolved) (providers.Provider, error) {
+					return subscriptionNamedProvider{agenttest.NewScriptProvider(t)}, nil
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer closeRuntime(t, runtime)
+			registry, err := yruntime.Resolve(runtime.Harness, yruntime.ToolRegistryKey)
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, descriptor := range registry.List() {
+				found = found || descriptor.Name == "web_search"
+			}
+			if found != test.want {
+				t.Fatalf("web_search availability = %v, want %v", found, test.want)
+			}
+		})
 	}
 }
 

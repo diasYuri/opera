@@ -65,6 +65,9 @@ func Load(opts Options) (Resolved, error) {
 			if _, ok := values["base_url"]; ok {
 				return Resolved{}, fmt.Errorf("base_url is user-only; project endpoints cannot receive user credentials")
 			}
+			if _, ok := values["search.provider"]; ok {
+				return Resolved{}, fmt.Errorf("search.provider is user-only; project configuration cannot enable external search")
+			}
 			if _, ok := values["credentials.store"]; ok {
 				return Resolved{}, fmt.Errorf("credentials.store is user-only; remove it from project configuration")
 			}

@@ -2,7 +2,10 @@ package core
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
+	bravesearch "github.com/diasYuri/opera/internal/adapters/search/brave"
 	"github.com/diasYuri/opera/internal/modules/execution"
 	operaext "github.com/diasYuri/opera/internal/modules/extensions"
 	"github.com/diasYuri/y/pkg/component"
@@ -41,7 +44,47 @@ func (b *compositionBuilder) tools() component.Definition {
 		limits := tools.ToolLimits{MaxOutputBytes: int64(cfg.Int("limits.output_bytes"))}
 		work := execution.NewWork(records, cfg.Int("agents.max_concurrent"), cfg.Int("agents.max_depth"))
 		work.MaxBudget = int64(cfg.Int("limits.worker_tokens")) // 0 means unlimited.
-		if err := registerToolPacks(ctx, registry, ToolPackContext{Config: cfg, Policy: engine, Limits: limits, Guard: guard, Questions: questions, Skills: skillManager, Work: work}, opts.ToolPacks, opts.DisabledToolPacks); err != nil {
+		searchProvider := opts.SearchProvider
+		if searchProvider == nil {
+			selection := cfg.String("search.provider")
+			switch selection {
+			case "":
+				// A project may choose a model provider, but it cannot thereby
+				// activate an external network capability. Users can explicitly
+				// opt in with search.provider="native" in user settings.
+				if cfg.Values["provider"].Source == "project" && cfg.Values["search.provider"].Source == "default" {
+					break
+				}
+				fallthrough
+			case "native":
+				catalog := opts.ProviderCatalog
+				if catalog == nil {
+					catalog, err = DefaultCatalog(cfg.CustomProviders...)
+					if err != nil {
+						return err
+					}
+				}
+				searchProvider = catalog.SearchProvider(cfg.String("provider"), cfg, opts.Credential)
+				if selection == "native" && searchProvider == nil {
+					return fmt.Errorf("native web search is not available for provider %q", cfg.String("provider"))
+				}
+			case "disabled":
+			case "brave":
+				if opts.Credential == nil {
+					return errors.New("search provider Brave Search is configured but no credential resolver is available")
+				}
+				searchProvider = bravesearch.NewWithCredentialResolver(func(ctx context.Context) (string, error) {
+					key, err := opts.Credential(ctx, "brave-search")
+					if err != nil {
+						return "", fmt.Errorf("resolve Brave Search credential: %w", err)
+					}
+					return key, nil
+				})
+			default:
+				return fmt.Errorf("unsupported search provider %q", cfg.String("search.provider"))
+			}
+		}
+		if err := registerToolPacks(ctx, registry, ToolPackContext{Config: cfg, Policy: engine, Limits: limits, Guard: guard, Questions: questions, Skills: skillManager, Work: work, Search: searchProvider}, opts.ToolPacks, opts.DisabledToolPacks); err != nil {
 			return err
 		}
 		b.extensions, err = operaext.New(ctx, cfg, registry, opts.Secret, opts.Offline)

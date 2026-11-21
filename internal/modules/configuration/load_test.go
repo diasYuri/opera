@@ -61,7 +61,7 @@ func TestEmptyAndFalseAreExplicit(t *testing.T) {
 }
 
 func TestProjectCannotElevateOrSelectStore(t *testing.T) {
-	for _, project := range []string{"policy='trusted'", "[credentials]\nstore='file'"} {
+	for _, project := range []string{"policy='trusted'", "[credentials]\nstore='file'", "[search]\nprovider='brave'"} {
 		opts := fixture(t, "", project)
 		if _, err := config.Load(opts); err == nil {
 			t.Errorf("accepted privileged project configuration")
@@ -74,6 +74,39 @@ func TestProjectCannotElevateOrSelectStore(t *testing.T) {
 	opts.Flags = map[string]string{"policy": "trusted"}
 	if cfg, err := config.Load(opts); err != nil || cfg.String("policy") != "trusted" {
 		t.Fatalf("explicit user flag should be allowed: %v", err)
+	}
+}
+
+func TestSearchProviderIsExplicitUserSetting(t *testing.T) {
+	opts := fixture(t, "[search]\nprovider='brave'", "")
+	cfg, err := config.Load(opts)
+	if err != nil || cfg.String("search.provider") != "brave" || cfg.Values["search.provider"].Source != "user" {
+		t.Fatalf("user search setting = %#v, %v", cfg.Values["search.provider"], err)
+	}
+	opts = fixture(t, "", "")
+	opts.Env = func(key string) (string, bool) {
+		if key == "OPERA_SEARCH_PROVIDER" {
+			return "brave", true
+		}
+		return "", false
+	}
+	cfg, err = config.Load(opts)
+	if err != nil || cfg.String("search.provider") != "brave" {
+		t.Fatalf("environment search setting = %q, %v", cfg.String("search.provider"), err)
+	}
+	opts = fixture(t, "[search]\nprovider='disabled'", "")
+	cfg, err = config.Load(opts)
+	if err != nil || cfg.String("search.provider") != "disabled" {
+		t.Fatalf("disabled search setting = %q, %v", cfg.String("search.provider"), err)
+	}
+	opts = fixture(t, "[search]\nprovider='native'", "")
+	cfg, err = config.Load(opts)
+	if err != nil || cfg.String("search.provider") != "native" {
+		t.Fatalf("native search setting = %q, %v", cfg.String("search.provider"), err)
+	}
+	opts = fixture(t, "[search]\nprovider='unknown'", "")
+	if _, err := config.Load(opts); err == nil {
+		t.Fatal("unsupported search provider accepted")
 	}
 }
 

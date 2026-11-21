@@ -14,6 +14,7 @@ import (
 	"github.com/diasYuri/opera/internal/adapters/providers/openai/subscription"
 	"github.com/diasYuri/opera/internal/adapters/providers/openai_compatible"
 	"github.com/diasYuri/opera/internal/adapters/providers/openrouter"
+	bravesearch "github.com/diasYuri/opera/internal/adapters/search/brave"
 	"github.com/diasYuri/opera/internal/modules/configuration"
 	"github.com/diasYuri/opera/internal/modules/providers/catalog"
 	"github.com/diasYuri/y/pkg/providers/auth"
@@ -47,6 +48,9 @@ func (r CredentialResolver) ResolveAPIKey(ctx context.Context, request auth.Reso
 // EnvironmentAPIKey resolves standard SDK environment variables and provider-owned
 // conventions through the composed catalog.
 func EnvironmentAPIKey(ctx context.Context, provider string, lookup func(string) string) (string, error) {
+	if provider == "brave-search" {
+		return bravesearch.EnvironmentCredential(lookup), nil
+	}
 	catalog, err := DefaultCatalog()
 	if err != nil {
 		return "", err

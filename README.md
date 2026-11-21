@@ -64,9 +64,11 @@ real dependency consumer and platform-specific credential tests.
 Race detection is separate: `GOTOOLCHAIN=go1.27.4 CGO_ENABLED=1 go test -race ./...`
 requires a supported native C compiler. Distributed binaries remain CGO-free.
 
-The published Y baseline is **v1.3.4**. No local replacement or adjacent checkout
+The published Y baseline is **v1.4.0**. No local replacement or adjacent checkout
 is required to build. [SDK coverage](docs/y-capability-coverage.md) records the
-public inventory and verified F1 SDK additions. [Architecture decisions](docs/adr/README.md) define
+public inventory and verified SDK additions. Opera includes approved web search
+through Codex and Claude sign-in, with Brave Search as an explicit alternative.
+[Architecture decisions](docs/adr/README.md) define
 the boundaries for subsequent phases. [F0 validation](docs/f0-validation.md)
 records what was actually checked locally and what requires native CI.
 

@@ -17,6 +17,7 @@ import (
 	"github.com/diasYuri/y/pkg/component"
 	"github.com/diasYuri/y/pkg/providers"
 	yruntime "github.com/diasYuri/y/pkg/runtime"
+	"github.com/diasYuri/y/pkg/search"
 )
 
 type Options struct {
@@ -30,6 +31,7 @@ type Options struct {
 	ContextPaths      []string
 	Credential        func(context.Context, string) (string, error)
 	ProviderFactory   func(context.Context, config.Resolved) (providers.Provider, error)
+	SearchProvider    search.Provider
 	ProviderCatalog   *providercatalog.Catalog
 	ToolPacks         []ToolPack
 	DisabledToolPacks []string

@@ -63,6 +63,19 @@ by underscores. For example, `agents.max_depth` becomes `OPERA_AGENTS_MAX_DEPTH`
 Only documented environment keys are read. Core settings have no API secret
 fields; custom provider credentials are defined separately in the private provider file.
 
+When `search.provider` is empty (the default), Opera enables the provider's
+hosted web search for `openai-subscription` (Codex sign-in) and `anthropic`
+(Claude sign-in). It uses the active provider's saved login and resolves the
+credential only after `web_search` is approved. Other model providers do not
+enable external search automatically. If a project selects the model provider,
+set `search.provider = "native"` in user settings to opt in. Set
+`search.provider = "disabled"` to turn search off, or choose `"brave"` to use
+Brave Search with a separate key.
+For Brave, store the key with `opera auth set brave-search.default` or set
+`BRAVE_SEARCH_API_KEY`. Project configuration cannot enable external search.
+An approved search sends its query to the selected provider's search service;
+returned titles and URLs provide citation evidence.
+
 ```sh
 opera config get policy --policy read-only
 opera config get ui.no_motion --no-motion=false

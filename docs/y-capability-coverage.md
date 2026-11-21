@@ -1,10 +1,10 @@
 # Y capability coverage — F5 baseline
 
-Baseline: **github.com/diasYuri/y v1.3.4**, published commit
-`3fc84a570391fc0b3b7b2067ee6d6904e0ec6a94`. F0 audited v1.2.0; F1 implemented the authorized changes in `~/git/diasYuri/y` and published the SDK. [F1 evidence](f1-validation.md) records the tests and real-provider proof.
+Baseline: **github.com/diasYuri/y v1.4.0**, published commit
+`0a0f4665c7b397eda960aa0e19c9f73ac81c1e73`. F0 audited v1.2.0; F1 implemented the authorized changes in `~/git/diasYuri/y` and published the SDK. [F1 evidence](f1-validation.md) records the tests and real-provider proof.
 
 The module was resolved through Go module download with checksum
-`h1:kvbffLLcfaxJ1TrI2zs2CdR3SaXIobWlXkxWNNf0pNU=`. This is the actual published
+`h1:snEpSTQfYBkrU7XvW5DUBQyr/H7js+Yv2vtDvFNANgo=`. This is the actual published
 baseline, not a local replacement. The old roadmap's API families are expanded
 below. Integration coverage is recorded per phase; extension/provider parity remains a final coverage gate.
 
@@ -41,6 +41,7 @@ names. Nested `internal` packages and `_test.go` files are excluded. Generate wi
 | `pkg/memory` | 36 | Store/extractor contracts, candidates and persistence readiness (C18). |
 | `pkg/policy` | 37 | Decisions, approval, quotas and scope/identity (C03). |
 | `pkg/providers` | 55 | Provider/model catalogs, retries, middleware, errors and token helpers (C02). |
+| `pkg/search` | 17 | Provider-neutral typed web-search requests, capabilities and citation evidence, implemented by OpenAI, Anthropic and Brave adapters. |
 | `pkg/providers/anthropic` | 19 | Provider adapter, models, stream/capabilities and HTTP fixtures (P01–P04). |
 | `pkg/providers/auth` | 33 | Credentials, sources/resolver and refresh interface (C05). |
 | `pkg/providers/google` | 19 | Provider adapter, models, stream/capabilities and HTTP fixtures (P01–P04). |
@@ -51,7 +52,7 @@ names. Nested `internal` packages and `_test.go` files are excluded. Generate wi
 | `pkg/runtime` | 171 | Harness/service keys apply; network/queue hosting is outside CLI scope (C01/C23). |
 | `pkg/session` | 3 | Session and branch store interfaces (C10). |
 | `pkg/telemetry` | 40 | Tracing, dimensions and accounting (C20). |
-| `pkg/tools` | 117 | Registry, policy/middleware, snapshots and coding tool registrations (T01–T30). |
+| `pkg/tools` | 121 | Registry, policy/middleware, snapshots and coding tool registrations (T01–T30), including the generic web-search registration helper. |
 | `pkg/tools/code_search` | 2 | Public convenience registration adapter; same enforcement as its pkg/tools family. |
 | `pkg/tools/filesystem` | 2 | Public convenience registration adapter; same enforcement as its pkg/tools family. |
 | `pkg/tools/git` | 2 | Public convenience registration adapter; same enforcement as its pkg/tools family. |
@@ -83,8 +84,10 @@ The minimum F1 read/write path, OpenAI live proof and HTTP-compatible fixture ar
 
 ## Coverage row conventions
 
-Every row below uses Y **v1.3.4**. `pending` means a product implementation and
-its named acceptance test remain future work; no planned test is claimed to pass.
+The current consumer pin is Y **v1.4.0**. Rows describe Opera product coverage;
+evidence retains the SDK version under which it was gathered. `pending` means a
+product implementation and its named acceptance test remain future work; no
+planned test is claimed to pass.
 The per-row **owner** is the responsible Opera/SDK component, not a person.
 The package links above and generated index resolve precise file/line symbols.
 
@@ -245,11 +248,21 @@ a new CLI scope. A supported single-module transition drains captured views.
 
 ## Final applicability review (F5)
 
-The generated index contains 1746 public declarations, including build variants,
-not 1746 independent product requirements. Every capability family above has a
+The generated index contains 1767 public declarations, including build variants,
+not 1767 independent product requirements. Every capability family above has a
 product implementation/evidence or an explicit scope boundary. No applicable
 row remains pending for lack of a public adapter. [F5 validation](f5-validation.md)
 records local evidence and the native-CI gate separately.
+
+Y v1.4.0 publishes a provider-neutral web-search contract and registry tool
+(`pkg/search` and `pkg/tools`). Opera registers `web_search` through the normal
+audited tool registry and selects hosted OpenAI Responses search for
+`openai-subscription` or Anthropic Messages search for `anthropic` by default.
+Those adapters resolve the active provider's saved login only after approval.
+Brave Search remains available as an explicit choice with a separate key, and
+`search.provider = "disabled"` turns search off. Project configuration cannot
+enable the external capability by selecting a provider alone; a project-selected
+provider requires the user's explicit `search.provider = "native"` opt-in.
 
 The following public SDK mechanisms are alternate compositions or intentionally
 inactive product profiles, rather than missing adapters:

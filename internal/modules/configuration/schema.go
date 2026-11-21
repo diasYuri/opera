@@ -24,6 +24,7 @@ func Schema() []Field {
 		{Key: "extensions.file", Kind: "string", Default: ""},
 		{Key: "provider", Kind: "string", Default: ""},
 		{Key: "model", Kind: "string", Default: ""},
+		{Key: "search.provider", Kind: "string", Default: "", Choices: []string{"", "native", "brave", "disabled"}},
 		{Key: "thinking", Kind: "string", Default: "off", Choices: []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}},
 		{Key: "base_url", Kind: "string", Default: ""},
 		{Key: "policy", Kind: "string", Default: "ask", Choices: []string{"read-only", "ask", "trusted"}},
