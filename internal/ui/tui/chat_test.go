@@ -232,3 +232,35 @@ func TestPasteHistoryAndCheckpointCommitIdentity(t *testing.T) {
 		t.Fatal("replay duplicated checkpoint identity")
 	}
 }
+
+func TestPolicySelectionUsesHighlightedOption(t *testing.T) {
+	e := &navigationTestExecutor{}
+	m := newModel(context.Background(), e, execution.Request{}, true)
+	m.openSetting(SettingItem{Key: "policy", Value: "ask"})
+
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m = next.(model)
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(model)
+
+	if m.formKind != "policy-confirm" || m.formValue != "trusted" {
+		t.Fatalf("policy selection did not carry highlighted option into confirmation: kind=%q value=%q", m.formKind, m.formValue)
+	}
+	confirm, ok := m.approvalForm.GetFocusedField().GetValue().(bool)
+	if !ok || !confirm {
+		t.Fatal("policy confirmation should select Apply policy by default")
+	}
+	next, command := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = next.(model)
+	if command == nil {
+		t.Fatal("confirming the policy did not schedule persistence")
+	}
+	result := command()
+	if e.settingKey != "policy" || e.settingValue != "trusted" {
+		t.Fatalf("policy confirmation persisted %s=%s", e.settingKey, e.settingValue)
+	}
+	next, _ = m.Update(result)
+	if got := next.(model).status; got != "Saved policy" {
+		t.Fatalf("policy save result was not reported: status=%q", got)
+	}
+}

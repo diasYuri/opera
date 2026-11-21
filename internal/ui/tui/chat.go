@@ -811,6 +811,20 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				}
+				if m.formKind == "policy-select" && keyMatches(msg, keys.submit) {
+					if field := form.GetFocusedField(); field != nil {
+						if value, ok := field.GetValue().(string); ok {
+							return m.finishPolicySelection(value)
+						}
+					}
+				}
+				if m.formKind == "policy-confirm" && keyMatches(msg, keys.submit) {
+					if field := form.GetFocusedField(); field != nil {
+						if confirmed, ok := field.GetValue().(bool); ok {
+							return m.finishPolicyConfirmation(confirmed)
+						}
+					}
+				}
 				if form.State == huh.StateAborted {
 					m.approvalForm = nil
 					m.overlay.dismissPanel()
@@ -1528,8 +1542,9 @@ func (m *model) openModelPicker() tea.Cmd {
 }
 
 func (m *model) openPolicyConfirmation(value string) tea.Cmd {
+	confirm := true
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewConfirm().Key("confirm").Title("Apply workspace policy: " + value + "?").Description("The new policy controls tool effects in future executions.").Affirmative("Apply policy").Negative("Cancel"),
+		huh.NewConfirm().Key("confirm").Value(&confirm).Title("Apply workspace policy: " + value + "?").Description("The new policy controls tool effects in future executions.").Affirmative("Apply policy").Negative("Cancel"),
 	)).WithWidth(max(1, m.contentWidth()-4)).WithHeight(7).WithShowHelp(true)
 	return m.openForm("Confirm policy change", form, "policy-confirm", "policy", value)
 }
@@ -1601,6 +1616,33 @@ func (m model) finishThinkingForm(value string) (tea.Model, tea.Cmd) {
 	m.resize()
 	cmd := m.applySetting(keyName, value)
 	return m, cmd
+}
+
+func (m model) finishPolicySelection(value string) (tea.Model, tea.Cmd) {
+	current := m.formValue
+	m.approvalForm = nil
+	m.overlay.dismissPanel()
+	m.formKind, m.formKey, m.formValue = "", "", ""
+	m.formHeight = 0
+	m.resize()
+	if value == current {
+		m.status = "Policy is unchanged"
+		return m, m.composer.editor.Focus()
+	}
+	return m, m.openPolicyConfirmation(value)
+}
+
+func (m model) finishPolicyConfirmation(confirmed bool) (tea.Model, tea.Cmd) {
+	keyName, value := m.formKey, m.formValue
+	m.approvalForm = nil
+	m.overlay.dismissPanel()
+	m.formKind, m.formKey, m.formValue = "", "", ""
+	m.formHeight = 0
+	m.resize()
+	if confirmed {
+		return m, m.applySetting(keyName, value)
+	}
+	return m, m.composer.editor.Focus()
 }
 
 func (m *model) applySetting(keyName, value string) tea.Cmd {
