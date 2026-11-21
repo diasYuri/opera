@@ -13,7 +13,7 @@ import (
 
 func TestHostedSearchUsesSupportedResponsesEndpointAndReturnsSources(t *testing.T) {
 	lookups := 0
-	p := NewSearchProvider("gpt-5.1-codex", func(_ context.Context, id string) (string, error) {
+	p := NewSearchProvider(func(_ context.Context, id string) (string, error) {
 		lookups++
 		if id != ProviderID {
 			t.Fatalf("credential provider = %q", id)
@@ -48,7 +48,7 @@ func TestHostedSearchUsesSupportedResponsesEndpointAndReturnsSources(t *testing.
 		if err := json.Unmarshal(encoded, &body); err != nil {
 			t.Fatal(err)
 		}
-		if body.Model != "gpt-5.1-codex" || len(body.Input) != 1 || body.Input[0].Role != "user" || !strings.Contains(body.Input[0].Content, "Anthropic public listing") || body.Reasoning.Effort != "low" || body.ToolChoice != "required" || len(body.Tools) != 1 || body.Tools[0].Type != "web_search" || !body.Tools[0].ExternalWebAccess {
+		if body.Model != searchModel || len(body.Input) != 1 || body.Input[0].Role != "user" || !strings.Contains(body.Input[0].Content, "Anthropic public listing") || body.Reasoning.Effort != "low" || body.ToolChoice != "required" || len(body.Tools) != 1 || body.Tools[0].Type != "web_search" || !body.Tools[0].ExternalWebAccess {
 			t.Fatalf("unexpected Responses request: %#v", body)
 		}
 		if body.Store == nil || *body.Store || body.Stream == nil || !*body.Stream {
@@ -83,7 +83,7 @@ func TestHostedSearchUsesSupportedResponsesEndpointAndReturnsSources(t *testing.
 
 func TestHostedSearchRejectsUnsupportedControlsBeforeCredentialLookup(t *testing.T) {
 	lookups := 0
-	p := NewSearchProvider("gpt-5.1-codex", func(context.Context, string) (string, error) { lookups++; return "token", nil })
+	p := NewSearchProvider(func(context.Context, string) (string, error) { lookups++; return "token", nil })
 	for _, request := range []search.Request{
 		{Query: "news", Language: "pt"},
 		{Query: "news", DateRange: &search.DateRange{Start: "2026-01-01"}},
@@ -100,7 +100,7 @@ func TestHostedSearchRejectsUnsupportedControlsBeforeCredentialLookup(t *testing
 }
 
 func TestHostedSearchRejectsHTTPFailureWithoutLeakingBody(t *testing.T) {
-	p := NewSearchProvider("gpt-5.1-codex", func(context.Context, string) (string, error) { return "secret-token", nil })
+	p := NewSearchProvider(func(context.Context, string) (string, error) { return "secret-token", nil })
 	p.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: http.StatusUnauthorized, Body: io.NopCloser(strings.NewReader(`{"error":{"code":"no_matching_rule","message":"secret-token"}}`)), Header: make(http.Header)}, nil
 	})
@@ -133,7 +133,7 @@ func TestHostedSearchRejectsIncompleteResponse(t *testing.T) {
 }
 
 func TestHostedSearchDoesNotCompleteWithoutCiteableSources(t *testing.T) {
-	p := NewSearchProvider("gpt-5.1-codex", func(context.Context, string) (string, error) { return "token", nil })
+	p := NewSearchProvider(func(context.Context, string) (string, error) { return "token", nil })
 	p.client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return fixtureResponse("event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"web_search_call\",\"action\":{\"type\":\"search\",\"sources\":[]}}]}}\n\n"), nil
 	})
@@ -144,7 +144,7 @@ func TestHostedSearchDoesNotCompleteWithoutCiteableSources(t *testing.T) {
 }
 
 func TestHostedSearchRejectsEmptySession(t *testing.T) {
-	p := NewSearchProvider("gpt-5.1-codex", func(context.Context, string) (string, error) { return "Bearer ", nil })
+	p := NewSearchProvider(func(context.Context, string) (string, error) { return "Bearer ", nil })
 	if _, err := p.Search(context.Background(), search.Request{Query: "current price"}); err == nil || !strings.Contains(err.Error(), "no ChatGPT session") {
 		t.Fatalf("empty subscription session error = %v", err)
 	}

@@ -11,8 +11,8 @@ import (
 )
 
 func Entry() providercatalog.Entry {
-	return providercatalog.Entry{ID: ProviderID, Name: "openai", Description: "Sign in with /login · ChatGPT subscription models", FixedEndpoint: true, SearchFactory: func(cfg config.Resolved, lookup func(context.Context, string) (string, error)) search.Provider {
-		return NewSearchProvider(cfg.String("model"), lookup)
+	return providercatalog.Entry{ID: ProviderID, Name: "openai", Description: "Sign in with /login · ChatGPT subscription models", FixedEndpoint: true, SearchFactory: func(_ config.Resolved, lookup func(context.Context, string) (string, error)) search.Provider {
+		return NewSearchProvider(lookup)
 	}, Factory: func(_ context.Context, cfg config.Resolved, lookup func(context.Context, string) (string, error)) (providers.Provider, error) {
 		if cfg.String("base_url") != "" {
 			return nil, errors.New("openai-subscription uses the public OpenAI API and does not accept base_url")

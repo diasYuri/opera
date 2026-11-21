@@ -22,6 +22,7 @@ import (
 
 const (
 	searchEndpoint    = "https://api.openai.com/v1/responses"
+	searchModel       = "gpt-6-luna"
 	maxSearchResponse = 4 << 20
 	maxSearchSnippet  = 4 << 10
 )
@@ -32,14 +33,12 @@ var countryCode = regexp.MustCompile(`^[A-Za-z]{2}$`)
 // credentials are admitted there. ChatGPT's backend-api Codex endpoints are
 // outside that OAuth flow's supported endpoint contract.
 type SearchProvider struct {
-	model  string
 	lookup func(context.Context, string) (string, error)
 	client *http.Client
 }
 
-func NewSearchProvider(model string, lookup func(context.Context, string) (string, error)) *SearchProvider {
+func NewSearchProvider(lookup func(context.Context, string) (string, error)) *SearchProvider {
 	return &SearchProvider{
-		model:  model,
 		lookup: lookup,
 		client: &http.Client{Timeout: 90 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}
@@ -119,9 +118,6 @@ func (p *SearchProvider) Search(ctx context.Context, request searchcontract.Requ
 	if len(request.AllowedDomains) > 100 || len(request.ExcludedDomains) > 100 {
 		return searchcontract.Response{}, fmt.Errorf("OpenAI web search accepts at most 100 domains per filter: %w", searchcontract.ErrInvalidRequest)
 	}
-	if p.model == "" {
-		return searchcontract.Response{}, errors.New("OpenAI web search requires the selected model")
-	}
 	token, err := p.lookup(ctx, ProviderID)
 	if err != nil {
 		return searchcontract.Response{}, fmt.Errorf("resolve ChatGPT search session: %w", err)
@@ -145,7 +141,7 @@ func (p *SearchProvider) Search(ctx context.Context, request searchcontract.Requ
 		tool.UserLocation = &userLocation{Type: "approximate", Country: strings.ToUpper(request.Country)}
 	}
 	body, err := json.Marshal(responsesSearchRequest{
-		Model: p.model,
+		Model: searchModel,
 		Input: []responsesSearchInput{{
 			Role: "user", Content: "Search the web for: " + query + ". Return concise factual findings and cite the sources used.",
 		}},
