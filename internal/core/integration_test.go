@@ -14,7 +14,7 @@ import (
 	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/opera/internal/modules/configuration"
 	execmod "github.com/diasYuri/opera/internal/modules/execution"
-	"github.com/diasYuri/opera/internal/modules/providers/catalog"
+	providercatalog "github.com/diasYuri/opera/internal/modules/providers/catalog"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/agent/agenttest"
 	"github.com/diasYuri/y/pkg/policy"
@@ -39,6 +39,16 @@ func (*scriptedSearch) Capabilities() search.Capabilities { return search.Capabi
 func (p *scriptedSearch) Search(_ context.Context, request search.Request) (search.Response, error) {
 	p.calls++
 	return search.Response{Results: []search.Result{{Title: "Verified source", URL: "https://example.com/fact", Snippet: request.Query}}}, nil
+}
+
+type capturedSearch struct{ request search.Request }
+
+func (*capturedSearch) Capabilities() search.Capabilities {
+	return search.Capabilities{AllowedDomains: true, ExcludedDomains: true, ContextSize: true, MaxResults: true, Country: true, Language: true, SafeSearch: true}
+}
+func (p *capturedSearch) Search(_ context.Context, request search.Request) (search.Response, error) {
+	p.request = request
+	return search.Response{Results: []search.Result{{Title: "Example", URL: "https://example.com", Snippet: "result"}}}, nil
 }
 
 func configuration(t *testing.T) config.Resolved {
@@ -266,6 +276,56 @@ func TestConfiguredBraveSearchDoesNotFailActivationWithoutCredential(t *testing.
 		t.Fatalf("configured search without a credential failed activation: %v", err)
 	}
 	closeRuntime(t, runtime)
+}
+
+func TestConfiguredWebSearchDefaultsReachProviderAndRequestValuesWin(t *testing.T) {
+	cfg := configuration(t)
+	cfg.Values["provider"] = config.Value{Value: "openai-subscription", Source: "user"}
+	cfg.Values["search.provider"] = config.Value{Value: "native", Source: "user"}
+	cfg.Values["search.options.openai-subscription.max_results"] = config.Value{Value: 8, Source: "user-workspace"}
+	cfg.Values["search.options.openai-subscription.country"] = config.Value{Value: "BR", Source: "user-workspace"}
+	cfg.Values["search.options.openai-subscription.context_size"] = config.Value{Value: "low", Source: "user-workspace"}
+	cfg.Values["search.options.openai-subscription.allowed_domains"] = config.Value{Value: "example.com", Source: "user-workspace"}
+	cfg.Values["search.options.openai-subscription.excluded_domains"] = config.Value{Value: "private.example.com", Source: "user-workspace"}
+	searchProvider := &capturedSearch{}
+	providersCatalog, err := providercatalog.New(providercatalog.Entry{
+		ID: "openai-subscription",
+		Factory: func(context.Context, config.Resolved, func(context.Context, string) (string, error)) (providers.Provider, error) {
+			return subscriptionNamedProvider{agenttest.NewScriptProvider(t)}, nil
+		},
+		SearchFactory: func(config.Resolved, func(context.Context, string) (string, error)) search.Provider {
+			return searchProvider
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := core.Open(context.Background(), cfg, core.Options{ProviderCatalog: providersCatalog})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeRuntime(t, runtime)
+	registry, err := yruntime.Resolve(runtime.Harness, yruntime.ToolRegistryKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func(arguments string) {
+		t.Helper()
+		_, err := registry.Handle(context.Background(), tools.ToolRequest{Name: tools.WebSearchToolName, Arguments: json.RawMessage(arguments), Approval: &policy.ApprovalResolution{State: policy.ApprovalApproved}})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	call(`{"query":"current information"}`)
+	got := searchProvider.request
+	if got.MaxResults != 8 || got.Country != "BR" || got.ContextSize != search.ContextSizeLow || strings.Join(got.AllowedDomains, ",") != "example.com" || strings.Join(got.ExcludedDomains, ",") != "private.example.com" {
+		t.Fatalf("configured defaults were not applied through composition: %#v", got)
+	}
+	call(`{"query":"current information","max_results":3,"country":"US","context_size":"high","allowed_domains":["docs.example.com"]}`)
+	got = searchProvider.request
+	if got.MaxResults != 3 || got.Country != "US" || got.ContextSize != search.ContextSizeHigh || strings.Join(got.AllowedDomains, ",") != "docs.example.com" || strings.Join(got.ExcludedDomains, ",") != "private.example.com" {
+		t.Fatalf("request values did not override matching defaults: %#v", got)
+	}
 }
 
 func TestCodexSearchResolvesItsCredentialOnlyAfterApproval(t *testing.T) {

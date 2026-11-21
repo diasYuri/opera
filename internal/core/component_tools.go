@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 
+	searchadapter "github.com/diasYuri/opera/internal/adapters/search"
 	bravesearch "github.com/diasYuri/opera/internal/adapters/search/brave"
 	"github.com/diasYuri/opera/internal/modules/execution"
 	operaext "github.com/diasYuri/opera/internal/modules/extensions"
 	"github.com/diasYuri/y/pkg/component"
 	"github.com/diasYuri/y/pkg/policy"
 	yruntime "github.com/diasYuri/y/pkg/runtime"
+	searchcontract "github.com/diasYuri/y/pkg/search"
 	"github.com/diasYuri/y/pkg/tools"
 )
 
@@ -45,6 +47,7 @@ func (b *compositionBuilder) tools() component.Definition {
 		work := execution.NewWork(records, cfg.Int("agents.max_concurrent"), cfg.Int("agents.max_depth"))
 		work.MaxBudget = int64(cfg.Int("limits.worker_tokens")) // 0 means unlimited.
 		searchProvider := opts.SearchProvider
+		searchConfigProviderID := ""
 		if searchProvider == nil {
 			selection := cfg.String("search.provider")
 			switch selection {
@@ -65,11 +68,13 @@ func (b *compositionBuilder) tools() component.Definition {
 					}
 				}
 				searchProvider = catalog.SearchProvider(cfg.String("provider"), cfg, opts.Credential)
+				searchConfigProviderID = cfg.String("provider")
 				if selection == "native" && searchProvider == nil {
 					return fmt.Errorf("native web search is not available for provider %q", cfg.String("provider"))
 				}
 			case "disabled":
 			case "brave":
+				searchConfigProviderID = "brave"
 				if opts.Credential == nil {
 					return errors.New("search provider Brave Search is configured but no credential resolver is available")
 				}
@@ -83,6 +88,14 @@ func (b *compositionBuilder) tools() component.Definition {
 			default:
 				return fmt.Errorf("unsupported search provider %q", cfg.String("search.provider"))
 			}
+		}
+		if searchProvider != nil && searchConfigProviderID != "" {
+			defaults := cfg.WebSearchDefaults(searchConfigProviderID)
+			searchProvider = searchadapter.WithDefaults(searchProvider, searchcontract.Request{
+				AllowedDomains: defaults.AllowedDomains, ExcludedDomains: defaults.ExcludedDomains,
+				ContextSize: searchcontract.ContextSize(defaults.ContextSize), MaxResults: defaults.MaxResults,
+				Country: defaults.Country, Language: defaults.Language, SafeSearch: searchcontract.SafeSearch(defaults.SafeSearch),
+			})
 		}
 		if err := registerToolPacks(ctx, registry, ToolPackContext{Config: cfg, Policy: engine, Limits: limits, Guard: guard, Questions: questions, Skills: skillManager, Work: work, Search: searchProvider}, opts.ToolPacks, opts.DisabledToolPacks); err != nil {
 			return err
