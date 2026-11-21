@@ -67,7 +67,10 @@ When `search.provider` is empty (the default), Opera enables the provider's
 hosted web search for `openai-subscription` (Codex sign-in) and `anthropic`
 (Claude sign-in). It uses the active provider's saved login and resolves the
 credential only after `web_search` is approved. Other model providers do not
-enable external search automatically. If a project selects the model provider,
+enable external search automatically. Codex sign-in uses the public OpenAI
+Responses API `web_search` tool; it does not call ChatGPT's internal `backend-api`
+routes. Search availability still depends on the selected model and account
+policy. If a project selects the model provider,
 set `search.provider = "native"` in user settings to opt in. Set
 `search.provider = "disabled"` to turn search off, or choose `"brave"` to use
 Brave Search with a separate key.

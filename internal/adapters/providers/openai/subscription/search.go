@@ -1,6 +1,7 @@
 package subscription
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,21 +13,24 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	searchadapter "github.com/diasYuri/opera/internal/adapters/search"
 	searchcontract "github.com/diasYuri/y/pkg/search"
-	"github.com/google/uuid"
 )
 
 const (
-	searchEndpoint    = "https://chatgpt.com/backend-api/codex/alpha/search"
+	searchEndpoint    = "https://api.openai.com/v1/responses"
 	maxSearchResponse = 4 << 20
+	maxSearchSnippet  = 4 << 10
 )
 
 var countryCode = regexp.MustCompile(`^[A-Za-z]{2}$`)
 
-// SearchProvider calls Codex's standalone search endpoint with the same
-// subscription credential used by the active model provider.
+// SearchProvider uses the public Responses API because Sign in with ChatGPT
+// credentials are admitted there. ChatGPT's backend-api Codex endpoints are
+// outside that OAuth flow's supported endpoint contract.
 type SearchProvider struct {
 	model  string
 	lookup func(context.Context, string) (string, error)
@@ -37,36 +41,37 @@ func NewSearchProvider(model string, lookup func(context.Context, string) (strin
 	return &SearchProvider{
 		model:  model,
 		lookup: lookup,
-		client: &http.Client{Timeout: 45 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+		client: &http.Client{Timeout: 90 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 	}
 }
 
 func (*SearchProvider) Capabilities() searchcontract.Capabilities {
-	return searchcontract.Capabilities{AllowedDomains: true, ExcludedDomains: true, ContextSize: true, MaxResults: true, Country: true}
+	return searchcontract.Capabilities{
+		AllowedDomains: true, ExcludedDomains: true, ContextSize: true,
+		MaxResults: true, Country: true,
+	}
 }
 
-type searchRequest struct {
-	ID              string         `json:"id"`
-	Model           string         `json:"model"`
-	Input           string         `json:"input"`
-	Commands        searchCommands `json:"commands"`
-	Settings        searchSettings `json:"settings"`
-	MaxOutputTokens int            `json:"max_output_tokens"`
+type responsesSearchRequest struct {
+	Model      string                 `json:"model"`
+	Input      []responsesSearchInput `json:"input"`
+	Tools      []responsesSearchTool  `json:"tools"`
+	ToolChoice string                 `json:"tool_choice"`
+	Include    []string               `json:"include"`
+	Store      bool                   `json:"store"`
+	Stream     bool                   `json:"stream"`
 }
 
-type searchCommands struct {
-	SearchQuery []searchQuery `json:"search_query"`
+type responsesSearchInput struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
 }
 
-type searchQuery struct {
-	Query string `json:"q"`
-}
-
-type searchSettings struct {
-	UserLocation      *userLocation              `json:"user_location,omitempty"`
+type responsesSearchTool struct {
+	Type              string                     `json:"type"`
 	SearchContextSize searchcontract.ContextSize `json:"search_context_size,omitempty"`
 	Filters           *domainFilters             `json:"filters,omitempty"`
-	AllowedCallers    []string                   `json:"allowed_callers"`
+	UserLocation      *userLocation              `json:"user_location,omitempty"`
 	ExternalWebAccess bool                       `json:"external_web_access"`
 }
 
@@ -77,12 +82,12 @@ type domainFilters struct {
 
 type userLocation struct {
 	Type    string `json:"type"`
-	Country string `json:"country"`
+	Country string `json:"country,omitempty"`
 }
 
 func (p *SearchProvider) Search(ctx context.Context, request searchcontract.Request) (searchcontract.Response, error) {
 	if p == nil || p.lookup == nil {
-		return searchcontract.Response{}, errors.New("OpenAI Codex web search requires sign-in with `opera auth login openai-subscription`")
+		return searchcontract.Response{}, errors.New("OpenAI web search requires sign-in with `opera auth login openai-subscription`")
 	}
 	if ctx == nil {
 		return searchcontract.Response{}, errors.New("a context is required for OpenAI web search")
@@ -95,7 +100,7 @@ func (p *SearchProvider) Search(ctx context.Context, request searchcontract.Requ
 		return searchcontract.Response{}, fmt.Errorf("invalid OpenAI web search query: %w", searchcontract.ErrInvalidRequest)
 	}
 	if request.Location != "" || request.Language != "" || request.DateRange != nil || request.SafeSearch != "" {
-		return searchcontract.Response{}, fmt.Errorf("OpenAI hosted web search does not support the requested control: %w", searchcontract.ErrUnsupportedControl)
+		return searchcontract.Response{}, fmt.Errorf("OpenAI web search does not support the requested control: %w", searchcontract.ErrUnsupportedControl)
 	}
 	if request.MaxResults < 0 || request.MaxResults > 20 {
 		return searchcontract.Response{}, fmt.Errorf("max_results for OpenAI web search must be from 0 to 20: %w", searchcontract.ErrInvalidRequest)
@@ -127,18 +132,21 @@ func (p *SearchProvider) Search(ctx context.Context, request searchcontract.Requ
 		return searchcontract.Response{}, errors.New("no ChatGPT session is configured; sign in with `opera auth login openai-subscription`")
 	}
 
-	settings := searchSettings{AllowedCallers: []string{"direct"}, ExternalWebAccess: true, SearchContextSize: request.ContextSize}
+	tool := responsesSearchTool{Type: "web_search", SearchContextSize: request.ContextSize, ExternalWebAccess: true}
 	if len(request.AllowedDomains) > 0 || len(request.ExcludedDomains) > 0 {
-		settings.Filters = &domainFilters{AllowedDomains: request.AllowedDomains, BlockedDomains: request.ExcludedDomains}
+		tool.Filters = &domainFilters{AllowedDomains: request.AllowedDomains, BlockedDomains: request.ExcludedDomains}
 	}
 	if request.Country != "" {
-		settings.UserLocation = &userLocation{Type: "approximate", Country: strings.ToUpper(request.Country)}
+		tool.UserLocation = &userLocation{Type: "approximate", Country: strings.ToUpper(request.Country)}
 	}
-	body, err := json.Marshal(searchRequest{
-		ID: uuid.NewString(), Model: p.model,
-		Input:    "Search the web for this query: " + query,
-		Commands: searchCommands{SearchQuery: []searchQuery{{Query: query}}},
-		Settings: settings, MaxOutputTokens: 2048,
+	body, err := json.Marshal(responsesSearchRequest{
+		Model: p.model,
+		Input: []responsesSearchInput{{
+			Role: "user", Content: "Search the web for: " + query + ". Return concise factual findings and cite the sources used.",
+		}},
+		Tools: []responsesSearchTool{tool}, ToolChoice: "required",
+		Include: []string{"web_search_call.action.sources"},
+		Store:   false, Stream: true,
 	})
 	if err != nil {
 		return searchcontract.Response{}, fmt.Errorf("encode OpenAI web search request: %w", err)
@@ -148,9 +156,8 @@ func (p *SearchProvider) Search(ctx context.Context, request searchcontract.Requ
 		return searchcontract.Response{}, fmt.Errorf("build OpenAI web search request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Originator", "codex_cli_rs")
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
 	client := p.client
 	if client == nil {
 		client = http.DefaultClient
@@ -160,30 +167,30 @@ func (p *SearchProvider) Search(ctx context.Context, request searchcontract.Requ
 		if ctx.Err() != nil {
 			return searchcontract.Response{}, ctx.Err()
 		}
-		return searchcontract.Response{}, fmt.Errorf("OpenAI hosted web search failed: %w", err)
+		return searchcontract.Response{}, fmt.Errorf("OpenAI Responses web search failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return searchcontract.Response{}, codexSearchHTTPError(resp)
+		return searchcontract.Response{}, responsesSearchHTTPError(resp)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxSearchResponse+1))
+	completed, err := readCompletedResponse(resp.Body)
 	if err != nil {
-		return searchcontract.Response{}, fmt.Errorf("read OpenAI web search response: %w", err)
+		if ctx.Err() != nil {
+			return searchcontract.Response{}, ctx.Err()
+		}
+		return searchcontract.Response{}, err
 	}
-	if len(data) > maxSearchResponse {
-		return searchcontract.Response{}, errors.New("OpenAI web search response exceeded 4 MiB")
-	}
-	results, err := parseSearchResults(data, request)
+	results, err := parseResponsesSearchResults(completed, request)
 	if err != nil {
 		return searchcontract.Response{}, err
 	}
 	for i := range results {
-		results[i].Metadata = map[string]string{"provider": "OpenAI Codex hosted web search"}
+		results[i].Metadata = map[string]string{"provider": "OpenAI Responses web search"}
 	}
 	return searchcontract.Response{Results: searchadapter.Limit(results, request.MaxResults)}, nil
 }
 
-func codexSearchHTTPError(resp *http.Response) error {
+func responsesSearchHTTPError(resp *http.Response) error {
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	var body struct {
 		Error struct {
@@ -192,47 +199,243 @@ func codexSearchHTTPError(resp *http.Response) error {
 	}
 	if json.Unmarshal(data, &body) == nil {
 		if code := searchadapter.ErrorCode(body.Error.Code); code != "" {
-			return fmt.Errorf("OpenAI hosted web search rejected the request (HTTP %d, %s)", resp.StatusCode, code)
+			return fmt.Errorf("OpenAI Responses web search rejected the request (HTTP %d, %s)", resp.StatusCode, code)
 		}
 	}
-	return fmt.Errorf("OpenAI hosted web search rejected the request (HTTP %d)", resp.StatusCode)
+	return fmt.Errorf("OpenAI Responses web search rejected the request (HTTP %d)", resp.StatusCode)
 }
 
-func parseSearchResults(data []byte, request searchcontract.Request) ([]searchcontract.Result, error) {
+// readCompletedResponse consumes the Responses API SSE stream and returns only
+// the completed response object. Partial output is never reported as success.
+func readCompletedResponse(body io.Reader) ([]byte, error) {
+	reader := bufio.NewReader(io.LimitReader(body, maxSearchResponse+1))
+	var eventData strings.Builder
+	var consumed int
+	for {
+		line, err := reader.ReadString('\n')
+		consumed += len(line)
+		if consumed > maxSearchResponse {
+			return nil, errors.New("OpenAI web search response exceeded 4 MiB")
+		}
+		if line == "\n" || line == "\r\n" {
+			if eventData.Len() > 0 {
+				completed, eventErr := consumeResponseEvent(strings.TrimSuffix(eventData.String(), "\n"))
+				if eventErr != nil || completed != nil {
+					return completed, eventErr
+				}
+				eventData.Reset()
+			}
+		} else if strings.HasPrefix(line, "data:") {
+			data := strings.TrimPrefix(line, "data:")
+			data = strings.TrimPrefix(data, " ")
+			eventData.WriteString(data)
+			eventData.WriteByte('\n')
+		}
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return nil, fmt.Errorf("read OpenAI web search stream: %w", err)
+			}
+			if eventData.Len() > 0 {
+				return consumeResponseEvent(strings.TrimSuffix(eventData.String(), "\n"))
+			}
+			break
+		}
+	}
+	return nil, errors.New("OpenAI web search stream ended before response.completed")
+}
+
+func consumeResponseEvent(data string) ([]byte, error) {
+	if data == "[DONE]" || data == "" {
+		return nil, nil
+	}
+	var event struct {
+		Type     string          `json:"type"`
+		Response json.RawMessage `json:"response"`
+		Error    struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(data), &event); err != nil {
+		return nil, errors.New("OpenAI web search returned an invalid event stream")
+	}
+	switch event.Type {
+	case "response.completed":
+		if len(event.Response) == 0 || string(event.Response) == "null" {
+			return nil, errors.New("OpenAI web search completion omitted its response")
+		}
+		return event.Response, nil
+	case "response.failed", "error":
+		code := event.Error.Code
+		if code == "" && len(event.Response) > 0 {
+			var response struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			_ = json.Unmarshal(event.Response, &response)
+			code = response.Error.Code
+		}
+		if code := searchadapter.ErrorCode(code); code != "" {
+			return nil, fmt.Errorf("OpenAI Responses web search failed (%s)", code)
+		}
+		return nil, errors.New("OpenAI Responses web search failed")
+	case "response.incomplete":
+		return nil, errors.New("OpenAI Responses web search ended with an incomplete response")
+	default:
+		return nil, nil
+	}
+}
+
+type responsesSearchResult struct {
+	Type    string `json:"type"`
+	Title   string `json:"title"`
+	URL     string `json:"url"`
+	Snippet string `json:"snippet"`
+	Text    string `json:"text"`
+}
+
+type responsesSearchAnnotation struct {
+	Type        string `json:"type"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	StartIndex  int    `json:"start_index"`
+	EndIndex    int    `json:"end_index"`
+	URLCitation struct {
+		Title string `json:"title"`
+		URL   string `json:"url"`
+	} `json:"url_citation"`
+}
+
+func parseResponsesSearchResults(data []byte, request searchcontract.Request) ([]searchcontract.Result, error) {
 	var response struct {
-		Output  *string `json:"output"`
-		Results []struct {
-			Type    string `json:"type"`
-			Title   string `json:"title"`
-			URL     string `json:"url"`
-			Snippet string `json:"snippet"`
-			Text    string `json:"text"`
-		} `json:"results"`
+		Output []struct {
+			Type   string `json:"type"`
+			Action struct {
+				Type    string                  `json:"type"`
+				Sources []responsesSearchResult `json:"sources"`
+			} `json:"action"`
+			Content []struct {
+				Type        string                      `json:"type"`
+				Text        string                      `json:"text"`
+				Annotations []responsesSearchAnnotation `json:"annotations"`
+			} `json:"content"`
+		} `json:"output"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
-		return nil, errors.New("OpenAI web search returned an invalid response")
+		return nil, errors.New("OpenAI Responses web search returned an invalid response")
 	}
 	if response.Output == nil {
-		return nil, errors.New("OpenAI web search response omitted output")
+		return nil, errors.New("OpenAI Responses web search response omitted output")
 	}
-	results := make([]searchcontract.Result, 0, len(response.Results))
-	for _, item := range response.Results {
-		if item.URL == "" || item.Type != "" && item.Type != "text_result" {
+
+	type source struct {
+		title   string
+		url     string
+		snippet string
+	}
+	sources := make([]source, 0)
+	byURL := make(map[string]int)
+	addSource := func(candidate source) {
+		if candidate.url == "" {
+			return
+		}
+		if index, ok := byURL[candidate.url]; ok {
+			if sources[index].title == "" {
+				sources[index].title = candidate.title
+			}
+			if sources[index].snippet == "" {
+				sources[index].snippet = candidate.snippet
+			}
+			return
+		}
+		byURL[candidate.url] = len(sources)
+		sources = append(sources, candidate)
+	}
+	var answer string
+	for _, item := range response.Output {
+		if item.Type == "web_search_call" {
+			for _, found := range item.Action.Sources {
+				snippet := found.Snippet
+				if snippet == "" {
+					snippet = found.Text
+				}
+				addSource(source{title: found.Title, url: found.URL, snippet: snippet})
+			}
+		}
+		if item.Type != "message" {
 			continue
 		}
-		title := strings.TrimSpace(item.Title)
+		for _, content := range item.Content {
+			if content.Type != "output_text" {
+				continue
+			}
+			if answer == "" {
+				answer = content.Text
+			}
+			for _, citation := range content.Annotations {
+				if citation.Type != "url_citation" {
+					continue
+				}
+				title, rawURL := citation.Title, citation.URL
+				if rawURL == "" {
+					title, rawURL = citation.URLCitation.Title, citation.URLCitation.URL
+				}
+				addSource(source{title: title, url: rawURL, snippet: citationContext(content.Text, citation.StartIndex, citation.EndIndex)})
+			}
+		}
+	}
+
+	results := make([]searchcontract.Result, 0, len(sources))
+	for _, found := range sources {
+		title := strings.TrimSpace(found.title)
 		if title == "" {
-			if parsed, err := url.Parse(item.URL); err == nil {
+			if parsed, err := url.Parse(found.url); err == nil {
 				title = parsed.Hostname()
 			}
 		}
-		snippet := item.Snippet
+		snippet := found.snippet
 		if snippet == "" {
-			snippet = item.Text
+			snippet = answer
 		}
-		if result, ok := searchadapter.Result(title, item.URL, snippet, request); ok {
+		snippet = truncateUTF8(strings.TrimSpace(snippet), maxSearchSnippet)
+		if result, ok := searchadapter.Result(title, found.url, snippet, request); ok {
 			results = append(results, result)
 		}
 	}
 	return results, nil
+}
+
+func citationContext(text string, startIndex, endIndex int) string {
+	runes := []rune(text)
+	if len(runes) == 0 {
+		return ""
+	}
+	start := max(0, min(startIndex, len(runes)))
+	end := max(start, min(endIndex, len(runes)))
+	left, right := start, end
+	for left > 0 && start-left < 600 && !sentenceBoundary(runes[left-1]) {
+		left--
+	}
+	for right < len(runes) && right-end < 600 && !sentenceBoundary(runes[right]) {
+		right++
+	}
+	if right < len(runes) {
+		right++
+	}
+	return strings.TrimSpace(string(runes[left:right]))
+}
+
+func sentenceBoundary(r rune) bool {
+	return r == '\n' || r == '!' || r == '?' || r == '.' || r == '。' || r == '！' || r == '？'
+}
+
+func truncateUTF8(value string, maxBytes int) string {
+	if len(value) <= maxBytes {
+		return value
+	}
+	value = value[:maxBytes]
+	for !utf8.ValidString(value) {
+		value = value[:len(value)-1]
+	}
+	return strings.TrimRightFunc(value, unicode.IsSpace)
 }
