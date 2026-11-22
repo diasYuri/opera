@@ -28,6 +28,10 @@ type Catalog struct {
 	Skills []Skill `json:"skills"`
 	Issues []Issue `json:"issues,omitempty"`
 	Digest string  `json:"digest"`
+
+	// LegacyDigest is the digest before the built-in skill was included.
+	// It is set only for catalogs that can migrate earlier checkpoints.
+	LegacyDigest *string `json:"-"`
 }
 
 func (c Catalog) JSON() ([]byte, error) { return json.Marshal(c) }

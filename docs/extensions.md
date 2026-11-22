@@ -139,7 +139,7 @@ A module directory contains the public Y `extension.toml` manifest and its ABI
 module. `extensions schema <id>` displays its manifest/schema. The product grants
 only `logs` and `y_tools`. The latter supports classified, non-sensitive read tools
 through the **captured durable runtime view**, with a derived operation identity.
-Mutating, task/subagent, recursive WASM and sensitive host calls are refused.
+Mutating, task/subagent, agent skill, recursive WASM and sensitive host calls are refused.
 Filesystem, network, process and secret host grants are unsupported and rejected.
 Guest tools themselves remain visible operations, subject to policy and the
 workspace mutation queue. Manifest/runtime memory, execution and output limits

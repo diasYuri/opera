@@ -38,7 +38,7 @@ func TestDiscoverParsesMetadataAndWorkspaceWins(t *testing.T) {
 	writeSkill(t, globalRoot, "writing", validSkill("writing", "Write clear docs"), "Writing instructions")
 
 	catalog := Discover(workspace, home)
-	if len(catalog.Skills) != 2 || len(catalog.Issues) != 0 {
+	if len(catalog.Skills) != 3 || len(catalog.Issues) != 0 {
 		t.Fatalf("unexpected catalog: %+v", catalog)
 	}
 	review, ok := catalog.Find("review")
@@ -47,6 +47,34 @@ func TestDiscoverParsesMetadataAndWorkspaceWins(t *testing.T) {
 	}
 	if strings.Join(review.AllowedTools, ",") != "read_file,search" {
 		t.Fatalf("allowed-tools not parsed: %v", review.AllowedTools)
+	}
+}
+
+func TestBuiltinSkillIsReservedAndWorksWithoutLocalFiles(t *testing.T) {
+	workspace, home := t.TempDir(), t.TempDir()
+	fresh := Discover(workspace, "")
+	if len(fresh.Skills) != 1 || fresh.Skills[0].Source != "builtin" || fresh.LegacyDigest == nil || *fresh.LegacyDigest != "" {
+		t.Fatalf("unexpected empty workspace catalog: %+v", fresh)
+	}
+	writeSkill(t, filepath.Join(workspace, ".agents", "skills"), "opera", "invalid", "")
+	writeSkill(t, filepath.Join(home, ".agents", "skills"), "opera", validSkill("opera", "User copy"), "User instructions")
+	manager := NewManager(workspace, home)
+	catalog := manager.PinRun("run")
+	if catalog.Digest != fresh.Digest || len(catalog.Issues) != 0 {
+		t.Fatalf("disk copies affected the built-in catalog: %+v", catalog)
+	}
+	if instructions := manager.InstructionsForNames("run", manager.ExplicitNames("run", "Use $opera")); !strings.Contains(instructions, "references/develop.md") {
+		t.Fatalf("built-in skill was not activated: %s", instructions)
+	}
+	for _, path := range []string{"references/operate.md", "references/develop.md", "references/extend.md"} {
+		if data, err := manager.ReadResource("opera", path); err != nil || len(data) == 0 {
+			t.Fatalf("built-in resource %s: %v", path, err)
+		}
+	}
+	for _, path := range []string{"../SKILL.md", "/SKILL.md", "references/../SKILL.md", "references/missing.md"} {
+		if _, err := manager.ReadResource("opera", path); err == nil {
+			t.Fatalf("accepted invalid built-in resource %q", path)
+		}
 	}
 }
 

@@ -168,6 +168,9 @@ conflicting edits. Tools do not provide an operating-system sandbox. See the
 
 ## Agent Skills
 
+Use `$opera` to load the built-in guide to operating, developing and extending Opera.
+Inspect it offline with `opera skills show opera`.
+
 Place reusable instructions in `.agents/skills/<name>/SKILL.md` within the
 workspace or `~/.agents/skills/<name>/SKILL.md` for the current user. Inspect
 them with `opera skills list|show|check`; in chat, `/skills` lists the catalog

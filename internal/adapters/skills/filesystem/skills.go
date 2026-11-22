@@ -1,5 +1,4 @@
-// Package skills discovers and safely reads Agent Skills in a workspace and
-// the current user's shared skills directory.
+// Package skills discovers and safely reads built-in, workspace and user Agent Skills.
 package skills
 
 import (
@@ -40,8 +39,8 @@ type Skill = skillcatalog.Skill
 type Issue = skillcatalog.Issue
 type Catalog = skillcatalog.Catalog
 
-// Discover scans immediate child directories only. Workspace skills shadow
-// user skills with the same name, including when the workspace copy is invalid.
+// Discover includes built-in skills and scans immediate child directories only.
+// Workspace skills shadow user skills, including when the workspace copy is invalid.
 func Discover(workspace, home string) Catalog {
 	var catalog Catalog
 	workspace = canonicalDirectory(workspace)
@@ -65,6 +64,9 @@ scanSources:
 			continue
 		}
 		for _, entry := range entries {
+			if entry.Name() == builtinSkillName {
+				continue
+			}
 			if len(seen) >= MaxSkills && !seen[entry.Name()] {
 				catalog.Issues = append(catalog.Issues, Issue{Source: source.label, Error: fmt.Sprintf("skill limit reached (%d)", MaxSkills)})
 				break
@@ -105,6 +107,15 @@ scanSources:
 		}
 		return catalog.Issues[i].Name < catalog.Issues[j].Name
 	})
+	builtin, err := loadBuiltinSkill()
+	if err != nil {
+		catalog.Issues = append(catalog.Issues, Issue{Name: builtinSkillName, Source: builtinSource, Error: err.Error()})
+	} else {
+		legacyDigest := digestCatalog(catalog.Skills)
+		catalog.LegacyDigest = &legacyDigest
+		// Keep the native entry visible even when the prompt catalog is truncated.
+		catalog.Skills = append([]Skill{builtin}, catalog.Skills...)
+	}
 	catalog.Digest = digestCatalog(catalog.Skills)
 	return catalog
 }
@@ -125,16 +136,26 @@ func canonicalDirectory(path string) string {
 }
 
 func loadSkill(dir, folderName, source string) (Skill, error) {
-	if !validName.MatchString(folderName) || len(folderName) > 64 {
-		return Skill{}, errors.New("directory name must be 1-64 lowercase letters, digits, or single hyphens")
-	}
-	if err := rejectSymlinkPath(dir); err != nil {
-		return Skill{}, err
-	}
 	path := filepath.Join(dir, "SKILL.md")
 	data, err := readRegular(path, MaxSkillFileBytes)
 	if err != nil {
 		return Skill{}, fmt.Errorf("read SKILL.md: %w", err)
+	}
+	skill, err := parseSkill(data, folderName, source)
+	if err != nil {
+		return Skill{}, err
+	}
+	skill.Dir = dir
+	skill.Digest, skill.PackageBytes, err = digestPackage(dir)
+	if err != nil {
+		return Skill{}, err
+	}
+	return skill, nil
+}
+
+func parseSkill(data []byte, folderName, source string) (Skill, error) {
+	if !validName.MatchString(folderName) || len(folderName) > 64 {
+		return Skill{}, errors.New("directory name must be 1-64 lowercase letters, digits, or single hyphens")
 	}
 	if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
 		return Skill{}, errors.New("SKILL.md must be UTF-8 text")
@@ -213,13 +234,9 @@ func loadSkill(dir, folderName, source string) (Skill, error) {
 			metadata[key] = text
 		}
 	}
-	digest, packageBytes, err := digestPackage(dir)
-	if err != nil {
-		return Skill{}, err
-	}
 	return Skill{Name: name, Description: description, License: license, Compatibility: compatibility,
 		Metadata: metadata, Extensions: extensions, AllowedTools: strings.Fields(allowed), Body: strings.TrimSpace(string(body)),
-		Dir: dir, Source: source, Digest: digest, PackageBytes: packageBytes}, nil
+		Source: source}, nil
 }
 
 func digestPackage(root string) (string, int64, error) {
@@ -607,6 +624,9 @@ func (m *Manager) readResource(runID, name, relative string) ([]byte, error) {
 	clean := filepath.Clean(filepath.FromSlash(relative))
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || clean != filepath.FromSlash(relative) {
 		return nil, errors.New("resource path escapes the skill directory")
+	}
+	if skill.Source == builtinSource {
+		return readBuiltinResource(relative)
 	}
 	path := filepath.Join(skill.Dir, clean)
 	rel, err := filepath.Rel(skill.Dir, path)

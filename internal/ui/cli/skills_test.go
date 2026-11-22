@@ -17,7 +17,7 @@ func TestSkillsCLIListShowAndCheck(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("---\nname: release-notes\ndescription: Prepare a release summary\n---\nGroup changes by user impact."), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code := f.app.Run([]string{"skills", "list"}); code != 0 || !strings.Contains(f.out.String(), "$release-notes (workspace)") {
+	if code := f.app.Run([]string{"skills", "list"}); code != 0 || !strings.Contains(f.out.String(), "$release-notes (workspace)") || !strings.Contains(f.out.String(), "$opera (builtin)") {
 		t.Fatalf("skills list failed: code=%d out=%s err=%s", code, &f.out, &f.err)
 	}
 	f.out.Reset()

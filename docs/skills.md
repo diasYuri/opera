@@ -6,7 +6,12 @@ assets, and other bundled files.
 
 ## Locations and precedence
 
-Opera discovers immediate child directories in:
+Every standard Opera binary includes the `opera` skill and its references.
+It covers operating, developing and extending Opera without installation or
+network access. The catalog lists it first as `builtin`. The name `opera`
+is reserved, and copies on disk are ignored.
+
+Opera also discovers immediate child directories in:
 
 - `<workspace>/.agents/skills/<skill-name>/SKILL.md`
 - `~/.agents/skills/<skill-name>/SKILL.md`
@@ -49,11 +54,17 @@ absolute paths, traversal, oversized files, and binary files other than common
 image formats are rejected. `SKILL.md` is capped at 128 KiB, each resource at
 1 MiB, the package at 8 MiB and 1024 files, and discovery at 256 skills.
 The total discovered package bytes are capped at 16 MiB per workspace catalog.
+The bundled skill is available independently of those discovery limits.
 `scripts/` files can be read as resources; Opera
 does not execute scripts automatically. The `allowed-tools` metadata is exposed
 as metadata only and never bypasses Opera's operation policy or approvals.
 
-Skill text is untrusted guidance. It cannot override the user, workspace
-instructions, or tool policy. Changing a skill's contents after a checkpoint
-was created prevents that checkpoint from resuming until the original skill
-catalog is restored.
+Skill tools are read-only and remain available in plan and review runs with
+the standard tool packs. Skill text cannot grant permissions or override
+the user, workspace instructions or tool policy.
+
+A checkpoint pins the catalog, including the bundled skill and references.
+When resuming a checkpoint created before the bundled skill was introduced,
+Opera verifies the original disk catalog before pinning the new catalog.
+Resolving a catalog mismatch requires the original skill contents and, for
+changes to the bundled skill, the original Opera build.
