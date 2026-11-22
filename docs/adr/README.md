@@ -15,3 +15,4 @@ mean its future execution capability is already implemented.
 8. [Fullscreen chat regions](008-fullscreen-chat.md)
 9. [Core based on Y, cohesive modules and external adapters](009-core-y-and-cohesive-modules.md)
 10. [Agent profiles and runtime modes](010-agent-profiles-and-runtime-modes.md)
+11. [Distribuição de bundles externos (proposta)](011-external-bundle-distribution.md)

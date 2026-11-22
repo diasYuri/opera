@@ -111,3 +111,11 @@ Append-only chat supports `/multiline`, `/send`, `/cancel-input` and `/quit` as 
 as the ordinary application commands. Non-TTY approval exits 3 without reading an
 approval answer. See [quickstart](quickstart.md), [usage](usage.md) and
 [inspection/recovery](operations.md).
+
+## Composition diagnostics
+
+`doctor` includes the selected component graphs for the default, headless and
+inspection profiles. In JSONL, `doctor.report.data.composition` adds those graphs
+to the existing report. The graph contains service contracts, capabilities,
+tool pack IDs and configuration sources. Resolution does not activate the
+graphs. See [composition](composition.md) for the fields and profiles.

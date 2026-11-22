@@ -409,3 +409,10 @@ um plano, não uma decisão de arquitetura.
   filesystem, rede, processos ou segredos.
 - Adicionar hot reload universal, perfis especulativos ou uma linguagem genérica de
   configuração/patch.
+
+## Acompanhamento da implementação
+
+O [contrato operacional de composição](composition.md) documenta os perfis,
+o catálogo, o inventário de dependências e o exemplo compilado das etapas
+0–6. A avaliação da etapa 7 está na [proposta de ADR de distribuição
+externa](adr/011-external-bundle-distribution.md).
