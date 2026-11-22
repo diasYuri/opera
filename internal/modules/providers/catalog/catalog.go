@@ -205,6 +205,15 @@ func (c *Catalog) Has(id string) bool {
 
 type SearchEntry struct {
 	ID, Name, Description string
+	AuthMethods           []SearchAuthMethod
+}
+
+// SearchAuthMethod describes a credential flow associated with a search
+// provider. Provider-owned authentication handlers remain in the provider
+// catalog; API-key-only adapters can declare the same metadata directly.
+type SearchAuthMethod struct {
+	ID, Name, Description string
+	Kind, ProviderID      string
 }
 
 // SearchEntries lists the native search adapters that this catalog can
@@ -220,9 +229,25 @@ func (c *Catalog) SearchEntries() []SearchEntry {
 		if name == "" {
 			name = entry.Name
 		}
-		result = append(result, SearchEntry{ID: id, Name: name, Description: entry.SearchDescription})
+		result = append(result, SearchEntry{ID: id, Name: name, Description: entry.SearchDescription, AuthMethods: c.searchAuthMethods(id)})
 	}
 	return result
+}
+
+func (c *Catalog) searchAuthMethods(providerID string) []SearchAuthMethod {
+	var methods []SearchAuthMethod
+	for _, id := range c.IDs() {
+		login := c.entries[id].Login
+		if login == nil {
+			continue
+		}
+		for _, method := range login.Methods {
+			if method.ProviderID == providerID {
+				methods = append(methods, SearchAuthMethod{ID: method.ID, Name: method.Name, Description: method.Description, Kind: method.Kind, ProviderID: method.ProviderID})
+			}
+		}
+	}
+	return methods
 }
 
 func (c *Catalog) HasNativeSearch(id string, cfg config.Resolved) bool {

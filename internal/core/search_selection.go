@@ -90,6 +90,7 @@ func (s searchSelection) create(cfg config.Resolved, opts Options) (search.Provi
 func webSearchEntries(catalog *providercatalog.Catalog) []providercatalog.SearchEntry {
 	return append(catalog.SearchEntries(), providercatalog.SearchEntry{
 		ID: "brave", Name: "Brave Search", Description: "Brave Search API; requires a Brave Search API key",
+		AuthMethods: bravesearch.AuthenticationMethods(),
 	})
 }
 

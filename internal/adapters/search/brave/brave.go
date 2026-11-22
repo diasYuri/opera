@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	providercatalog "github.com/diasYuri/opera/internal/modules/providers/catalog"
 	"github.com/diasYuri/y/pkg/search"
 )
 
@@ -43,6 +44,13 @@ func NewWithCredentialResolver(lookup func(context.Context) (string, error)) *Pr
 	provider := New("")
 	provider.lookup = lookup
 	return provider
+}
+
+func AuthenticationMethods() []providercatalog.SearchAuthMethod {
+	return []providercatalog.SearchAuthMethod{{
+		ID: "api-key", Name: "Brave Search API key", Description: "Store a Brave Search API key in the configured credential store",
+		Kind: "api-key", ProviderID: "brave-search",
+	}}
 }
 
 // Capabilities returns only controls enforced by this adapter.
