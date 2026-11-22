@@ -898,6 +898,7 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case keyMatches(msg, keys.historyPrevious) && (msg.Mod == tea.ModAlt || m.composer.shouldNavigateHistory(true)),
 			keyMatches(msg, keys.historyNext) && m.composer.shouldNavigateHistory(false):
 			m.composer.navigateHistory(keyMatches(msg, keys.historyPrevious))
+			m.styleEditor()
 			m.sizeEditor()
 			return m, nil
 		case keyMatches(msg, keys.cancel):
@@ -930,6 +931,7 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.composer.editor.Reset()
+			m.styleEditor()
 			m.sizeEditor()
 			m.composer.remember(text)
 			commandName, _, _ := strings.Cut(text, " ")
@@ -1217,6 +1219,7 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	var command tea.Cmd
 	m.composer.editor, command = m.composer.editor.Update(message)
+	m.styleEditor()
 	m.sizeEditor()
 	completionCommand := m.refreshCompletions()
 	return m, tea.Batch(command, completionCommand)

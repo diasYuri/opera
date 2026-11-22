@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os"
+	"strings"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textarea"
@@ -70,7 +71,11 @@ func (m model) theme() palette {
 
 func (m *model) styleEditor() {
 	t := m.theme()
-	state := textarea.StyleState{Text: t.text, Placeholder: t.muted, Prompt: t.accent, EndOfBuffer: t.muted}
+	textStyle, promptStyle := t.text, t.accent
+	if strings.HasPrefix(strings.TrimSpace(m.composer.editor.Value()), "!") {
+		textStyle, promptStyle = t.warning, t.warning
+	}
+	state := textarea.StyleState{Text: textStyle, Placeholder: t.muted, Prompt: promptStyle, EndOfBuffer: t.muted}
 	styles := textarea.Styles{Focused: state, Blurred: state}
 	// A steady virtual cursor keeps idle chat free of redraw timers.
 	styles.Cursor.Blink = false

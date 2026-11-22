@@ -338,6 +338,53 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				start(req)
 				continue
 			}
+			if submitted := strings.TrimSpace(text); strings.HasPrefix(submitted, "!") {
+				command := strings.TrimSpace(strings.TrimPrefix(submitted, "!"))
+				if command == "" {
+					if !write("Usage: !<bash command>\nYou> ") {
+						return 1
+					}
+					continue
+				}
+				if currentExecution != nil {
+					if !write("Resolve the active execution before running a shell command.\nYou> ") {
+						return 1
+					}
+					continue
+				}
+				shell, ok := r.(ui.ShellExecutor)
+				if !ok {
+					if !write("Shell commands are unavailable in this session.\nYou> ") {
+						return 1
+					}
+					continue
+				}
+				if !write("Running shell command: " + command + "\n") {
+					return 1
+				}
+				output, err := shell.RunShell(ctx, command)
+				if output != "" && !write(output) {
+					return 1
+				}
+				if output != "" && !strings.HasSuffix(output, "\n") {
+					if !write("\n") {
+						return 1
+					}
+				}
+				if err != nil {
+					if !write("Command failed: " + err.Error() + "\n") {
+						return 1
+					}
+				} else if output == "" {
+					if !write("\n") {
+						return 1
+					}
+				}
+				if !write("You> ") {
+					return 1
+				}
+				continue
+			}
 			name, rest, _ := strings.Cut(text, " ")
 			if name == "/steer" {
 				if currentExecution == nil || strings.TrimSpace(rest) == "" {
