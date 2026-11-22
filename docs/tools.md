@@ -21,6 +21,7 @@ without invoking them. `/tools` inspects the live registry. `tools call <name>
 | Search | search_text, search_ast, outline, find_files | rg fallback; ast-grep optional and never auto-installed |
 | Semantic navigation | definition, references, hover, symbols, callers/callees | Scoped lazy LSP; external server/capabilities required |
 | Tasks/children | task_create/refine/start/complete/list, subagent_spawn/list/wait/cancel | Persisted IDs, process-owned children and shared reservation/write limits |
+| Agent skills | skill_catalog/load/resource | Read-only access to the pinned catalog, including the bundled Opera guide |
 | MCP | namespaced tools/resources/templates/prompts | Explicit activation/credential references, scoped clients, conservative policy |
 | Memory | memory.search/read/list/save/forget | Workspace-isolated durable store; explicit write/forget intent |
 | WASM | manifest-provided tools | Explicit module/grant consent, ABI/limits, classified-read host bridge only |
@@ -31,3 +32,10 @@ WASM effects are serialized. The queue does not establish logical edit isolation
 or sandbox arbitrary executables. `doctor` reports missing programs and supported
 fallbacks. Inspection never installs programs. See [operations](operations.md) for
 large-output archives, filtering and explicit recovery.
+
+For multi-step work the default agent can persist a plan, refine dependent
+steps, and delegate independent slices to local children. `worker` starts
+with a persisted root task. Children share the workspace, so concurrent edits
+need separate file scopes and a parent responsible for integration. Resume
+reuses task and child IDs. Plan mode and the reviewer inspect and report
+without task mutations or delegation.
