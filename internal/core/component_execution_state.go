@@ -2,11 +2,14 @@ package core
 
 import (
 	"context"
+	"errors"
 	"os"
 
 	"github.com/diasYuri/opera/internal/adapters/approvals/filesystem"
+	"github.com/diasYuri/opera/internal/adapters/context/filesystem"
 	"github.com/diasYuri/opera/internal/adapters/skills/filesystem"
 	"github.com/diasYuri/opera/internal/modules/execution"
+	"github.com/diasYuri/opera/internal/modules/summarizer"
 	"github.com/diasYuri/opera/internal/modules/workspace"
 	"github.com/diasYuri/y/pkg/component"
 )
@@ -29,6 +32,12 @@ func (b *compositionBuilder) executionState() component.Definition {
 				return err
 			}
 			cfg := settings.cfg
+			if !settings.opts.Management {
+				if service.SessionMemory == nil {
+					return errors.New("execution records must support compare-and-swap for session context")
+				}
+				service.Backstage = execution.NewBackstage()
+			}
 			paths := newContextPathState(settings.opts.ContextPaths)
 			home, _ := os.UserHomeDir()
 			skillManager := skills.NewManager(cfg.Paths.Workspace, home)
@@ -56,8 +65,11 @@ func (b *compositionBuilder) baseExecutionService(scope *component.Scope) (*exec
 	cfg := settings.cfg
 	service := &execution.Service{
 		ReadApprovalFile: approvalfiles.Read, ResponseFormat: settings.opts.ResponseFormat,
-		Store: store, Records: records, Workspace: cfg.Paths.Workspace,
+		Store: store, Records: records, Workspace: cfg.Paths.Workspace, MaxTokens: cfg.Int("limits.context_tokens"),
 		Provider: cfg.String("provider"), Model: cfg.String("model"), Mode: cfg.String("policy"),
+	}
+	if store, ok := records.(summarizer.Store); ok && !settings.opts.Management {
+		service.SessionMemory = &summarizer.Memory{Store: store, File: contextfiles.SessionContext{Data: cfg.Paths.Data, Workspace: cfg.Paths.Workspace}}
 	}
 	service.Work = execution.NewWork(records, cfg.Int("agents.max_concurrent"), cfg.Int("agents.max_depth"))
 	service.Work.MaxBudget = int64(cfg.Int("limits.worker_tokens")) // 0 means unlimited.

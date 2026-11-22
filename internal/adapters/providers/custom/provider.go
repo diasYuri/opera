@@ -17,7 +17,7 @@ import (
 
 func Entry(def config.CustomProvider) providercatalog.Entry {
 	id := def.ID()
-	return providercatalog.Entry{ID: id, Name: def.Name, Description: "Custom " + def.ProviderType + " provider", Factory: func(_ context.Context, _ config.Resolved, _ func(context.Context, string) (string, error)) (providers.Provider, error) {
+	return providercatalog.Entry{ID: id, Name: def.Name, Description: "Custom " + def.ProviderType + " provider", KnownModels: func() []ai.Model { return newCustomProvider(nil, id, "", def).listed }, Factory: func(_ context.Context, _ config.Resolved, _ func(context.Context, string) (string, error)) (providers.Provider, error) {
 		var provider providers.Provider
 		var api string
 		switch def.ProviderType {

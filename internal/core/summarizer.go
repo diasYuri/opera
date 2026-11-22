@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-type summarizer struct {
+type summaryProvider struct {
 	provider   providers.Provider
 	credential func(context.Context, string) (string, error)
 	timeout    string
 }
 
-func (s summarizer) Stream(ctx context.Context, request providers.StreamRequest) (providers.EventStream, error) {
+func (s summaryProvider) Stream(ctx context.Context, request providers.StreamRequest) (providers.EventStream, error) {
 	if s.credential != nil {
 		key, err := s.credential(ctx, s.provider.ID())
 		if err != nil {
@@ -21,6 +21,8 @@ func (s summarizer) Stream(ctx context.Context, request providers.StreamRequest)
 		request.Options.APIKey = key
 	}
 	request.Options.Timeout, _ = time.ParseDuration(s.timeout)
-	request.Options.MaxTokens = 4096
+	if request.Options.MaxTokens == 0 {
+		request.Options.MaxTokens = 4096
+	}
 	return s.provider.Stream(ctx, request)
 }

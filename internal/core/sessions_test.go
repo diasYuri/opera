@@ -9,13 +9,15 @@ import (
 	"testing"
 )
 
+const layeredSummary = "## L1 — Current objective\nInspect the code.\n\n## L2 — Work and evidence\nReviewed evidence.\n\n## L3 — Outcomes\nInspection reported."
+
 func TestSessionCatalogBranchCompactionAndExport(t *testing.T) {
 	cfg := configuration(t)
 	turns := []agenttest.ScriptedTurn{}
 	for i := 0; i < 7; i++ {
 		turns = append(turns, agenttest.TextTurn(strings.Repeat("Evidence for the coding task. ", 50)))
 	}
-	turns = append(turns, agenttest.TextTurn("The original request and evidence are summarized; recent messages remain verbatim."), agenttest.TextTurn("new branch task complete"))
+	turns = append(turns, agenttest.TextTurn(layeredSummary), agenttest.TextTurn("new branch task complete"))
 	r := open(t, cfg, turns...)
 	defer closeRuntime(t, r)
 	ctx := context.Background()

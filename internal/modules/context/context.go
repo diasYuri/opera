@@ -31,5 +31,16 @@ func ImageReference(path string) ai.ContentBlock {
 	return ai.ContentBlock{Type: ai.ContentText, Text: "", Details: details}
 }
 
+// ImageReferencePath returns the workspace path in an unresolved image block.
+func ImageReferencePath(block ai.ContentBlock) string {
+	var reference struct {
+		Path string `json:"opera_image_path"`
+	}
+	if block.Type == ai.ContentText && len(block.Details) > 0 && json.Unmarshal(block.Details, &reference) == nil {
+		return reference.Path
+	}
+	return ""
+}
+
 // RedactText applies the same credential-assignment redaction to exported strings.
 func RedactText(text string) string { return string(redact([]byte(text))) }

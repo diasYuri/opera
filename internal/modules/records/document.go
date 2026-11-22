@@ -2,7 +2,12 @@
 // application contracts and persistence adapters.
 package records
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"errors"
+)
+
+var ErrConflict = errors.New("opera record version conflict")
 
 type Document struct {
 	Key     string          `json:"key"`

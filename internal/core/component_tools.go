@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/diasYuri/opera/internal/modules/execution"
 	operaext "github.com/diasYuri/opera/internal/modules/extensions"
@@ -48,12 +49,18 @@ func (b *compositionBuilder) tools() component.Definition {
 		if err != nil {
 			return err
 		}
-		if err := installToolPacks(ctx, registry, ToolPackContext{Config: cfg, Policy: engine, Limits: limits, Guard: guard, Questions: service.QuestionBroker, Skills: state.skills, Work: service.Work, Search: searchProvider}, b.packs); err != nil {
+		if err := installToolPacks(ctx, registry, ToolPackContext{Config: cfg, Policy: engine, Limits: limits, Guard: guard, Questions: service.QuestionBroker, Skills: state.skills, Work: service.Work, Service: service, Search: searchProvider}, b.packs); err != nil {
 			return err
 		}
 		extensions, err := operaext.NewWithSafePoint(ctx, cfg, registry, opts.Secret, opts.Offline, service.AtReconfigurationPoint)
 		if err != nil {
 			return err
+		}
+		if service.SessionMemory != nil && slices.ContainsFunc(b.packs, func(pack ToolPack) bool { return pack.ID == "session-context" }) {
+			extensions.LegacyContextView = func(ctx context.Context, run, generation string) bool {
+				metadata, err := service.Metadata(ctx, run)
+				return err == nil && metadata.ToolGeneration == generation
+			}
 		}
 		if err := scope.Track(extensions.Close); err != nil {
 			return errors.Join(err, extensions.Close(context.WithoutCancel(ctx)))

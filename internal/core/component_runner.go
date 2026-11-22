@@ -2,10 +2,11 @@ package core
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"path/filepath"
 
 	"github.com/diasYuri/opera/internal/adapters/context/filesystem"
+	contextdata "github.com/diasYuri/opera/internal/modules/context"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/component"
@@ -34,6 +35,9 @@ func (b *compositionBuilder) runner() component.Definition {
 		if !ok || providerAdapter == nil {
 			return errors.New("configured provider does not implement providers.Provider")
 		}
+		if !opts.Management {
+			state.service.ModelInfo = opts.ProviderCatalog.KnownModel(cfg.String("provider"), cfg.String("model"))
+		}
 		registry, err := component.Require(scope, yruntime.ToolRegistryKey)
 		if err != nil {
 			return err
@@ -50,6 +54,8 @@ func (b *compositionBuilder) runner() component.Definition {
 		if err != nil {
 			return err
 		}
+		state.service.SummaryTimeout = timeout
+		state.service.WaitForContext = opts.Profile == ProfileHeadless
 		options := []agent.RunnerOption{agent.WithRunnerStateStore(store), agent.WithRunnerEventStore(store), agent.WithRunnerTranscriptStore(store), agent.WithRunnerOperationStore(store), agent.WithRunnerAgentOptions(append(extensions.AgentOptions(), work.AgentOption(), agent.WithMaxTurns(64), agent.WithMaxRetries(0), agent.WithToolTimeout(timeout), agent.WithStreamDefaults(providers.StreamOptions{Timeout: timeout, MaxTokens: 4096, Reasoning: ai.ThinkingLevel(opts.Thinking), ThinkingBudgets: defaultThinkingBudgets(), ResponseFormat: opts.ResponseFormat}), agent.WithBeforeRequest(func(ctx context.Context, request *providers.StreamRequest) (*agent.HookedResponse, error) {
 			if request.Options.ResponseFormat != nil {
 				if err := providers.ValidateStructuredOutputRequest(*request, providerAdapter.ID(), providerAdapter.Capabilities(request.Model.ID)); err != nil {
@@ -62,62 +68,13 @@ func (b *compositionBuilder) runner() component.Definition {
 			if guard != nil {
 				request.Context.Tools = guard.FilterTools(request.Options.RunID, request.Context.Tools)
 			}
-			request.Context.Messages = append([]ai.Message(nil), request.Context.Messages...)
-			var imagePaths []string
-			for mi := range request.Context.Messages {
-				if request.Context.Messages[mi].Role != ai.RoleUser {
-					continue
-				}
-				blocks := request.Context.Messages[mi].Content
-				for bi := range blocks {
-					var reference struct {
-						Path string `json:"opera_image_path"`
-					}
-					if blocks[bi].Type == ai.ContentText && len(blocks[bi].Details) > 0 && json.Unmarshal(blocks[bi].Details, &reference) == nil && reference.Path != "" {
-						imagePaths = append(imagePaths, reference.Path)
-					}
-				}
-			}
-			if len(imagePaths) > 0 {
-				attached, err := contextfiles.Images(ctx, cfg.Paths.Workspace, imagePaths, providerAdapter.Capabilities(request.Model.ID).Vision, min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024))
-				if err != nil {
-					return nil, err
-				}
-				at := 0
-				for mi := range request.Context.Messages {
-					blocks := request.Context.Messages[mi].Content
-					var resolved []ai.ContentBlock
-					for _, block := range blocks {
-						var reference struct {
-							Path string `json:"opera_image_path"`
-						}
-						if block.Type == ai.ContentText && len(block.Details) > 0 && json.Unmarshal(block.Details, &reference) == nil && reference.Path != "" {
-							resolved = append(resolved, attached[at])
-							at++
-							continue
-						}
-						resolved = append(resolved, block)
-					}
-					request.Context.Messages[mi].Content = resolved
-				}
-			}
-			images, err := contextfiles.Images(ctx, cfg.Paths.Workspace, contextPaths.Current(), providerAdapter.Capabilities(request.Model.ID).Vision, min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024))
-			if err != nil {
+			vision := providerAdapter.Capabilities(request.Model.ID).Vision
+			limit := min(cfg.Int("limits.context_tokens")*2, cfg.Int("limits.attachment_bytes"), 256*1024)
+			paths := contextPaths.Current()
+			if err := state.service.PrepareContext(ctx, request, func(ctx context.Context, messages []ai.Message) ([]ai.Message, error) {
+				return hydrateRequestImages(ctx, cfg.Paths.Workspace, messages, paths, vision, limit)
+			}); err != nil {
 				return nil, err
-			}
-			if len(images) > 0 {
-				for i := len(request.Context.Messages) - 1; i >= 0; i-- {
-					if request.Context.Messages[i].Role == ai.RoleUser {
-						request.Context.Messages[i].Content = append(append([]ai.ContentBlock(nil), request.Context.Messages[i].Content...), images...)
-						break
-					}
-				}
-			}
-			if err := work.Charge(ctx, request.Options.RunID, providers.EstimateTokens(request.Context)+4096); err != nil {
-				return nil, err
-			}
-			if providers.EstimateTokens(request.Context) > int64(cfg.Int("limits.context_tokens")) {
-				return nil, errors.New("estimated context exceeds configured token budget")
 			}
 			return nil, nil
 		}))...)}
@@ -130,6 +87,72 @@ func (b *compositionBuilder) runner() component.Definition {
 		}
 		return component.Provide(scope, b.keys.runner, runner)
 	})
+}
+
+func hydrateRequestImages(ctx context.Context, workspace string, messages []ai.Message, paths []string, vision bool, limit int) ([]ai.Message, error) {
+	var references []string
+	positions := make(map[string]int)
+	canonicalImage := func(block ai.ContentBlock) string {
+		path := contextdata.ImageReferencePath(block)
+		if path == "" {
+			return ""
+		}
+		if !filepath.IsAbs(path) {
+			return filepath.Join(workspace, path)
+		}
+		return filepath.Clean(path)
+	}
+	for _, message := range messages {
+		if message.Role != ai.RoleUser {
+			continue
+		}
+		for _, block := range message.Content {
+			if path := canonicalImage(block); path != "" {
+				if _, exists := positions[path]; !exists {
+					positions[path] = len(references)
+					references = append(references, path)
+				}
+			}
+		}
+	}
+
+	attached, err := contextfiles.Images(ctx, workspace, references, vision, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(attached) != len(references) {
+		return nil, errors.New("each /image path must reference a supported image")
+	}
+	images, err := contextfiles.Images(ctx, workspace, paths, vision, limit)
+	if err != nil {
+		return nil, err
+	}
+	if len(attached) == 0 && len(images) == 0 {
+		return messages, nil
+	}
+	out := append([]ai.Message(nil), messages...)
+	latestUser := -1
+	for i, message := range messages {
+		if message.Role != ai.RoleUser {
+			continue
+		}
+		latestUser = i
+		if len(attached) == 0 {
+			continue
+		}
+		blocks := make([]ai.ContentBlock, 0, len(message.Content))
+		for _, block := range message.Content {
+			if path := canonicalImage(block); path != "" {
+				block = attached[positions[path]]
+			}
+			blocks = append(blocks, block)
+		}
+		out[i].Content = blocks
+	}
+	if latestUser >= 0 && len(images) > 0 {
+		out[latestUser].Content = append(append([]ai.ContentBlock(nil), out[latestUser].Content...), images...)
+	}
+	return out, nil
 }
 
 // ThinkingBudgets translates Opera's ordered levels to token budgets below

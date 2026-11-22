@@ -30,6 +30,7 @@ func Run(ctx context.Context, cfg config.Resolved, mode string, p Provider, emit
 	if mode != "chat" && mode != "run" && mode != "worker" {
 		return e, errors.New("demo mode must be chat, run or worker")
 	}
+	p.worker = mode == "worker"
 	if err := os.MkdirAll(cfg.Paths.Workspace, 0700); err != nil {
 		return e, err
 	}
@@ -50,7 +51,7 @@ func Run(ctx context.Context, cfg config.Resolved, mode string, p Provider, emit
 			err = errors.Join(err, r.Close(cleanup))
 		}
 	}()
-	request := execution.Request{Prompt: "Implement and verify the demo change", Worker: mode == "worker"}
+	request := execution.Request{Prompt: "Implement and verify the demo change", Worker: p.worker}
 	var result execution.Result
 	if mode == "chat" {
 		execution := r.Start(ctx, request)

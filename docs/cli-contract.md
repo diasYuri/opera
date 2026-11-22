@@ -66,9 +66,14 @@ and Ctrl+D on an empty editor will exit. No job is detached from its CLI.
   a recoverable branch; completed conversations use `run --continue <run-id>`.
 - `retry <run-id>` follows the same recovery checks. Completed runs replay their
   durable result; uncertain operations block with code 4 until explicit reconciliation.
-- `compact <run-id>` requires a completed checkpoint and archives the original before
-  replacing the live transcript. Failure preserves either the original or an auditable
-  prepared archive; no external effect is repeated.
+- `compact <run-id>` consolidates the latest completed checkpoint of the main
+  conversation into L1 (current objective), L2 (work and evidence), and L3
+  (outcomes). It archives the original before publishing the summary and
+  replacing the live transcript. Repeat the command to finish an interrupted
+  compaction. Use `sessions branch` to work from an earlier checkpoint.
+- Backstage starts automatic compaction at 60% of the operational context window.
+  The main agent and its descendants receive the same session context.
+  Subagents can compact their own requests using private projections. See [session context architecture](adr/013-session-context-compaction.md).
 - Chat adds `/tasks`, `/agents`, `/compact`, `/retry` and `/review [task]`.
   `/review` invokes the read-only reviewer AgentProfile inside the currently
   selected RuntimeMode. `/mode` and `/plan` select RuntimeMode; profile

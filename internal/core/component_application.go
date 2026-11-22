@@ -40,7 +40,6 @@ func (b *compositionBuilder) application() component.Definition {
 		}
 		service := state.service
 		service.Runner = runner
-		service.MaxTokens = cfg.Int("limits.context_tokens")
 		service.ContextBudget = min(service.MaxTokens*2, cfg.Int("limits.attachment_bytes"), 256*1024)
 		service.LoadContext = contextfiles.Load
 		service.LoadImages = func(ctx context.Context, paths []string) ([]ai.ContentBlock, error) {
@@ -51,7 +50,10 @@ func (b *compositionBuilder) application() component.Definition {
 			return images, err
 		}
 		service.ToolGenerationSource = extensions.ToolGeneration
-		service.Summarizer = summarizer{provider: visionProvider, credential: opts.Credential, timeout: cfg.String("limits.process_timeout")}
+		service.LegacyToolGenerationSource = extensions.LegacyToolGeneration
+		if !opts.Management {
+			service.Summarizer = summaryProvider{provider: visionProvider, credential: opts.Credential, timeout: cfg.String("limits.process_timeout")}
+		}
 		if err := scope.Track(service.Close); err != nil {
 			return errors.Join(err, service.Close(context.WithoutCancel(ctx)))
 		}

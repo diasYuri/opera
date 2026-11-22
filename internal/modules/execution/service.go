@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/diasYuri/opera/internal/modules/context"
 	"github.com/diasYuri/opera/internal/modules/skills/catalog"
+	"github.com/diasYuri/opera/internal/modules/summarizer"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/agent/compaction"
 	"github.com/diasYuri/y/pkg/ai"
@@ -25,12 +27,18 @@ type Service struct {
 	ResponseFormat                   *ai.ResponseFormat
 	controlMu                        sync.Mutex
 	ToolGenerationSource             func() string
+	LegacyToolGenerationSource       func() string
 	reconfiguring                    bool
 	contexts                         map[string]context.Context
 	Records                          Records
 	Work                             *Work
 	QuestionBroker                   *QuestionBroker
 	Summarizer                       compaction.Summarizer
+	SessionMemory                    *summarizer.Memory
+	ModelInfo                        ai.Model
+	SummaryTimeout                   time.Duration
+	WaitForContext                   bool
+	Backstage                        *Backstage
 	ContextBudget                    int
 	activeMu                         sync.Mutex
 	active                           map[string]context.CancelFunc
@@ -87,16 +95,25 @@ func (s *Service) Execute(ctx context.Context, request Request, emit func(Event)
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	var observation contextObservation
+	if s.Backstage != nil {
+		ctx = context.WithValue(ctx, contextObservationKey{}, &observation)
+	}
 	id := request.ID
 	if id == "" {
 		id = rand.Text()
 	}
 	result = Result{ID: id, SessionID: request.SessionID}
-	if err := s.register(id, cancel, ctx); err != nil {
+	if err := s.register(id, cancel, ctx, false); err != nil {
 		result.ExitCode = 1
 		return result, err
 	}
-	defer s.unregister(id)
+	defer s.unregister(id, false)
+	defer func() {
+		if s.Backstage != nil && (runErr != nil || result.ExitCode != 0 || ctx.Err() != nil) {
+			s.Backstage.cancelRun(id)
+		}
+	}()
 	if s.Skills != nil {
 		s.Skills.PinRun(id)
 		defer s.Skills.ReleaseRun(id)
@@ -145,6 +162,10 @@ func (s *Service) Execute(ctx context.Context, request Request, emit func(Event)
 	if s.Guard != nil {
 		s.Guard.SetMode(id, mode)
 		defer s.Guard.ClearMode(id)
+		if request.ID != "" && !request.newRun {
+			s.Guard.SetLegacyContext(id, metadata.ToolGeneration != "" && metadata.ToolGeneration != s.toolGeneration())
+			defer s.Guard.SetLegacyContext(id, false)
+		}
 		s.Guard.SetProfile(id, profile)
 		defer s.Guard.ClearProfile(id)
 	}
@@ -305,9 +326,6 @@ func (s *Service) Execute(ctx context.Context, request Request, emit func(Event)
 			return result, err
 		}
 	}
-	if metadata.Worker && request.Prompt != "" {
-		request.Prompt = "Plan this task with task_create/task_refine before changing files. Use local subagents when useful; verify their results and complete the plan.\nTask: " + request.Prompt
-	}
 	if s.LoadContext == nil {
 		return result, errors.New("context loader is unavailable")
 	}
@@ -323,7 +341,18 @@ func (s *Service) Execute(ctx context.Context, request Request, emit func(Event)
 		activations = append(activations, s.Skills.ExplicitNames(id, request.Prompt)...)
 		skillInstructions = s.Skills.InstructionsForNames(id, activations)
 	}
-	builtPrompt := BuildPrompt(PromptInput{WorkspaceRoot: s.Workspace, RuntimeMode: mode, AgentProfile: profile, WorkspaceContext: bundle.Text, SkillCatalog: skillCatalog, SkillInstructions: skillInstructions, Task: request.Prompt})
+	builtPrompt := BuildPrompt(PromptInput{
+		WorkspaceRoot: s.Workspace, RuntimeMode: mode, AgentProfile: profile,
+		WorkspaceContext: bundle.Text, SkillCatalog: skillCatalog, SkillInstructions: skillInstructions,
+		Worker: metadata.Worker && s.Work != nil, Child: metadata.ParentID != "", Task: request.Prompt,
+	})
+	if s.SessionMemory != nil {
+		owner, err := s.contextOwner(ctx, metadata)
+		if err != nil {
+			return Result{ID: id, ExitCode: 1}, err
+		}
+		s.materializeContext(ctx, owner.SessionID)
+	}
 	modePrompt := builtPrompt.UserPrompt
 	run := agent.RunRequest{RunID: id, SessionID: metadata.SessionID, WorkspaceID: s.Workspace, WorkspaceRoot: s.Workspace, Identity: policy.Identity{CallerID: "opera", WorkspaceID: s.Workspace, SessionID: metadata.SessionID}, Model: ai.Model{ID: s.Model, Provider: ai.ProviderID(s.Provider)}, Prompt: modePrompt, Approval: resolution, PolicyVersion: "opera:" + s.Mode, SystemPrompt: builtPrompt.SystemPrompt}
 	if len(request.ImagePaths) > 0 {
@@ -355,7 +384,10 @@ func (s *Service) Execute(ctx context.Context, request Request, emit func(Event)
 					text += block.Text
 				}
 			}
-			if text == request.Prompt {
+			// Earlier worker runs prefixed the task-management instructions in
+			// the user message. Match that history as well as new prompts.
+			const legacyWorkerPrefix = "Plan this task with task_create/task_refine before changing files. Use local subagents when useful; verify their results and complete the plan.\nTask: "
+			if text == modePrompt || (metadata.Worker && text == mode.PromptPrefix+profile.PromptPrefix+legacyWorkerPrefix+request.Prompt) {
 				run.Prompt = ""
 			}
 		}
@@ -416,16 +448,27 @@ func (s *Service) Execute(ctx context.Context, request Request, emit func(Event)
 		return Result{ID: id, ExitCode: 1}, err
 	}
 	eventMu.Lock()
-	defer eventMu.Unlock()
-	expectedCancellation := errors.Is(eventErr, context.Canceled) && errors.Is(runErr, context.Canceled)
-	if eventErr != nil && !expectedCancellation {
-		return Result{ID: id, ExitCode: 1}, eventErr
+	streamErr := eventErr
+	eventMu.Unlock()
+	expectedCancellation := errors.Is(streamErr, context.Canceled) && errors.Is(runErr, context.Canceled)
+	if streamErr != nil && !expectedCancellation {
+		return Result{ID: id, ExitCode: 1}, streamErr
 	}
 	if err := s.Boundary(cleanupCtx, id); err != nil {
 		return Result{ID: id, ExitCode: 1}, err
 	}
 	if err := s.index(cleanupCtx, id, metadata, result); err != nil {
 		return Result{ID: id, ExitCode: 1}, err
+	}
+	completed := runErr == nil && result.ExitCode == 0 && response.Snapshot.Status == agent.RunCompleted
+	if completed && s.SessionMemory != nil && metadata.ParentID == "" {
+		if err := s.useCompletedHead(cleanupCtx, id, metadata); err != nil && !errors.Is(err, errContextLineage) {
+			slog.Warn("update session head for Backstage", "run_id", id)
+		}
+	}
+	done()
+	if completed && response.Snapshot.Version != state.Version {
+		s.finishContext(ctx, id, metadata, response.Snapshot.Agent.Transcript, observation)
 	}
 
 	return result, runErr
@@ -448,14 +491,24 @@ func (s *Service) prepare(ctx context.Context, id string, request Request) (agen
 		if err != nil {
 			return agent.Snapshot{}, metadata, false, err
 		}
-		if metadata.ToolGeneration != "" && metadata.ToolGeneration != s.toolGeneration() {
+		if metadata.ToolGeneration != "" && metadata.ToolGeneration != s.toolGeneration() &&
+			(s.LegacyToolGenerationSource == nil || metadata.ToolGeneration != s.LegacyToolGenerationSource()) {
 			return agent.Snapshot{}, metadata, false, errors.New("tool generation differs from checkpoint; restore the original tool configuration before resume")
 		}
 		if metadata.Workspace != s.Workspace || metadata.Provider != s.Provider || metadata.Model != s.Model || metadata.HarnessVersion != HarnessVersion {
 			return agent.Snapshot{}, metadata, false, errors.New("resume workspace, provider, model or harness version does not match checkpoint")
 		}
-		if s.Skills != nil && metadata.SkillGeneration != s.Skills.CatalogFor(id).Digest {
-			return agent.Snapshot{}, metadata, false, errors.New("skill catalog differs from checkpoint; restore the original skills before resume")
+		if s.Skills != nil {
+			skills := s.Skills.CatalogFor(id)
+			if metadata.SkillGeneration != skills.Digest {
+				if skills.LegacyDigest == nil || metadata.SkillGeneration != *skills.LegacyDigest {
+					return agent.Snapshot{}, metadata, false, errors.New("skill catalog differs from checkpoint; restore the original skills before resume")
+				}
+				metadata.SkillGeneration = skills.Digest
+				if err := s.saveMetadata(ctx, id, metadata); err != nil {
+					return agent.Snapshot{}, metadata, false, fmt.Errorf("pin built-in skills for resumed execution: %w", err)
+				}
+			}
 		}
 		state, err := s.Store.Load(ctx, id)
 		if errors.Is(err, agent.ErrStateNotFound) {
@@ -510,6 +563,12 @@ func (s *Service) prepare(ctx context.Context, id string, request Request) (agen
 		if previous.Status != agent.RunCompleted {
 			return state, metadata, false, errors.New("resume the pending run before continuing the conversation")
 		}
+		if s.SessionMemory != nil && prior.ParentID == "" {
+			if err := s.useCompletedHead(ctx, request.ContinueFrom, prior); err != nil {
+				return state, metadata, false, err
+			}
+		}
+		metadata.ContinuedFrom = request.ContinueFrom
 		state.Agent = previous.Agent
 		state.Agent.RunID = id
 		state.Agent.RunNonce = ""

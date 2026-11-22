@@ -149,17 +149,18 @@ func (s *Store) CAS(ctx context.Context, bucket, key string, version uint64, val
 	if err != nil {
 		return err
 	}
+	var res sql.Result
 	if version == 0 {
-		_, err = s.db.ExecContext(ctx, "INSERT INTO opera_documents(workspace,bucket,key,data,version) VALUES(?,?,?,?,1)", s.Workspace, bucket, key, raw)
-		return err
+		res, err = s.db.ExecContext(ctx, "INSERT INTO opera_documents(workspace,bucket,key,data,version) VALUES(?,?,?,?,1) ON CONFLICT(workspace,bucket,key) DO NOTHING", s.Workspace, bucket, key, raw)
+	} else {
+		res, err = s.db.ExecContext(ctx, "UPDATE opera_documents SET data=?,version=version+1 WHERE workspace=? AND bucket=? AND key=? AND version=?", raw, s.Workspace, bucket, key, version)
 	}
-	res, err := s.db.ExecContext(ctx, "UPDATE opera_documents SET data=?,version=version+1 WHERE workspace=? AND bucket=? AND key=? AND version=?", raw, s.Workspace, bucket, key, version)
 	if err != nil {
 		return err
 	}
 	n, err := res.RowsAffected()
 	if err == nil && n != 1 {
-		return fmt.Errorf("opera record version conflict")
+		return records.ErrConflict
 	}
 	return err
 }

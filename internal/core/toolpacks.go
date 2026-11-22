@@ -22,6 +22,7 @@ type ToolPackContext struct {
 	Questions *execution.QuestionBroker
 	Skills    *skills.Manager
 	Work      *execution.Work
+	Service   *execution.Service
 	Search    search.Provider
 }
 
@@ -49,6 +50,12 @@ func defaultToolPacks() []ToolPack {
 			return tools.RegisterLSP(r, tools.LSPOptions{WorkspaceRoot: c.Config.Paths.Workspace, Policy: c.Policy, Limits: c.Limits})
 		}},
 		{ID: "skills", Register: func(_ context.Context, r *tools.Registry, c ToolPackContext) error { return c.Skills.Register(r) }},
+		{ID: "session-context", Register: func(_ context.Context, r *tools.Registry, c ToolPackContext) error {
+			if c.Service == nil {
+				return nil
+			}
+			return c.Service.RegisterContextTools(r)
+		}},
 		{ID: "work", Register: func(_ context.Context, r *tools.Registry, c ToolPackContext) error { return c.Work.Register(r) }},
 		{ID: "user-question", Register: func(_ context.Context, r *tools.Registry, c ToolPackContext) error { return c.Questions.Register(r) }},
 		{ID: "web-search", Register: func(_ context.Context, r *tools.Registry, c ToolPackContext) error {

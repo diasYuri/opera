@@ -17,6 +17,7 @@ import (
 type Provider struct {
 	Command string
 	Args    []string
+	worker  bool
 }
 
 func (Provider) ID() string { return "openai" }
@@ -32,14 +33,10 @@ func (Provider) Capabilities(string) providers.Capabilities {
 func (Provider) Close() error { return nil }
 func (p Provider) Stream(_ context.Context, req providers.StreamRequest) (providers.EventStream, error) {
 	child := false
-	worker := false
 	done := map[string]bool{}
 	for _, message := range req.Context.Messages {
 		if message.Role == ai.RoleUser {
 			for _, block := range message.Content {
-				if strings.HasPrefix(block.Text, "Plan this task with task_create/task_refine") {
-					worker = true
-				}
 				if strings.HasPrefix(block.Text, "opera-demo-child") {
 					child = true
 				}
@@ -54,7 +51,7 @@ func (p Provider) Stream(_ context.Context, req providers.StreamRequest) (provid
 			return &stream{events: []ai.Event{ai.NewErrorEvent("demo_tool_failed", fmt.Errorf("demo tool %s failed", message.ToolResult.ToolName))}}, nil
 		}
 	}
-	if worker {
+	if p.worker && !child {
 		done["demo-0"] = true
 	}
 	type step struct{ name, args string }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/diasYuri/opera/internal/modules/configuration"
+	"github.com/diasYuri/y/pkg/ai"
 	"github.com/diasYuri/y/pkg/providers"
 	"github.com/diasYuri/y/pkg/search"
 )
@@ -72,6 +73,7 @@ type Entry struct {
 	Name                  string
 	Description           string
 	Factory               Factory
+	KnownModels           func() []ai.Model
 	SearchFactory         SearchFactory
 	SearchAvailable       func(config.Resolved) bool
 	SearchName            string
@@ -82,6 +84,20 @@ type Entry struct {
 }
 
 type Catalog struct{ entries map[string]Entry }
+
+// KnownModel returns build-time or configured metadata without discovery I/O.
+func (c *Catalog) KnownModel(provider, id string) ai.Model {
+	if c != nil {
+		if list := c.entries[provider].KnownModels; list != nil {
+			for _, model := range list() {
+				if model.ID == id {
+					return model
+				}
+			}
+		}
+	}
+	return ai.Model{}
+}
 
 func (c *Catalog) Authenticator(provider string) Authenticator {
 	if c == nil {

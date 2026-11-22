@@ -22,6 +22,11 @@ A run aggregate includes descendants once. Agent scope includes only that agent.
 Session scope includes its runs and descendants without adding pre-aggregated
 child totals. Branches inherit transcript context, never usage claims; new inference
 on a branch counts separately. Retry/resume count only new provider invocations.
+Each conversation keeps a bounded `context.md` shared with its subagents.
+Backstage consolidates it automatically at 60% of the operational context window.
+Use `/compact` in chat or `opera compact <run-id>` for the latest completed
+checkpoint of the main conversation. Use `sessions branch` for earlier checkpoints.
+
 Compaction inference is recorded with kind `compaction`; rewriting a transcript
 never erases the ledger. Work admission's `limits.worker_tokens` reservation is a
 separate conservative budget, unlimited by default, not a billing figure.

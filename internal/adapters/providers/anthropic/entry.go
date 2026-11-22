@@ -15,7 +15,7 @@ func Entry() providercatalog.Entry {
 		{ID: "claude", Name: "Sign in with Claude", Description: "Claude Pro/Max OAuth", Kind: "anthropic-oauth", ProviderID: "anthropic", Authenticator: authenticator{}},
 		{ID: "api-key", Name: "Anthropic API key", Description: "Use an Anthropic API key", Kind: "api-key", ProviderID: "anthropic"},
 	}}
-	return providercatalog.Entry{ID: "anthropic", Name: "Anthropic API", Description: "Requires Anthropic credentials", Login: login, EnvironmentCredential: EnvironmentCredential, SearchName: "Anthropic · Claude", SearchDescription: "Hosted web search using the selected Claude model and account", SearchAvailable: func(cfg config.Resolved) bool { return cfg.String("base_url") == "" }, SearchFactory: func(cfg config.Resolved, lookup func(context.Context, string) (string, error)) search.Provider {
+	return providercatalog.Entry{ID: "anthropic", Name: "Anthropic API", Description: "Requires Anthropic credentials", Login: login, KnownModels: yanthropic.CuratedModels, EnvironmentCredential: EnvironmentCredential, SearchName: "Anthropic · Claude", SearchDescription: "Hosted web search using the selected Claude model and account", SearchAvailable: func(cfg config.Resolved) bool { return cfg.String("base_url") == "" }, SearchFactory: func(cfg config.Resolved, lookup func(context.Context, string) (string, error)) search.Provider {
 		return NewSearchProvider(cfg.String("model"), lookup)
 	}, Factory: func(_ context.Context, cfg config.Resolved, _ func(context.Context, string) (string, error)) (providers.Provider, error) {
 		opts := []yanthropic.Option{yanthropic.WithEnvLookup(func(string) string { return "" })}

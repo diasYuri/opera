@@ -15,6 +15,8 @@ import (
 
 func mutation(name string) bool {
 	switch name {
+	case SessionContextNote, "skill_catalog", "skill_load", "skill_resource":
+		return false
 	case "memory.search", "memory.read", "memory.list", "task_create", "task_list", "task_start", "task_complete", "task_refine", "subagent_spawn", "subagent_list", "subagent_wait", "subagent_cancel", "read_file", "list_directory", "list_files", "search", "search_text", "search_ast", "web_search", "outline", "find_files", "git_status", "git_diff", "git_log", "git_history", "git_blame", "git_search_history", "definition", "references", "implementations", "hover", "document_symbols", "workspace_symbols", "callers", "callees", "type_definition":
 		return false
 	default:

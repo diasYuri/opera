@@ -12,7 +12,7 @@ import (
 
 func TestUsageSurvivesReplayBranchAndCompaction(t *testing.T) {
 	cfg := configuration(t)
-	r := open(t, cfg, agenttest.TextTurn(strings.Repeat("context ", 1000)), agenttest.TextTurn("second answer"))
+	r := open(t, cfg, agenttest.TextTurn(strings.Repeat("context ", 1000)), agenttest.TextTurn("second answer"), agenttest.TextTurn(layeredSummary))
 	defer closeRuntime(t, r)
 	ctx := context.Background()
 	first, err := r.Service.Execute(ctx, execution.Request{Prompt: "one"}, nil)
@@ -53,7 +53,7 @@ func TestUsageSurvivesReplayBranchAndCompaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if all.Totals.Total.Count < 2 {
+	if all.Totals.Total.Count != 3 {
 		t.Fatal("compaction erased usage")
 	}
 	for _, row := range all.Records {

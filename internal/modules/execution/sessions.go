@@ -10,9 +10,9 @@ import (
 	"github.com/diasYuri/opera/internal/modules/accounting"
 	"github.com/diasYuri/opera/internal/modules/context"
 	"github.com/diasYuri/opera/internal/modules/records"
+	"github.com/diasYuri/opera/internal/modules/summarizer"
 	"github.com/diasYuri/y/pkg/agent"
 	"github.com/diasYuri/y/pkg/agent/compaction"
-	"github.com/diasYuri/y/pkg/ai"
 	ycontext "github.com/diasYuri/y/pkg/context"
 	"github.com/diasYuri/y/pkg/policy"
 	"github.com/diasYuri/y/pkg/providers"
@@ -66,15 +66,37 @@ func (s *Service) Sessions(ctx context.Context, offset, limit int) ([]SessionEnt
 	sort.Slice(out, func(i, j int) bool { return out[i].Updated.After(out[j].Updated) })
 	grouped := []SessionEntry{}
 	seen := map[string]bool{}
+	heads := map[string]string{}
 	for _, entry := range out {
 		key := entry.SessionID
 		if key == "" {
 			key = entry.ID
 		}
-		if !seen[key] {
-			seen[key] = true
-			grouped = append(grouped, entry)
+		if seen[key] {
+			continue
 		}
+		if s.SessionMemory != nil && entry.Parent == "" && entry.State == "completed" {
+			head, known := heads[key]
+			if !known {
+				memory, err := s.SessionMemory.Read(ctx, key)
+				if err != nil {
+					return nil, err
+				}
+				head = memory.HeadRun
+				heads[key] = head
+			}
+			if head != "" && head != entry.ID {
+				metadata, err := s.Metadata(ctx, entry.ID)
+				if err != nil {
+					return nil, err
+				}
+				if metadata.ContinuedFrom != head {
+					continue
+				}
+			}
+		}
+		seen[key] = true
+		grouped = append(grouped, entry)
 	}
 	out = grouped
 	if offset >= len(out) {
@@ -262,6 +284,7 @@ func (s *Service) Fork(ctx context.Context, id string, version uint64) (string, 
 	m.ParentID = ""
 	m.Origin = id
 	m.OriginVersion = view.Snapshot.Version
+	m.ContinuedFrom = ""
 	m.Pending = nil
 	if err := s.saveMetadata(ctx, child, m); err != nil {
 		return "", err
@@ -278,46 +301,29 @@ func (s *Service) Fork(ctx context.Context, id string, version uint64) (string, 
 	if err != nil {
 		return "", err
 	}
+	if s.SessionMemory != nil {
+		s.materializeContext(ctx, child)
+	}
 	return child, s.index(ctx, child, m, Result{State: "branched", Checkpoint: state.Version})
 }
 
 // ForkSummary creates a new session from a compacted copy of a completed run.
 // The source checkpoint is left untouched.
 func (s *Service) ForkSummary(ctx context.Context, id string) (string, error) {
-	if s.Active() {
-		return "", errors.New("fork requires idle execution")
-	}
-	view, err := s.Inspect(ctx, id)
-	if err != nil {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if err := s.register(id, cancel, ctx, true); err != nil {
 		return "", err
 	}
-	if view.Snapshot.Status != agent.RunCompleted {
-		return "", errors.New("fork requires a completed checkpoint; resolve pending or uncertain operations first")
-	}
-	if s.Summarizer == nil {
-		return "", errors.New("summarizer unavailable")
-	}
-	for _, op := range view.Operations {
-		if op.State == agent.OperationPending {
-			return "", agent.ErrOperationInDoubt
-		}
-	}
-	references, _ := json.Marshal(struct {
-		Tasks      any
-		Operations []agent.OperationRecord
-	}{view.Tasks, view.Operations})
-	compacted, err := compaction.NewCompactor().Compact(ctx, compaction.Request{
-		Transcript: view.Snapshot.Agent.Transcript,
-		Provider:   limitedSummarizer{service: s, id: id, base: s.Summarizer},
-		Model:      ai.Model{ID: s.Model, Provider: ai.ProviderID(s.Provider), ContextWindow: int64(s.MaxTokens)},
-		Reason:     compaction.ReasonManual, Force: true, BranchSummary: string(references),
-	})
+	defer s.unregister(id, true)
+	view, memory, compacted, err := s.summarizeCheckpoint(ctx, id)
 	if err != nil {
 		return "", err
 	}
 	if !compacted.Applied {
 		return "", errors.New("session could not be summarized")
 	}
+
 	child := rand.Text()
 	state := agent.NewSnapshot(child, view.Snapshot.Agent)
 	state.SessionID = child
@@ -344,6 +350,7 @@ func (s *Service) ForkSummary(ctx context.Context, id string) (string, error) {
 	metadata.ParentID = ""
 	metadata.Origin = id
 	metadata.OriginVersion = view.Snapshot.Version
+	metadata.ContinuedFrom = ""
 	metadata.Pending = nil
 	if err := s.saveMetadata(ctx, child, metadata); err != nil {
 		return "", err
@@ -351,57 +358,16 @@ func (s *Service) ForkSummary(ctx context.Context, id string) (string, error) {
 	if err := s.Store.Save(ctx, child, 0, state); err != nil {
 		return "", err
 	}
+	memory = summarizer.Context{Markdown: memory.Markdown}
+	if err := s.SessionMemory.Commit(ctx, child, memory); err != nil {
+		return "", err
+	}
+	s.materializeContext(ctx, child)
 	state, err = s.Store.Load(ctx, child)
 	if err != nil {
 		return "", err
 	}
 	return child, s.index(ctx, child, metadata, Result{State: "branched", Checkpoint: state.Version})
-}
-
-func (s *Service) Compact(ctx context.Context, id string) error {
-	if s.Active() {
-		return errors.New("compaction requires idle execution")
-	}
-	view, err := s.Inspect(ctx, id)
-	if err != nil {
-		return err
-	}
-	if view.Snapshot.Status != agent.RunCompleted {
-		return errors.New("compaction requires a completed checkpoint")
-	}
-	if s.Summarizer == nil {
-		return errors.New("summarizer unavailable")
-	}
-	references, _ := json.Marshal(struct {
-		Tasks      any
-		Operations []agent.OperationRecord
-	}{view.Tasks, view.Operations})
-	compacted, err := compaction.NewCompactor().Compact(ctx, compaction.Request{Transcript: view.Snapshot.Agent.Transcript, Provider: limitedSummarizer{service: s, id: id, base: s.Summarizer}, Model: ai.Model{ID: s.Model, Provider: ai.ProviderID(s.Provider), ContextWindow: int64(s.MaxTokens)}, Reason: compaction.ReasonManual, Force: true, BranchSummary: string(references)})
-	if err != nil {
-		return err
-	}
-	if !compacted.Applied {
-		return nil
-	}
-	key := fmt.Sprintf("%s:%d", id, view.Snapshot.Version)
-	archive := struct {
-		Before     agent.Snapshot
-		Compaction compaction.Result
-		State      string
-	}{view.Snapshot, compacted, "prepared"}
-	if err := s.Records.Put(ctx, "compactions", key, archive); err != nil {
-		return err
-	}
-	state := view.Snapshot
-	state.Agent.Transcript = compacted.Messages
-	if state.Result != nil {
-		state.Result.Messages = compacted.Messages
-	}
-	if err := s.Store.Save(ctx, id, state.Version, state); err != nil {
-		return err
-	}
-	archive.State = "committed"
-	return s.Records.Put(ctx, "compactions", key, archive)
 }
 
 func scrub(value any) {
@@ -439,7 +405,7 @@ func (p limitedSummarizer) Stream(ctx context.Context, request providers.StreamR
 		return nil, errors.New("compaction input exceeds context budget")
 	}
 	if p.service.Work != nil {
-		if err := p.service.Work.Charge(ctx, p.id, estimated+4096); err != nil {
+		if err := p.service.Work.Charge(ctx, p.id, estimated+request.Options.MaxTokens); err != nil {
 			return nil, err
 		}
 	}

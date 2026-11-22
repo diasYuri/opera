@@ -21,7 +21,7 @@ func Entries() []providercatalog.Entry {
 		},
 	}
 	return []providercatalog.Entry{
-		{ID: "openai", Name: "OpenAI API", Description: "Requires an OpenAI API credential", Login: login, Factory: func(_ context.Context, cfg config.Resolved, _ func(context.Context, string) (string, error)) (providers.Provider, error) {
+		{ID: "openai", Name: "OpenAI API", Description: "Requires an OpenAI API credential", Login: login, KnownModels: yopenai.CuratedModels, Factory: func(_ context.Context, cfg config.Resolved, _ func(context.Context, string) (string, error)) (providers.Provider, error) {
 			opts := []yopenai.Option{yopenai.WithEnvLookup(noEnvironment)}
 			if base := cfg.String("base_url"); base != "" {
 				opts = append(opts, yopenai.WithBaseURL(base))

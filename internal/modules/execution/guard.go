@@ -21,6 +21,7 @@ type Guard struct {
 	expected         map[string]*Approval
 	modes            map[string]RuntimeMode
 	profiles         map[string]AgentProfile
+	legacyContext    map[string]bool
 }
 
 func (g *Guard) SetMode(id string, mode RuntimeMode) {
@@ -43,6 +44,19 @@ func (g *Guard) SetProfile(id string, profile AgentProfile) {
 	g.profiles[id] = profile
 }
 
+func (g *Guard) SetLegacyContext(run string, legacy bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if legacy {
+		if g.legacyContext == nil {
+			g.legacyContext = make(map[string]bool)
+		}
+		g.legacyContext[run] = true
+	} else {
+		delete(g.legacyContext, run)
+	}
+}
+
 func (g *Guard) ClearProfile(id string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -56,12 +70,16 @@ func (g *Guard) FilterTools(runID string, advertised []ai.Tool) []ai.Tool {
 	g.mu.Lock()
 	mode, hasMode := g.modes[runID]
 	profile, hasProfile := g.profiles[runID]
+	legacy := g.legacyContext[runID]
 	g.mu.Unlock()
-	if !hasMode && !hasProfile {
+	if !hasMode && !hasProfile && !legacy {
 		return advertised
 	}
 	filtered := make([]ai.Tool, 0, len(advertised))
 	for _, tool := range advertised {
+		if legacy && tool.Name == SessionContextNote {
+			continue
+		}
 		if hasMode && !toolAllowed(mode.Tools, tool.Name) {
 			continue
 		}
@@ -106,7 +124,11 @@ func (g *Guard) Middleware(ctx context.Context, request tools.ToolRequest, _ too
 	g.mu.Lock()
 	mode, configured := g.modes[request.RunID]
 	profile, hasProfile := g.profiles[request.RunID]
+	legacy := g.legacyContext[request.RunID]
 	g.mu.Unlock()
+	if legacy && request.Name == SessionContextNote {
+		return tools.ToolResponse{}, fmt.Errorf("tool %q is unavailable in this checkpoint generation", request.Name)
+	}
 	if configured && !allowsTool(mode.Tools, request.Name) {
 		return tools.ToolResponse{}, fmt.Errorf("tool %q is not available in runtime mode %s", request.Name, mode.Name)
 	}

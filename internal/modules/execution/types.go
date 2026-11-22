@@ -70,6 +70,7 @@ type Metadata struct {
 	ParentID          string             `json:"parent_id,omitempty"`
 	Origin            string             `json:"origin,omitempty"`
 	OriginVersion     uint64             `json:"origin_version,omitempty"`
+	ContinuedFrom     string             `json:"continued_from,omitempty"`
 	ContextPaths      []string           `json:"context_paths,omitempty"`
 	InitialPrompt     string             `json:"initial_prompt,omitempty"`
 	Workspace         string             `json:"workspace"`

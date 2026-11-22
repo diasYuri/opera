@@ -71,14 +71,50 @@ func TestBuildPromptSeparatesRuntimeModeAndAgentProfile(t *testing.T) {
 		}
 		previous = index
 	}
-	if len(built.Sections) != 7 {
-		t.Fatalf("got %d prompt sections", len(built.Sections))
-	}
 	if !strings.Contains(built.SystemPrompt, "use web_search when it is available") || !strings.Contains(built.SystemPrompt, "without trying workspace search tools such as search_text or search_ast") {
 		t.Fatal("prompt does not guide web research or prevent a shell fallback")
 	}
 	if empty := BuildPrompt(PromptInput{RuntimeMode: mode, AgentProfile: profile}); empty.UserPrompt != "" {
 		t.Fatalf("empty task became prompt prefix %q", empty.UserPrompt)
+	}
+}
+
+func TestBuildPromptFollowsExecutionRoleAndToolAccess(t *testing.T) {
+	defaultMode, _ := ResolveRuntimeMode(RuntimeModeDefault)
+	planMode, _ := ResolveRuntimeMode(RuntimeModePlan)
+	defaultProfile, _ := ResolveAgentProfile(AgentProfileDefault)
+	reviewer, _ := ResolveAgentProfile(AgentProfileReview)
+	for _, tc := range []struct {
+		name    string
+		mode    RuntimeMode
+		profile AgentProfile
+		worker  bool
+		child   bool
+		want    string
+	}{
+		{"coding", defaultMode, defaultProfile, false, false, "exploration,delivery,tasks,delegation"},
+		{"worker", defaultMode, defaultProfile, true, false, "exploration,delivery,tasks,worker,delegation"},
+		{"child", defaultMode, defaultProfile, false, true, "exploration,delivery,tasks,child"},
+		{"planning", planMode, defaultProfile, false, false, "exploration,planning"},
+		{"review", defaultMode, reviewer, false, false, "exploration,review"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			built := BuildPrompt(PromptInput{RuntimeMode: tc.mode, AgentProfile: tc.profile, Worker: tc.worker, Child: tc.child, Task: "user task"})
+			var workflow []string
+			for _, section := range built.Sections {
+				switch section.ID {
+				case "opera", "runtime-mode", "agent-profile:reviewer", "agent-profile-context:reviewer":
+				default:
+					workflow = append(workflow, section.ID)
+				}
+			}
+			if got := strings.Join(workflow, ","); got != tc.want {
+				t.Fatalf("workflow = %q, want %q", got, tc.want)
+			}
+			if got := built.UserPrompt; got != tc.mode.PromptPrefix+"user task" {
+				t.Fatalf("unexpected user prompt %q", got)
+			}
+		})
 	}
 }
 

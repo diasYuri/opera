@@ -5,7 +5,7 @@ import (
 	"errors"
 )
 
-func (s *Service) register(id string, cancel context.CancelFunc, ctx context.Context) error {
+func (s *Service) register(id string, cancel context.CancelFunc, ctx context.Context, exclusive bool) error {
 	s.activeMu.Lock()
 	defer s.activeMu.Unlock()
 	if s.closed {
@@ -13,6 +13,12 @@ func (s *Service) register(id string, cancel context.CancelFunc, ctx context.Con
 	}
 	if s.reconfiguring {
 		return errors.New("execution service is applying a composition change")
+	}
+	if exclusive {
+		if len(s.active) > 0 {
+			return errors.New("compaction requires idle execution")
+		}
+		s.reconfiguring = true
 	}
 	if s.active == nil {
 		s.active = map[string]context.CancelFunc{}
@@ -28,10 +34,13 @@ func (s *Service) register(id string, cancel context.CancelFunc, ctx context.Con
 	s.activeWG.Add(1)
 	return nil
 }
-func (s *Service) unregister(id string) {
+func (s *Service) unregister(id string, exclusive bool) {
 	s.activeMu.Lock()
 	delete(s.active, id)
 	delete(s.contexts, id)
+	if exclusive {
+		s.reconfiguring = false
+	}
 	s.activeMu.Unlock()
 	s.activeWG.Done()
 }
@@ -45,19 +54,29 @@ func (s *Service) Close(ctx context.Context) error {
 		cancel()
 	}
 	s.activeMu.Unlock()
+	var backstageDone <-chan struct{}
+	if s.Backstage != nil {
+		backstageDone = s.Backstage.stop()
+	}
+	var workErr error
 	if s.Work != nil {
-		if err := s.Work.Close(ctx); err != nil {
-			return err
-		}
+		workErr = s.Work.Close(ctx)
 	}
 	done := make(chan struct{})
 	go func() { s.activeWG.Wait(); close(done) }()
 	select {
 	case <-done:
-		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return errors.Join(workErr, ctx.Err())
 	}
+	if backstageDone != nil {
+		select {
+		case <-backstageDone:
+		case <-ctx.Done():
+			return errors.Join(workErr, ctx.Err())
+		}
+	}
+	return workErr
 }
 
 func (s *Service) Active() bool {

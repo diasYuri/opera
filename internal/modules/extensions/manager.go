@@ -26,18 +26,19 @@ import (
 
 type SecretLookup func(context.Context, string) (string, error)
 type Manager struct {
-	safePoint      func(context.Context, string, func() error) error
-	Host           *extensionhost.Host
-	Registry       *tools.Registry
-	WASM           wasm.Manager
-	Memory         *memoryext.Extension
-	Settings       Settings
-	Config         config.Resolved
-	Secret         SecretLookup
-	DiscoveryError string
-	Offline        bool
-	mu             sync.Mutex
-	grants         map[string]map[wasm.Capability]bool
+	safePoint         func(context.Context, string, func() error) error
+	LegacyContextView func(context.Context, string, string) bool
+	Host              *extensionhost.Host
+	Registry          *tools.Registry
+	WASM              wasm.Manager
+	Memory            *memoryext.Extension
+	Settings          Settings
+	Config            config.Resolved
+	Secret            SecretLookup
+	DiscoveryError    string
+	Offline           bool
+	mu                sync.Mutex
+	grants            map[string]map[wasm.Capability]bool
 }
 
 func New(ctx context.Context, cfg config.Resolved, registry *tools.Registry, secret SecretLookup, offline bool) (*Manager, error) {
@@ -288,6 +289,27 @@ func (m *Manager) ToolGeneration() string {
 	return m.toolGenerationLocked(m.Registry.List())
 }
 
+// LegacyToolGeneration recognizes checkpoints created before the session context
+// tool existed. All other descriptors and extension configuration remain pinned.
+func (m *Manager) LegacyToolGeneration() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.legacyToolGenerationLocked(m.Registry.List())
+}
+
+func (m *Manager) legacyToolGenerationLocked(descriptors []tools.ToolDescriptor) string {
+	if m.LegacyContextView == nil {
+		return ""
+	}
+	legacy := slices.DeleteFunc(slices.Clone(descriptors), func(tool tools.ToolDescriptor) bool {
+		return tool.Name == execution.SessionContextNote
+	})
+	if len(legacy) == len(descriptors) {
+		return ""
+	}
+	return m.toolGenerationLocked(legacy)
+}
+
 func (m *Manager) toolGenerationLocked(descriptors []tools.ToolDescriptor) string {
 	raw, _ := json.Marshal(descriptors)
 	return fmt.Sprintf("%x", sha256.Sum256(append(raw, []byte(m.digestLocked())...)))
@@ -327,7 +349,8 @@ func (m *Manager) allowCapability(request wasm.CapabilityRequest) wasm.Decision 
 // Only classified, non-sensitive reads can be bridged. Effectful guest work must
 // use separately visible tools; raw filesystem/network/process/secrets are denied.
 func (m *Manager) invokeReadTool(ctx context.Context, extensionID, name string, args json.RawMessage) (wasm.HostToolInvokeResult, error) {
-	if execution.IsWorkspaceMutation(name) || strings.HasPrefix(name, "wasm_") || strings.HasPrefix(name, "task_") || strings.HasPrefix(name, "subagent_") {
+	// Agent Skills can include user-level files outside the workspace.
+	if name == execution.SessionContextNote || execution.IsWorkspaceMutation(name) || strings.HasPrefix(name, "wasm_") || strings.HasPrefix(name, "task_") || strings.HasPrefix(name, "subagent_") || strings.HasPrefix(name, "skill_") {
 		return wasm.HostToolInvokeResult{}, errors.New("WASM bridge supports classified read tools only")
 	}
 	view, ok := agent.RuntimeViewFromContext(ctx)
@@ -402,7 +425,12 @@ func (m *Manager) AcquireRuntimeView(ctx context.Context) (*agent.RuntimeView, e
 	}
 	info := view.Info()
 	identity, _ := agent.RuntimeIdentityFromContext(ctx)
-	info.ID = "opera:" + identity.RunID + ":" + m.toolGenerationLocked(view.Tools().List())
+	descriptors := view.Tools().List()
+	generation := m.toolGenerationLocked(descriptors)
+	if legacy := m.legacyToolGenerationLocked(descriptors); legacy != "" && identity.RunID != "" && m.LegacyContextView(ctx, identity.RunID, legacy) {
+		generation = legacy
+	}
+	info.ID = "opera:" + identity.RunID + ":" + generation
 	wrapped, err := agent.NewRuntimeView(info, view.Tools(), view.ContextResolver(), view.Hooks(), view.Close)
 	if err != nil {
 		_ = view.Close()
