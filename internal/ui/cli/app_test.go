@@ -76,6 +76,37 @@ func TestDoctorHeadlessWithMissingDependencies(t *testing.T) {
 	}
 }
 
+func TestDoctorCompositionReportsOnlySafeProvenance(t *testing.T) {
+	f := newFixture(t)
+	f.app.LookPath = func(string) (string, error) { return "/private/doctor-path-marker", nil }
+	f.app.OpenStore = func(string, string) (credentials.Store, error) {
+		t.Fatal("doctor read keyring")
+		return nil, nil
+	}
+	args := []string{"doctor", "--format=jsonl", "--provider=openai", "--model=doctor-model-marker",
+		"--set=base_url=https://example.test/doctor-endpoint-marker", "--set=credential_ref=doctor-credential-marker"}
+	if code := f.app.Run(args); code != 0 {
+		t.Fatalf("doctor code %d: %s", code, f.err.String())
+	}
+	report := f.out.String()
+	for _, want := range []string{`"profile":"default"`, `"profile":"headless"`, `"profile":"inspection"`,
+		`"key":"base_url","source":"flag"`, `"key":"credential_ref","source":"flag"`, `"provider":"openai"`, "opera.execution"} {
+		if !strings.Contains(report, want) {
+			t.Errorf("doctor omitted %s", want)
+		}
+	}
+	if strings.Contains(report, "-marker") {
+		t.Fatal("doctor exposed a configuration value or process path")
+	}
+	f.out.Reset()
+	if code := f.app.Run([]string{"doctor", "--format=jsonl", "--provider=invalid-provider-marker"}); code != cli.ExitFailure {
+		t.Fatalf("unknown provider diagnostic returned %d", code)
+	}
+	if report := f.out.String(); strings.Contains(report, "-marker") || !strings.Contains(report, "composition.default") {
+		t.Fatalf("unsafe or missing selection diagnostic: %s", report)
+	}
+}
+
 func TestConfigFlagsAndMalformedProject(t *testing.T) {
 	f := newFixture(t)
 	if code := f.app.Run([]string{"config", "get", "model", "--model=selected"}); code != 0 || f.out.String() != "selected (flag)\n" {

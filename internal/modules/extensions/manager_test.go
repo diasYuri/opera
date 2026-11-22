@@ -74,7 +74,7 @@ func TestReloadRollbackAndSafePoint(t *testing.T) {
 		t.Fatal("failed reload changed generation")
 	}
 	denied := errors.New("busy")
-	m.SafePoint = func(context.Context, string) error { return denied }
+	m.safePoint = func(context.Context, string, func() error) error { return denied }
 	if !errors.Is(m.Reload(ctx), denied) {
 		t.Fatal("safe point bypassed")
 	}

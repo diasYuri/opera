@@ -57,11 +57,10 @@ func (m *Manager) Inspect(ctx context.Context) (Report, error) {
 // Replacing aggregate MCP/memory instances or changing a warm WASM module's
 // bytes/grants requires a new CLI scope; rejected transitions keep the old host.
 func (m *Manager) Reload(ctx context.Context) error {
-	if m.SafePoint != nil {
-		if err := m.SafePoint(ctx, ""); err != nil {
-			return err
-		}
-	}
+	return m.atSafePoint(ctx, "", func() error { return m.reload(ctx) })
+}
+
+func (m *Manager) reload(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	next, err := Load(m.Config)
@@ -115,27 +114,23 @@ func (m *Manager) Reload(ctx context.Context) error {
 		return nil
 	}
 	module := changes[0]
-	old := m.Settings
-	m.Settings = next
 	if module.Enabled {
 		if err := m.verifyModule(module); err != nil {
-			m.Settings = old
 			return err
 		}
 		definitions, err := wasm.ComponentDefinitions(m.WASM, m.Host, module.ID)
 		if err != nil {
-			m.Settings = old
 			return err
 		}
-		if err := m.Host.AddDefinitions(ctx, definitions); err != nil {
-			m.Settings = old
-			return err
-		}
-	} else {
-		if err := m.Host.Uninstall(ctx, "wasm."+module.ID); err != nil {
-			m.Settings = old
-			return err
-		}
+		return m.commitSettings(next, m.Host.AddDefinitions(ctx, definitions))
 	}
-	return nil
+	return m.commitSettings(next, m.Host.Uninstall(ctx, "wasm."+module.ID))
+}
+
+func (m *Manager) commitSettings(next Settings, err error) error {
+	var reconcile *component.ReconcileError
+	if err == nil || (errors.As(err, &reconcile) && reconcile.Committed) {
+		m.Settings = next
+	}
+	return err
 }

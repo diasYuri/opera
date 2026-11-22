@@ -44,11 +44,11 @@ func Collect(cfg config.Resolved, lookup func(string) (string, error)) Report {
 		{"gopls", "Go semantic navigation will be unavailable; use file/text search ."},
 	} {
 		name := tool.name
-		path, err := lookup(name)
+		_, err := lookup(name)
 		if err != nil {
 			r.Checks = append(r.Checks, Check{name, "missing", "optional external dependency", tool.fallback})
 		} else {
-			r.Checks = append(r.Checks, Check{name, "ok", path, ""})
+			r.Checks = append(r.Checks, Check{name, "ok", "available on PATH", ""})
 		}
 	}
 	if cfg.String("provider") == "" || cfg.String("model") == "" {
@@ -64,9 +64,9 @@ func Collect(cfg config.Resolved, lookup func(string) (string, error)) Report {
 	)
 	settings, err := operaext.Load(cfg)
 	if err != nil {
-		r.Checks = append(r.Checks, Check{"extensions", "error", err.Error(), "Inspect user-owned extension settings; no external code was started."})
+		r.Checks = append(r.Checks, Check{"extensions", "error", "Extension settings could not be read or validated.", "Inspect user-owned extension settings; no external code was started."})
 	} else {
-		r.Checks = append(r.Checks, Check{"extensions", "configured", operaext.SettingsPath(cfg), "Activation consent is bound to configuration and module bytes; use extensions inspect for generations."})
+		r.Checks = append(r.Checks, Check{"extensions", "configured", "Local settings validated.", "Activation consent is bound to configuration and module bytes; use extensions inspect for generations."})
 		for _, server := range settings.MCP {
 			state := "disabled"
 			if server.Enabled {

@@ -48,18 +48,24 @@ func (r CredentialResolver) ResolveAPIKey(ctx context.Context, request auth.Reso
 // EnvironmentAPIKey resolves standard SDK environment variables and provider-owned
 // conventions through the composed catalog.
 func EnvironmentAPIKey(ctx context.Context, provider string, lookup func(string) string) (string, error) {
+	return EnvironmentAPIKeyWithCatalog(ctx, provider, lookup, nil)
+}
+
+func EnvironmentAPIKeyWithCatalog(ctx context.Context, provider string, lookup func(string) string, catalog *providercatalog.Catalog) (string, error) {
 	if provider == "brave-search" {
 		return bravesearch.EnvironmentCredential(lookup), nil
 	}
-	catalog, err := DefaultCatalog()
-	if err != nil {
-		return "", err
+	if catalog == nil {
+		var err error
+		catalog, err = DefaultCatalog()
+		if err != nil {
+			return "", err
+		}
 	}
 	if value := catalog.EnvironmentCredential(provider, lookup); value != "" {
 		return value, nil
 	}
-	source := auth.NewEnvSource().WithLookup(lookup)
-	return source.Resolve(ctx, provider)
+	return auth.NewEnvSource().WithLookup(lookup).Resolve(ctx, provider)
 }
 
 func CustomAPIKey(ctx context.Context, provider config.CustomProvider) (string, error) {

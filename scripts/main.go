@@ -177,6 +177,9 @@ func validateImportForFile(path, name string, externalIntegrationTest bool) erro
 	if strings.HasPrefix(name, "github.com/diasYuri/y/") && strings.Contains(name, "/internal/") {
 		return fmt.Errorf("private Y import in %s", path)
 	}
+	if name == "github.com/diasYuri/y/pkg/runtime" && (strings.HasPrefix(path, "internal/modules/") || strings.HasPrefix(path, "internal/ui/") || strings.HasPrefix(path, "internal/adapters/")) {
+		return fmt.Errorf("compose the Y Harness in internal/core and use product services in %s", path)
+	}
 	if !externalIntegrationTest && strings.HasPrefix(path, "internal/modules/accounting/") && strings.HasPrefix(name, "github.com/diasYuri/opera/internal/adapters/persistence/sqlite") {
 		return fmt.Errorf("accounting must write usage through its module contract (%s)", path)
 	}

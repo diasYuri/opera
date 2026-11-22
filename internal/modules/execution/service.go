@@ -24,7 +24,8 @@ type Service struct {
 	ReadApprovalFile                 ApprovalFileReader
 	ResponseFormat                   *ai.ResponseFormat
 	controlMu                        sync.Mutex
-	ToolGeneration                   string
+	ToolGenerationSource             func() string
+	reconfiguring                    bool
 	contexts                         map[string]context.Context
 	Records                          Records
 	Work                             *Work
@@ -447,7 +448,7 @@ func (s *Service) prepare(ctx context.Context, id string, request Request) (agen
 		if err != nil {
 			return agent.Snapshot{}, metadata, false, err
 		}
-		if metadata.ToolGeneration != "" && metadata.ToolGeneration != s.ToolGeneration {
+		if metadata.ToolGeneration != "" && metadata.ToolGeneration != s.toolGeneration() {
 			return agent.Snapshot{}, metadata, false, errors.New("tool generation differs from checkpoint; restore the original tool configuration before resume")
 		}
 		if metadata.Workspace != s.Workspace || metadata.Provider != s.Provider || metadata.Model != s.Model || metadata.HarnessVersion != HarnessVersion {
@@ -492,7 +493,7 @@ func (s *Service) prepare(ctx context.Context, id string, request Request) (agen
 	if err != nil {
 		return agent.Snapshot{}, Metadata{}, false, err
 	}
-	metadata := Metadata{ResponseFormat: s.ResponseFormat, Management: request.Management, ToolGeneration: s.ToolGeneration, SkillGeneration: skillGeneration, SkillActivations: skillActivations, Worker: request.Worker, ParentID: request.ParentID, RuntimeMode: mode.ID, RuntimeModeDigest: mode.Digest(), AgentProfile: profile.ID, ProfileDigest: profile.Digest(), ContextPaths: s.currentContextPaths(), InitialPrompt: request.Prompt, Workspace: s.Workspace, Provider: s.Provider, Model: s.Model, SessionID: request.SessionID, HarnessVersion: HarnessVersion}
+	metadata := Metadata{ResponseFormat: s.ResponseFormat, Management: request.Management, ToolGeneration: s.toolGeneration(), SkillGeneration: skillGeneration, SkillActivations: skillActivations, Worker: request.Worker, ParentID: request.ParentID, RuntimeMode: mode.ID, RuntimeModeDigest: mode.Digest(), AgentProfile: profile.ID, ProfileDigest: profile.Digest(), ContextPaths: s.currentContextPaths(), InitialPrompt: request.Prompt, Workspace: s.Workspace, Provider: s.Provider, Model: s.Model, SessionID: request.SessionID, HarnessVersion: HarnessVersion}
 	if metadata.SessionID == "" {
 		metadata.SessionID = id
 	}
@@ -586,4 +587,11 @@ func (s *Service) currentContextPaths() []string {
 		return s.ContextPathSource.Current()
 	}
 	return append([]string(nil), s.ContextPaths...)
+}
+
+func (s *Service) toolGeneration() string {
+	if s.ToolGenerationSource == nil {
+		return ""
+	}
+	return s.ToolGenerationSource()
 }

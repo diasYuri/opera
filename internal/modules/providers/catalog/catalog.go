@@ -73,6 +73,9 @@ type Entry struct {
 	Description           string
 	Factory               Factory
 	SearchFactory         SearchFactory
+	SearchAvailable       func(config.Resolved) bool
+	SearchName            string
+	SearchDescription     string
 	Login                 *LoginDescriptor
 	EnvironmentCredential func(func(string) string) string
 	FixedEndpoint         bool
@@ -126,6 +129,7 @@ func New(entries ...Entry) (*Catalog, error) {
 		if _, exists := items[entry.ID]; exists {
 			return nil, fmt.Errorf("duplicate provider %q", entry.ID)
 		}
+		entry.Login = cloneLoginDescriptor(entry.Login)
 		items[entry.ID] = entry
 	}
 	for _, entry := range items {
@@ -191,17 +195,51 @@ func (c *Catalog) Create(ctx context.Context, cfg config.Resolved, lookup func(c
 	return provider, nil
 }
 
+func (c *Catalog) Has(id string) bool {
+	if c == nil {
+		return false
+	}
+	_, ok := c.entries[id]
+	return ok
+}
+
+type SearchEntry struct {
+	ID, Name, Description string
+}
+
+// SearchEntries lists the native search adapters that this catalog can
+// construct. Availability in one configuration is checked separately.
+func (c *Catalog) SearchEntries() []SearchEntry {
+	var result []SearchEntry
+	for _, id := range c.IDs() {
+		entry := c.entries[id]
+		if entry.SearchFactory == nil {
+			continue
+		}
+		name := entry.SearchName
+		if name == "" {
+			name = entry.Name
+		}
+		result = append(result, SearchEntry{ID: id, Name: name, Description: entry.SearchDescription})
+	}
+	return result
+}
+
+func (c *Catalog) HasNativeSearch(id string, cfg config.Resolved) bool {
+	if c == nil {
+		return false
+	}
+	entry := c.entries[id]
+	return entry.SearchFactory != nil && (entry.SearchAvailable == nil || entry.SearchAvailable(cfg))
+}
+
 // SearchProvider returns a provider-owned web search capability for the
 // selected model provider. Authentication is resolved when a search executes.
 func (c *Catalog) SearchProvider(provider string, cfg config.Resolved, lookup func(context.Context, string) (string, error)) search.Provider {
-	if c == nil {
+	if !c.HasNativeSearch(provider, cfg) {
 		return nil
 	}
-	entry, ok := c.entries[provider]
-	if !ok || entry.SearchFactory == nil {
-		return nil
-	}
-	return entry.SearchFactory(cfg, lookup)
+	return c.entries[provider].SearchFactory(cfg, lookup)
 }
 
 // Entries returns provider selection metadata in stable ID order.
@@ -215,6 +253,7 @@ func (c *Catalog) Entries() []Entry {
 		entry := c.entries[id]
 		entry.Factory = nil
 		entry.SearchFactory = nil
+		entry.SearchAvailable = nil
 		entry.EnvironmentCredential = nil
 		entry.Login = cloneLoginDescriptor(entry.Login)
 		if entry.Login != nil {

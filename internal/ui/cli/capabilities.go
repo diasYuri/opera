@@ -200,7 +200,7 @@ func (a App) capabilities(command string, opts options, cfg config.Resolved, jso
 		return a.fail(2, fmt.Errorf("unknown %s action", command), jsonl)
 	}
 	if args[0] == "reload" {
-		probe, err := core.Open(ctx, cfg, core.Options{Inspection: true})
+		probe, err := core.Open(ctx, cfg, core.Options{Profile: core.ProfileInspection})
 		if err != nil {
 			return a.fail(1, err, jsonl)
 		}
@@ -210,7 +210,7 @@ func (a App) capabilities(command string, opts options, cfg config.Resolved, jso
 			return a.fail(1, err, jsonl)
 		}
 	}
-	runtime, err := core.Open(ctx, cfg, core.Options{Management: true, Offline: args[0] != "reload" && args[0] != "inspect", Secret: a.extensionSecret(cfg)})
+	runtime, err := core.Open(ctx, cfg, core.Options{Profile: core.ProfileHeadless, ProviderCatalog: a.ProviderCatalog, Credential: a.credentialLookup(cfg), Management: true, Offline: args[0] != "reload" && args[0] != "inspect", Secret: a.extensionSecret(cfg)})
 	if err != nil {
 		return a.fail(1, err, jsonl)
 	}

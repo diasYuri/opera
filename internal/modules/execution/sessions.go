@@ -447,14 +447,12 @@ func (p limitedSummarizer) Stream(ctx context.Context, request providers.StreamR
 }
 
 func (s *Service) CheckReconfiguration(ctx context.Context, exceptRun string) error {
-	if s.Active() {
-		s.activeMu.Lock()
-		count := len(s.active)
-		_, own := s.active[exceptRun]
-		s.activeMu.Unlock()
-		if count > 1 || !own {
-			return errors.New("reconfiguration requires an idle execution safe point")
-		}
+	s.activeMu.Lock()
+	count := len(s.active)
+	_, own := s.active[exceptRun]
+	s.activeMu.Unlock()
+	if count != 0 && (count > 1 || !own) {
+		return errors.New("reconfiguration requires an idle execution safe point")
 	}
 	documents, err := s.Records.List(ctx, "sessions")
 	if err != nil {

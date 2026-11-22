@@ -18,6 +18,7 @@ import (
 	"github.com/diasYuri/y/pkg/tools"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -25,7 +26,7 @@ import (
 
 type SecretLookup func(context.Context, string) (string, error)
 type Manager struct {
-	SafePoint      func(context.Context, string) error
+	safePoint      func(context.Context, string, func() error) error
 	Host           *extensionhost.Host
 	Registry       *tools.Registry
 	WASM           wasm.Manager
@@ -39,15 +40,21 @@ type Manager struct {
 	grants         map[string]map[wasm.Capability]bool
 }
 
-func New(ctx context.Context, cfg config.Resolved, registry *tools.Registry, secret SecretLookup, offline bool) (manager *Manager, err error) {
+func New(ctx context.Context, cfg config.Resolved, registry *tools.Registry, secret SecretLookup, offline bool) (*Manager, error) {
+	return NewWithSafePoint(ctx, cfg, registry, secret, offline, nil)
+}
+
+func NewWithSafePoint(ctx context.Context, cfg config.Resolved, registry *tools.Registry, secret SecretLookup, offline bool, safePoint func(context.Context, string, func() error) error) (manager *Manager, err error) {
 	settings, err := Load(cfg)
 	if err != nil {
 		return nil, err
 	}
-	m := &Manager{Host: extensionhost.NewHost(registry), Registry: registry, Settings: settings, Config: cfg, Secret: secret, Offline: offline}
+	m := &Manager{safePoint: safePoint, Host: extensionhost.NewHost(registry), Registry: registry, Settings: settings, Config: cfg, Secret: secret, Offline: offline}
 	defer func() {
 		if err != nil {
-			_ = m.Close(context.Background())
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			err = errors.Join(err, m.Close(cleanup))
 		}
 	}()
 	m.grants = make(map[string]map[wasm.Capability]bool)
@@ -111,7 +118,7 @@ func New(ctx context.Context, cfg config.Resolved, registry *tools.Registry, sec
 			if server.Consent != ServerDigest(server) {
 				return nil, fmt.Errorf("MCP %s configuration changed; approve enable again", server.Name)
 			}
-			converted, e := m.serverConfig(server)
+			converted, e := m.serverConfig(ctx, server)
 			if e != nil {
 				return nil, e
 			}
@@ -185,6 +192,13 @@ func New(ctx context.Context, cfg config.Resolved, registry *tools.Registry, sec
 	}
 	return m, nil
 }
+func (m *Manager) atSafePoint(ctx context.Context, exceptRun string, apply func() error) error {
+	if m.safePoint == nil {
+		return apply()
+	}
+	return m.safePoint(ctx, exceptRun, apply)
+}
+
 func (m *Manager) timeout() time.Duration {
 	timeout, err := time.ParseDuration(m.Config.String("limits.process_timeout"))
 	if err != nil {
@@ -205,7 +219,7 @@ func (m *Manager) Close(ctx context.Context) error {
 	}
 	return err
 }
-func (m *Manager) serverConfig(server Server) (mcp.ServerConfig, error) {
+func (m *Manager) serverConfig(ctx context.Context, server Server) (mcp.ServerConfig, error) {
 	out := mcp.ServerConfig{Name: server.Name, Transport: mcp.Transport(server.Transport), Command: server.Command, Args: append([]string(nil), server.Args...), Endpoint: server.Endpoint}
 	if server.Transport == "stdio" {
 		out.Env = map[string]string{}
@@ -218,7 +232,7 @@ func (m *Manager) serverConfig(server Server) (mcp.ServerConfig, error) {
 			if m.Secret == nil {
 				return out, errors.New("MCP credential resolver unavailable")
 			}
-			value, err := m.Secret(context.Background(), reference)
+			value, err := m.Secret(ctx, reference)
 			if err != nil {
 				return out, errors.New("MCP credential reference could not be resolved")
 			}
@@ -246,7 +260,7 @@ func (t tokenSource) Resolve(ctx context.Context, _ string) (string, error) {
 	}
 	return value, nil
 }
-func (m *Manager) Digest() string {
+func (m *Manager) digestLocked() string {
 	active := Settings{Version: 1, Memory: m.Settings.Memory}
 	for _, server := range m.Settings.MCP {
 		if server.Enabled {
@@ -260,6 +274,23 @@ func (m *Manager) Digest() string {
 	}
 	raw, _ := json.Marshal(active)
 	return fmt.Sprintf("%x", sha256.Sum256(raw))
+}
+
+func (m *Manager) Digest() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.digestLocked()
+}
+
+func (m *Manager) ToolGeneration() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.toolGenerationLocked(m.Registry.List())
+}
+
+func (m *Manager) toolGenerationLocked(descriptors []tools.ToolDescriptor) string {
+	raw, _ := json.Marshal(descriptors)
+	return fmt.Sprintf("%x", sha256.Sum256(append(raw, []byte(m.digestLocked())...)))
 }
 
 // VisualContributions returns the bounded UI declarations attached to loaded
@@ -299,13 +330,15 @@ func (m *Manager) invokeReadTool(ctx context.Context, extensionID, name string, 
 	if execution.IsWorkspaceMutation(name) || strings.HasPrefix(name, "wasm_") || strings.HasPrefix(name, "task_") || strings.HasPrefix(name, "subagent_") {
 		return wasm.HostToolInvokeResult{}, errors.New("WASM bridge supports classified read tools only")
 	}
-	descriptor, _, ok := m.Registry.Get(name)
-	if !ok || descriptor.Sensitive {
-		return wasm.HostToolInvokeResult{}, errors.New("WASM read tool is unavailable or sensitive")
-	}
 	view, ok := agent.RuntimeViewFromContext(ctx)
 	if !ok {
 		return wasm.HostToolInvokeResult{}, errors.New("WASM host calls require a durable runtime view")
+	}
+	classified := slices.ContainsFunc(view.Tools().List(), func(tool tools.ToolDescriptor) bool {
+		return tool.Name == name && !tool.Sensitive
+	})
+	if !classified {
+		return wasm.HostToolInvokeResult{}, errors.New("WASM read tool is unavailable or sensitive")
 	}
 	parent, ok := execution.ToolRequestFromContext(ctx)
 	if !ok {
@@ -361,18 +394,15 @@ func (m *Manager) AgentOptions() []agent.Option {
 // A stable, content-derived identity lets an explicitly reviewed approval survive
 // a CLI restart while the SDK still owns leases on the exact captured handlers.
 func (m *Manager) AcquireRuntimeView(ctx context.Context) (*agent.RuntimeView, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	view, err := m.Host.AcquireRuntimeView(ctx)
 	if err != nil {
 		return nil, err
 	}
 	info := view.Info()
-	descriptors, err := json.Marshal(m.Registry.List())
-	if err != nil {
-		_ = view.Close()
-		return nil, err
-	}
 	identity, _ := agent.RuntimeIdentityFromContext(ctx)
-	info.ID = fmt.Sprintf("opera:"+identity.RunID+":%x", sha256.Sum256(append(descriptors, []byte(m.Digest())...)))
+	info.ID = "opera:" + identity.RunID + ":" + m.toolGenerationLocked(view.Tools().List())
 	wrapped, err := agent.NewRuntimeView(info, view.Tools(), view.ContextResolver(), view.Hooks(), view.Close)
 	if err != nil {
 		_ = view.Close()

@@ -1,26 +1,26 @@
-// Package harness composes public Y services using Opera-owned factories.
+// Package core composes public Y services using Opera-owned factories.
 package core
 
 import (
 	"context"
 	"errors"
-	"os"
+	"fmt"
+	"time"
 
-	"github.com/diasYuri/opera/internal/adapters/approvals/filesystem"
-	"github.com/diasYuri/opera/internal/adapters/skills/filesystem"
 	"github.com/diasYuri/opera/internal/modules/configuration"
 	"github.com/diasYuri/opera/internal/modules/execution"
 	operaext "github.com/diasYuri/opera/internal/modules/extensions"
 	"github.com/diasYuri/opera/internal/modules/providers/catalog"
-	"github.com/diasYuri/opera/internal/modules/workspace"
 	"github.com/diasYuri/y/pkg/ai"
-	"github.com/diasYuri/y/pkg/component"
 	"github.com/diasYuri/y/pkg/providers"
 	yruntime "github.com/diasYuri/y/pkg/runtime"
 	"github.com/diasYuri/y/pkg/search"
 )
 
 type Options struct {
+	Profile           ProfileID
+	Catalog           *ComponentCatalog
+	Selections        map[ComponentSlot]ComponentID
 	ResponseFormat    *ai.ResponseFormat
 	Management        bool
 	Offline           bool
@@ -35,6 +35,7 @@ type Options struct {
 	ProviderCatalog   *providercatalog.Catalog
 	ToolPacks         []ToolPack
 	DisabledToolPacks []string
+	verifyThinking    bool
 }
 type Runtime struct {
 	Extensions *operaext.Manager
@@ -47,44 +48,19 @@ type Runtime struct {
 func (r *Runtime) Close(ctx context.Context) error { return r.Harness.Close(ctx) }
 
 func Open(ctx context.Context, cfg config.Resolved, opts Options) (*Runtime, error) {
-	if opts.ResponseFormat != nil {
-		if err := ai.ValidateResponseFormat(*opts.ResponseFormat); err != nil {
-			return nil, err
-		}
-	}
-	switch opts.Thinking {
-	case "", "off", "minimal", "low", "medium", "high", "xhigh", "max":
-	default:
-		return nil, errors.New("unsupported thinking level")
-	}
-	keys := newCompositionKeys()
-	guard := &execution.Guard{ReadApprovalFile: approvalfiles.Read, Workspace: cfg.Paths.Workspace, Mode: cfg.String("policy"), Queue: workspace.NewQueue()}
-	home, _ := os.UserHomeDir()
-	skillManager := skills.NewManager(cfg.Paths.Workspace, home)
-	// Copy the map before adding checkpoint-derived defaults.
-	values := map[string]config.Value{}
-	for key, value := range cfg.Values {
-		values[key] = value
-	}
-	cfg.Values = values
-	contextPaths := newContextPathState(opts.ContextPaths)
-	questions := execution.NewQuestionBroker()
-	builder := &compositionBuilder{cfg: cfg, opts: &opts, keys: keys, guard: guard, skillManager: skillManager, questions: questions, contextPaths: contextPaths}
-	definitions := []component.Definition{builder.storage(), builder.provider(), builder.tools(), builder.runner(), builder.application()}
-	if opts.Inspection {
-		definitions = append(definitions[:1], builder.inspection())
-	}
-	harness, err := yruntime.NewHarness(definitions...)
+	plan, err := ResolveComposition(cfg, opts)
 	if err != nil {
 		return nil, err
 	}
-	if err := harness.Start(ctx); err != nil {
-		return nil, err
+	if err := plan.harness.Start(ctx); err != nil {
+		return nil, fmt.Errorf("composition profile %q: %w", plan.ProfileID, err)
 	}
-	service, err := yruntime.Resolve(harness, keys.service)
+	result, err := plan.runtime()
 	if err != nil {
-		_ = harness.Close(context.Background())
-		return nil, err
+		// The caller may already be canceled. Y continues cleanup if this wait expires.
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		return nil, errors.Join(err, plan.harness.Close(cleanup))
 	}
-	return &Runtime{Extensions: builder.extensions, Harness: harness, Service: service, cfg: cfg, opts: opts}, nil
+	return result, nil
 }

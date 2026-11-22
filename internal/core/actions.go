@@ -2,11 +2,11 @@ package core
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/diasYuri/opera/internal/adapters/context/filesystem"
 	"github.com/diasYuri/opera/internal/modules/configuration"
@@ -36,11 +36,9 @@ func (r *Runtime) RunShell(ctx context.Context, command string) (string, error) 
 }
 
 func (r *Runtime) SetContextPaths(paths []string) {
-	r.opts.ContextPaths = append([]string(nil), paths...)
 	if source, ok := r.Service.ContextPathSource.(*contextPathState); ok {
 		source.Set(paths)
 	}
-	r.Service.ContextPaths = append([]string(nil), paths...)
 }
 func (r *Runtime) Command(ctx context.Context, text string) (string, error) {
 	parts := strings.Fields(text)
@@ -86,14 +84,9 @@ func (r *Runtime) Command(ctx context.Context, text string) (string, error) {
 		return string(raw), err
 	case "/extensions", "/mcp", "/memory":
 		if len(parts) > 1 && parts[0] == "/extensions" && parts[1] == "reload" {
-			if err := r.Service.CheckReconfiguration(ctx, ""); err != nil {
-				return "", err
-			}
 			if err := r.Extensions.Reload(ctx); err != nil {
 				return "", err
 			}
-			descriptors, _ := json.Marshal(r.Extensions.Registry.List())
-			r.Service.ToolGeneration = fmt.Sprintf("%x", sha256.Sum256(append(descriptors, []byte(r.Extensions.Digest())...)))
 		}
 		report, err := r.Extensions.Inspect(ctx)
 		if err != nil {
@@ -129,7 +122,7 @@ func (r *Runtime) Command(ctx context.Context, text string) (string, error) {
 	case "/settings":
 		return fmt.Sprintf("Provider: %s\nModel: %s\nThinking: %s\nPolicy: %s", r.Service.Provider, r.Service.Model, r.opts.Thinking, r.Service.Mode), nil
 	case "/context":
-		paths := append([]string(nil), r.opts.ContextPaths...)
+		paths := r.ContextPaths()
 		if len(parts) > 1 {
 			paths = append(paths, strings.TrimSpace(strings.TrimPrefix(text, "/context")))
 		}
@@ -144,12 +137,9 @@ func (r *Runtime) Command(ctx context.Context, text string) (string, error) {
 		}
 		return out.String(), nil
 	case "/model", "/thinking":
-		cfg := r.cfg
-		cfg.Values = map[string]config.Value{}
-		for k, v := range r.cfg.Values {
-			cfg.Values[k] = v
-		}
+		cfg := cloneConfig(r.cfg)
 		opts := r.opts
+		opts.ContextPaths = r.ContextPaths()
 		opts.ResumeID = ""
 		if parts[0] == "/model" {
 			if len(parts) == 1 {
@@ -160,6 +150,9 @@ func (r *Runtime) Command(ctx context.Context, text string) (string, error) {
 			}
 			cfg.Values["provider"] = config.Value{Value: parts[1], Source: "interactive"}
 			cfg.Values["model"] = config.Value{Value: parts[2], Source: "interactive"}
+			if opts.ProviderCatalog.FixedEndpoint(parts[1]) {
+				cfg.Values["base_url"] = config.Value{Value: "", Source: "interactive"}
+			}
 		} else {
 			if len(parts) != 2 {
 				return "", fmt.Errorf("usage: /thinking off|minimal|low|medium|high|xhigh|max")
@@ -171,34 +164,35 @@ func (r *Runtime) Command(ctx context.Context, text string) (string, error) {
 				return "", fmt.Errorf("unsupported thinking level")
 			}
 		}
-		if r.opts.ProviderFactory == nil && opts.Thinking != "" && opts.Thinking != "off" {
-			probe, err := providerFactory(ctx, cfg)
+		opts.verifyThinking = opts.ProviderFactory == nil
+		if err := r.Service.AtReconfigurationPoint(ctx, "", func() error {
+			next, err := Open(ctx, cfg, opts)
 			if err != nil {
-				return "", err
+				return err
 			}
-			supported := probe.Capabilities(cfg.String("model")).Reasoning
-			_ = probe.Close()
-			if !supported {
-				return "", fmt.Errorf("selected model does not advertise reasoning support")
+			previous := r.Harness
+			*r = *next
+			cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+			defer cancel()
+			if err := previous.Close(cleanup); err != nil {
+				return fmt.Errorf("selection applied; previous composition cleanup: %w", err)
 			}
-		}
-		if err := r.Close(ctx); err != nil {
+			return nil
+		}); err != nil {
 			return "", err
 		}
-		next, err := Open(ctx, cfg, opts)
-		if err != nil {
-			restored, restoreErr := Open(ctx, r.cfg, r.opts)
-			if restoreErr == nil {
-				*r = *restored
-			}
-			return "", err
-		}
-		*r = *next
 		return "Selection applied at idle safe point", nil
 	}
 	return "", fmt.Errorf("unknown command; use /help")
 }
 
 func (r *Runtime) ModelChoices(ctx context.Context) ([]string, error) {
-	return ModelChoices(ctx, r.cfg, r.opts.Credential)
+	return ModelChoices(ctx, r.cfg, r.opts.Credential, r.opts.ProviderCatalog)
+}
+
+func (r *Runtime) ContextPaths() []string {
+	if source := r.Service.ContextPathSource; source != nil {
+		return source.Current()
+	}
+	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"reflect"
 	"runtime"
 	"sort"
 	"strconv"
@@ -297,7 +298,7 @@ func (s *chatSession) AttachmentPreviews(ctx context.Context) ([]ui.AttachmentPr
 	root := s.cfg.Paths.Workspace
 	paths := append([]string(nil), s.opts.ContextPaths...)
 	if s.runtime != nil {
-		paths = append([]string(nil), s.runtime.Service.ContextPaths...)
+		paths = s.runtime.ContextPaths()
 	}
 	limit := min(s.cfg.Int("limits.attachment_bytes"), s.cfg.Int("limits.context_tokens")*4)
 	s.mu.Unlock()
@@ -403,7 +404,7 @@ func (s *chatSession) Settings() []ui.SettingItem {
 	}
 	contextPaths := append([]string(nil), s.opts.ContextPaths...)
 	if s.runtime != nil {
-		contextPaths = append([]string(nil), s.runtime.Service.ContextPaths...)
+		contextPaths = s.runtime.ContextPaths()
 	}
 	contextValue := "No additional files"
 	if len(contextPaths) > 0 {
@@ -442,14 +443,11 @@ func webSearchSelectionLabel(selection string) string {
 func (s *chatSession) WebSearchProviders() []ui.WebSearchProviderOption {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	current := ""
-	switch s.cfg.String("search.provider") {
-	case "brave":
-		current = "brave"
-	case "", "native":
-		current = s.cfg.String("provider")
+	catalog, err := s.providerCatalog()
+	if err != nil {
+		return nil
 	}
-	providers := config.WebSearchProviders()
+	providers, current := core.WebSearchChoices(s.cfg, catalog)
 	options := make([]ui.WebSearchProviderOption, 0, len(providers))
 	for _, provider := range providers {
 		options = append(options, ui.WebSearchProviderOption{ID: provider.ID, Name: provider.Name, Description: provider.Description, Current: provider.ID == current})
@@ -574,7 +572,7 @@ func (s *chatSession) SetSetting(ctx context.Context, key, value string) (string
 		}
 		paths := append([]string(nil), s.opts.ContextPaths...)
 		if s.runtime != nil {
-			paths = append([]string(nil), s.runtime.Service.ContextPaths...)
+			paths = s.runtime.ContextPaths()
 		}
 		root := s.cfg.Paths.Workspace
 		limit := min(s.cfg.Int("limits.attachment_bytes"), s.cfg.Int("limits.context_tokens")*4)
@@ -635,7 +633,7 @@ func (s *chatSession) setWebSearchPreference(ctx context.Context, key, value str
 		if err != nil {
 			return "", err
 		}
-		if catalog.SearchProvider(cfg.String("provider"), cfg, s.app.credentialLookup(cfg)) == nil {
+		if !catalog.HasNativeSearch(cfg.String("provider"), cfg) {
 			return "", fmt.Errorf("hosted web search is unavailable for provider %q", cfg.String("provider"))
 		}
 	}
@@ -668,7 +666,7 @@ func (s *chatSession) inspectionService(ctx context.Context) (*execution.Service
 	cfg := s.cfg
 	cfg.Values = cloneValues(s.cfg.Values)
 	s.mu.Unlock()
-	runtime, err := core.Open(ctx, cfg, core.Options{Inspection: true})
+	runtime, err := core.Open(ctx, cfg, core.Options{Profile: core.ProfileInspection})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -895,14 +893,11 @@ func (s *chatSession) Start(ctx context.Context, request execution.Request) *exe
 			if metadata.Workspace != s.cfg.Paths.Workspace {
 				return failedExecution(errors.New("checkpoint belongs to another workspace"))
 			}
-			if s.runtime.Service.Provider != metadata.Provider || s.runtime.Service.Model != metadata.Model {
+			if s.runtime.Service.Provider != metadata.Provider || s.runtime.Service.Model != metadata.Model ||
+				!reflect.DeepEqual(s.runtime.Service.ResponseFormat, metadata.ResponseFormat) {
 				if s.runtime.Service.Active() {
 					return failedExecution(errors.New("cannot switch models while an execution is active"))
 				}
-				if err := s.runtime.Close(ctx); err != nil {
-					return failedExecution(err)
-				}
-				s.runtime = nil
 				if err := s.openResumeRuntime(ctx, request.ID); err != nil {
 					return failedExecution(err)
 				}
@@ -941,8 +936,9 @@ func (s *chatSession) openResumeRuntime(ctx context.Context, id string) error {
 	cfg.Values["model"] = config.Value{Value: "", Source: "checkpoint"}
 	opts := s.opts
 	opts.ResumeID = id
-	// The checkpoint's context is authoritative when recovering that run.
+	// The checkpoint's attachments and response format are authoritative for chat recovery.
 	opts.ContextPaths = nil
+	opts.ResponseFormat = nil
 	runtime, err := core.Open(ctx, cfg, opts)
 	if err != nil {
 		return err
@@ -950,8 +946,16 @@ func (s *chatSession) openResumeRuntime(ctx context.Context, id string) error {
 	_, provider, model := runtime.SessionInfo()
 	s.cfg.Values["provider"] = config.Value{Value: provider, Source: "checkpoint"}
 	s.cfg.Values["model"] = config.Value{Value: model, Source: "checkpoint"}
-	s.opts.ContextPaths = append([]string(nil), runtime.Service.ContextPaths...)
+	s.opts.ContextPaths = runtime.ContextPaths()
+	previous := s.runtime
 	s.runtime = runtime
+	if previous != nil {
+		cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if err := previous.Close(cleanup); err != nil {
+			return fmt.Errorf("checkpoint runtime opened; previous composition cleanup: %w", err)
+		}
+	}
 	return nil
 }
 func (s *chatSession) FollowUp(id, text string) error {
@@ -1009,6 +1013,9 @@ func (s *chatSession) Command(ctx context.Context, text string) (string, error) 
 		providers, err := s.providerCatalog()
 		if err != nil {
 			return "", err
+		}
+		if !providers.Has(parts[1]) {
+			return "", fmt.Errorf("provider %q is not registered", parts[1])
 		}
 		if providers.FixedEndpoint(parts[1]) {
 			candidate.Values["base_url"] = config.Value{Value: "", Source: "interactive"}

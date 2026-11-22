@@ -34,33 +34,12 @@ func configuredProvider(ctx context.Context, cfg config.Resolved, lookup func(co
 	return catalog.Create(ctx, cfg, lookup)
 }
 
-func providerFactory(ctx context.Context, cfg config.Resolved) (providers.Provider, error) {
-	return configuredProvider(ctx, cfg, nil)
-}
-
 func Models(ctx context.Context, cfg config.Resolved, credentials ...func(context.Context, string) (string, error)) (any, error) {
 	var lookup func(context.Context, string) (string, error)
 	if len(credentials) > 0 {
 		lookup = credentials[0]
 	}
-	provider, err := configuredProvider(ctx, cfg, lookup)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = provider.Close() }()
-	models, err := provider.Models(ctx)
-	if err != nil {
-		return nil, err
-	}
-	type entry struct {
-		Model        any                    `json:"model"`
-		Capabilities providers.Capabilities `json:"capabilities"`
-	}
-	out := make([]entry, 0, len(models))
-	for _, model := range models {
-		out = append(out, entry{model, provider.Capabilities(model.ID)})
-	}
-	return out, nil
+	return ModelsWithCatalog(ctx, cfg, lookup, nil)
 }
 
 // ModelsWithCatalog lists models from the same catalog used for execution.

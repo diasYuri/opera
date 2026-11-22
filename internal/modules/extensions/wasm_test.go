@@ -4,10 +4,13 @@ package extensions
 
 import (
 	"context"
+	"errors"
+	"github.com/diasYuri/y/pkg/component"
 	"github.com/diasYuri/y/pkg/extensions/wasm/wasmtest"
 	"github.com/diasYuri/y/pkg/tools"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -115,5 +118,64 @@ func TestWASMReloadPinsOldGenerationAndRollsBackInvalidCandidate(t *testing.T) {
 	}
 	if _, _, ok := reg.Get("wasm_fixture_echo_echo"); ok {
 		t.Fatal("failed candidate leaked tool")
+	}
+}
+
+func TestWASMReloadKeepsCommittedIdentityWhileOldViewDrains(t *testing.T) {
+	ctx := context.Background()
+	cfg := testConfig(t)
+	module := Module{ID: "fixture.echo", Directory: wasmFixture(t), Enabled: true}
+	var err error
+	module.Consent, err = ModuleDigest(ctx, module)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings := Settings{Version: 1, WASM: []Module{module}}
+	if err := Save(cfg, settings); err != nil {
+		t.Fatal(err)
+	}
+	registry := tools.NewRegistry()
+	defer func() { _ = registry.Close(ctx) }()
+	m, err := New(ctx, cfg, registry, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = m.Close(ctx) }()
+	old, err := m.AcquireRuntimeView(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = old.Close() }()
+	generation := m.ToolGeneration()
+	if !strings.HasSuffix(old.Info().ID, generation) {
+		t.Fatal("runtime view and checkpoint identity disagree")
+	}
+	settings.WASM[0].Enabled = false
+	if err := Save(cfg, settings); err != nil {
+		t.Fatal(err)
+	}
+	wait, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	err = m.Reload(wait)
+	var transition *component.ReconcileError
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.As(err, &transition) || !transition.Committed {
+		t.Fatalf("expected a committed reconciliation waiting for a lease, got %v", err)
+	}
+	current, err := m.AcquireRuntimeView(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = current.Close() }()
+	if m.ToolGeneration() == generation || !strings.HasSuffix(current.Info().ID, m.ToolGeneration()) ||
+		current.Info().Generation == old.Info().Generation {
+		t.Fatal("published view regressed to old settings after a committed drain deadline")
+	}
+	for _, tool := range current.Tools().List() {
+		if tool.Name == "wasm_fixture_echo_echo" {
+			t.Fatal("new view still advertises the retired tool")
+		}
+	}
+	if _, err := old.Tools().Handle(ctx, tools.ToolRequest{ID: "old", Name: "wasm_fixture_echo_echo", Arguments: []byte(`{}`)}); err != nil {
+		t.Fatalf("retired view lost its pinned handler: %v", err)
 	}
 }

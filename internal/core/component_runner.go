@@ -15,11 +15,17 @@ import (
 )
 
 func (b *compositionBuilder) runner() component.Definition {
-	cfg, opts := b.cfg, b.opts
-	contextPaths := b.contextPaths
-	guard := b.guard
-
-	return componentDefinition("runner", []component.ServiceRef{component.Reference(b.keys.runner)}, []component.ServiceRef{component.Reference(yruntime.ProviderKey), component.Reference(yruntime.ToolRegistryKey), component.Reference(b.keys.store), component.Reference(b.keys.work), component.Reference(b.keys.extensions)}, func(_ context.Context, scope *component.Scope) error {
+	return componentDefinition("runner", "durable-runner", []component.ServiceRef{component.Reference(b.keys.runner)}, []component.ServiceRef{component.Reference(b.keys.settings), component.Reference(yruntime.ProviderKey), component.Reference(yruntime.ToolRegistryKey), component.Reference(b.keys.store), component.Reference(b.keys.state), component.Reference(b.keys.extensions)}, func(ctx context.Context, scope *component.Scope) error {
+		settings, err := component.Require(scope, b.keys.settings)
+		if err != nil {
+			return err
+		}
+		cfg, opts := settings.cfg, settings.opts
+		state, err := component.Require(scope, b.keys.state)
+		if err != nil {
+			return err
+		}
+		contextPaths, guard, work := state.paths, state.service.Guard, state.service.Work
 		provider, err := component.Require(scope, yruntime.ProviderKey)
 		if err != nil {
 			return err
@@ -33,10 +39,6 @@ func (b *compositionBuilder) runner() component.Definition {
 			return err
 		}
 		store, err := component.Require(scope, b.keys.store)
-		if err != nil {
-			return err
-		}
-		work, err := component.Require(scope, b.keys.work)
 		if err != nil {
 			return err
 		}
@@ -124,7 +126,7 @@ func (b *compositionBuilder) runner() component.Definition {
 		}
 		runner := agent.NewAgentRunner(provider, registry, options...)
 		if err := scope.Track(runner.Close); err != nil {
-			return err
+			return errors.Join(err, runner.Close(context.WithoutCancel(ctx)))
 		}
 		return component.Provide(scope, b.keys.runner, runner)
 	})

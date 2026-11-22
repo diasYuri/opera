@@ -13,7 +13,7 @@ import (
 
 func (a App) sessions(opts options, cfg config.Resolved, jsonl bool) (code int) {
 	ctx := context.Background()
-	runtime, err := core.Open(ctx, cfg, core.Options{Inspection: true})
+	runtime, err := core.Open(ctx, cfg, core.Options{Profile: core.ProfileInspection})
 	if err != nil {
 		return a.fail(1, err, jsonl)
 	}
@@ -103,7 +103,7 @@ func (a App) compact(opts options, cfg config.Resolved, jsonl bool) (code int) {
 		return a.fail(2, errors.New("usage: opera compact <run-id>"), jsonl)
 	}
 	ctx := context.Background()
-	runtime, err := core.Open(ctx, cfg, core.Options{ProviderCatalog: a.ProviderCatalog, ResumeID: opts.args[1], Credential: a.credentialLookup(cfg)})
+	runtime, err := core.Open(ctx, cfg, core.Options{Profile: core.ProfileHeadless, ProviderCatalog: a.ProviderCatalog, ResumeID: opts.args[1], Credential: a.credentialLookup(cfg)})
 	if err != nil {
 		return a.fail(1, err, jsonl)
 	}

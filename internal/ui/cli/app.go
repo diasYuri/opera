@@ -5,6 +5,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"github.com/diasYuri/opera/internal/core"
 	"io"
 	"os"
 	"os/exec"
@@ -18,7 +19,6 @@ import (
 	"github.com/diasYuri/opera/internal/adapters/credentials"
 	"github.com/diasYuri/opera/internal/adapters/platform"
 	"github.com/diasYuri/opera/internal/modules/configuration"
-	"github.com/diasYuri/opera/internal/modules/diagnostics"
 	"github.com/diasYuri/opera/internal/modules/execution"
 	"github.com/diasYuri/opera/internal/modules/providers/catalog"
 	"github.com/diasYuri/opera/internal/ui/cli/output"
@@ -93,6 +93,12 @@ func (a App) Run(args []string) int {
 		return a.fail(ExitUsage, err, a.jsonRequested(opts))
 	}
 	jsonl := cfg.String("output.format") == "jsonl"
+	if a.ProviderCatalog == nil {
+		a.ProviderCatalog, err = core.DefaultCatalog(cfg.CustomProviders...)
+		if err != nil {
+			return a.fail(ExitUsage, err, jsonl)
+		}
+	}
 	switch command {
 	case "tools", "mcp", "extensions", "memory":
 		return a.capabilities(command, opts, cfg, jsonl)
@@ -217,36 +223,6 @@ func (a App) config(args []string, cfg config.Resolved, jsonl bool) int {
 		return a.writeText(fmt.Sprintf("%v (%s)\n", value.Value, value.Source))
 	}
 	return a.fail(ExitUsage, errors.New("usage: opera config [show|paths|schema|get <key>]"), jsonl)
-}
-
-func (a App) doctor(cfg config.Resolved, jsonl bool) int {
-	report := diagnostics.Collect(cfg, a.LookPath)
-	code := ExitOK
-	for _, check := range report.Checks {
-		if check.Status == "error" {
-			code = ExitFailure
-		}
-	}
-	if jsonl {
-		if result := a.emit("doctor.report", report); result != ExitOK {
-			return result
-		}
-		return code
-	}
-	if _, err := fmt.Fprintf(a.Out, "Opera foundation diagnostics\nGo: %s; Y SDK: %s; credentials: %s\n", report.Go, report.SDK, report.CredentialStore); err != nil {
-		return ExitFailure
-	}
-	for _, check := range report.Checks {
-		if _, err := fmt.Fprintf(a.Out, "[%s] %s: %s\n", check.Status, check.Name, check.Detail); err != nil {
-			return ExitFailure
-		}
-		if check.Fallback != "" {
-			if _, err := fmt.Fprintln(a.Out, "  "+check.Fallback); err != nil {
-				return ExitFailure
-			}
-		}
-	}
-	return code
 }
 
 func (a App) jsonRequested(opts options) bool {

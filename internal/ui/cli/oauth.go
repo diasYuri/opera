@@ -85,7 +85,7 @@ func (a App) credentialLookup(cfg config.Resolved) func(context.Context, string)
 		}
 		// Provider environment conventions are resolved by composition so the
 		// command-line package remains unaware of provider-specific key names.
-		key, err := core.EnvironmentAPIKey(ctx, provider, func(name string) string { value, _ := a.Env(name); return value })
+		key, err := core.EnvironmentAPIKeyWithCatalog(ctx, provider, func(name string) string { value, _ := a.Env(name); return value }, a.ProviderCatalog)
 		if err != nil || key != "" {
 			return key, err
 		}

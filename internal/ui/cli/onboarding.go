@@ -17,9 +17,13 @@ func (a App) onboard(ctx context.Context, cfg config.Resolved) (config.Resolved,
 	if provider == "" {
 		provider = "openai"
 	}
-	providerCatalog, err := core.DefaultCatalog(cfg.CustomProviders...)
-	if err != nil {
-		return cfg, err
+	providerCatalog := a.ProviderCatalog
+	if providerCatalog == nil {
+		var err error
+		providerCatalog, err = core.DefaultCatalog(cfg.CustomProviders...)
+		if err != nil {
+			return cfg, err
+		}
 	}
 	providerOptions := make([]huh.Option[string], 0, len(providerCatalog.Entries()))
 	for _, entry := range providerCatalog.Entries() {

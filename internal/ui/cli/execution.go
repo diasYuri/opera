@@ -75,6 +75,7 @@ func (a App) execution(command string, opts options, cfg config.Resolved, jsonl 
 	if command == "chat" && !jsonl {
 		return a.interactiveChat(ctx, cfg, harnessOpts, request)
 	}
+	harnessOpts.Profile = core.ProfileHeadless
 	runtime, err := core.Open(ctx, cfg, harnessOpts)
 	if err != nil {
 		return a.fail(1, err, jsonl)

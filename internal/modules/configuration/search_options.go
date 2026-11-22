@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-type WebSearchProviderOption struct {
-	ID, Name, Description string
-}
-
 type WebSearchOption struct {
 	Key, Label, Description string
 	InputKind, ValueKind    string
@@ -27,15 +23,9 @@ type WebSearchDefaults struct {
 	MaxResults      int
 }
 
-var webSearchProviders = []WebSearchProviderOption{
-	{ID: "openai-subscription", Name: "OpenAI · Codex", Description: "Hosted web search using the signed-in ChatGPT account"},
-	{ID: "anthropic", Name: "Anthropic · Claude", Description: "Hosted web search using the selected Claude model and account"},
-	{ID: "brave", Name: "Brave Search", Description: "Brave Search API; requires a Brave Search API key"},
-}
-
-func WebSearchProviders() []WebSearchProviderOption {
-	return append([]WebSearchProviderOption(nil), webSearchProviders...)
-}
+// These IDs own persisted option keys. Discover installed search backends
+// through the composition catalog.
+var searchOptionProviderIDs = [...]string{"openai-subscription", "anthropic", "brave"}
 
 func WebSearchOptions(providerID string) []WebSearchOption {
 	common := []WebSearchOption{
@@ -69,8 +59,8 @@ func WebSearchOptions(providerID string) []WebSearchOption {
 
 func searchOptionFields() []Field {
 	var fields []Field
-	for _, provider := range webSearchProviders {
-		for _, option := range WebSearchOptions(provider.ID) {
+	for _, id := range searchOptionProviderIDs {
+		for _, option := range WebSearchOptions(id) {
 			fields = append(fields, Field{Key: option.Key, Kind: option.ValueKind, Default: option.Default, Choices: option.Choices, Min: option.Min, Max: option.Max})
 		}
 	}
@@ -81,8 +71,8 @@ func isWebSearchPreference(key string) bool {
 	if key == "search.provider" {
 		return true
 	}
-	for _, provider := range webSearchProviders {
-		for _, option := range WebSearchOptions(provider.ID) {
+	for _, id := range searchOptionProviderIDs {
+		for _, option := range WebSearchOptions(id) {
 			if option.Key == key {
 				return true
 			}

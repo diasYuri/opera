@@ -11,6 +11,9 @@ func (s *Service) register(id string, cancel context.CancelFunc, ctx context.Con
 	if s.closed {
 		return errors.New("execution service is closed")
 	}
+	if s.reconfiguring {
+		return errors.New("execution service is applying a composition change")
+	}
 	if s.active == nil {
 		s.active = map[string]context.CancelFunc{}
 	}
@@ -61,4 +64,27 @@ func (s *Service) Active() bool {
 	s.activeMu.Lock()
 	defer s.activeMu.Unlock()
 	return len(s.active) > 0
+}
+
+// AtReconfigurationPoint prevents new executions from entering between the
+// persisted safe-point check and a change. A management tool can apply its
+// change from the sole active run identified by exceptRun.
+func (s *Service) AtReconfigurationPoint(ctx context.Context, exceptRun string, apply func() error) error {
+	s.activeMu.Lock()
+	_, own := s.active[exceptRun]
+	if s.closed || s.reconfiguring || len(s.active) > 1 || (len(s.active) == 1 && !own) {
+		s.activeMu.Unlock()
+		return errors.New("reconfiguration requires an idle execution safe point")
+	}
+	s.reconfiguring = true
+	s.activeMu.Unlock()
+	defer func() {
+		s.activeMu.Lock()
+		s.reconfiguring = false
+		s.activeMu.Unlock()
+	}()
+	if err := s.CheckReconfiguration(ctx, exceptRun); err != nil {
+		return err
+	}
+	return apply()
 }

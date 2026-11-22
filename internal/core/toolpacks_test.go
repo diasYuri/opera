@@ -67,3 +67,11 @@ func TestWebSearchToolPackRegistersAuditedCitationTool(t *testing.T) {
 		t.Fatalf("search call/response = %d, %#v", provider.calls, response)
 	}
 }
+
+func registerToolPacks(ctx context.Context, registry *tools.Registry, inputs ToolPackContext, custom []ToolPack, disabled []string) error {
+	selection, err := selectToolPacks(custom, disabled)
+	if err != nil {
+		return err
+	}
+	return installToolPacks(ctx, registry, inputs, selection)
+}

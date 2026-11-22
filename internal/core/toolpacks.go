@@ -61,30 +61,37 @@ func defaultToolPacks() []ToolPack {
 	}
 }
 
-func registerToolPacks(ctx context.Context, registry *tools.Registry, context ToolPackContext, custom []ToolPack, disabled []string) error {
+func selectToolPacks(custom []ToolPack, disabled []string) ([]ToolPack, error) {
 	all := append(defaultToolPacks(), custom...)
 	selected := make(map[string]ToolPack, len(all))
 	for _, pack := range all {
 		if pack.ID == "" || pack.Register == nil {
-			return errors.New("tool pack requires ID and registration function")
+			return nil, errors.New("tool pack requires ID and registration function")
 		}
 		if _, exists := selected[pack.ID]; exists {
-			return fmt.Errorf("duplicate tool pack %q", pack.ID)
+			return nil, fmt.Errorf("duplicate tool pack %q", pack.ID)
 		}
 		selected[pack.ID] = pack
 	}
 	for _, id := range disabled {
 		if _, ok := selected[id]; !ok {
-			return fmt.Errorf("tool pack %q is not registered", id)
+			return nil, fmt.Errorf("tool pack %q is not registered", id)
 		}
 		delete(selected, id)
 	}
+	packs := make([]ToolPack, 0, len(selected))
 	for _, pack := range all {
 		if _, ok := selected[pack.ID]; ok {
-			if err := pack.Register(ctx, registry, context); err != nil {
-				return fmt.Errorf("register tool pack %q: %w", pack.ID, err)
-			}
-			delete(selected, pack.ID)
+			packs = append(packs, pack)
+		}
+	}
+	return packs, nil
+}
+
+func installToolPacks(ctx context.Context, registry *tools.Registry, inputs ToolPackContext, packs []ToolPack) error {
+	for _, pack := range packs {
+		if err := pack.Register(ctx, registry, inputs); err != nil {
+			return fmt.Errorf("register tool pack %q: %w", pack.ID, err)
 		}
 	}
 	return nil

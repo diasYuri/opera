@@ -59,10 +59,14 @@ func (s *chatSession) apiKeyLogin(ctx context.Context, cfg config.Resolved, prov
 }
 
 func (s *chatSession) environmentAPIKey(ctx context.Context, provider string) (string, error) {
-	return core.EnvironmentAPIKey(ctx, provider, func(key string) string {
+	catalog, err := s.providerCatalog()
+	if err != nil {
+		return "", err
+	}
+	return core.EnvironmentAPIKeyWithCatalog(ctx, provider, func(key string) string {
 		value, _ := s.app.Env(key)
 		return value
-	})
+	}, catalog)
 }
 
 func promptLoginValue(ctx context.Context, notify func(execution.LoginNotice) error, prompt execution.LoginPrompt) (string, error) {
