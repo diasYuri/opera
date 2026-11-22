@@ -121,13 +121,15 @@ func TestCtrlCCancelsExecutionAndWaitsForCancelledResult(t *testing.T) {
 
 type navigationTestExecutor struct {
 	terminalExecutor
-	summary       SessionSummary
-	readID        string
-	readVersion   uint64
-	branchID      string
-	branchVersion uint64
-	settingKey    string
-	settingValue  string
+	summary             SessionSummary
+	readID              string
+	readVersion         uint64
+	branchID            string
+	branchVersion       uint64
+	settingKey          string
+	settingValue        string
+	webSearchAuthOption WebSearchAuthOption
+	webSearchAuthCalled bool
 }
 
 func (e *navigationTestExecutor) SessionChoices(context.Context) ([]SessionSummary, error) {
@@ -150,13 +152,24 @@ func (e *navigationTestExecutor) Settings() []SettingItem {
 	return []SettingItem{{Key: "thinking", Value: "medium", Source: "workspace", Scope: "workspace", Description: "Reasoning level"}}
 }
 func (e *navigationTestExecutor) WebSearchProviders() []WebSearchProviderOption {
-	return []WebSearchProviderOption{{ID: "brave", Name: "Brave Search", Description: "Requires an API key", Current: true}}
+	return []WebSearchProviderOption{{ID: "brave", Name: "Brave Search", Description: "Requires an API key", Current: true, AuthOptions: []WebSearchAuthOption{{SearchProviderID: "brave", CredentialProviderID: "brave-search", MethodID: "api-key", Kind: "api-key", Name: "Brave Search API key", Description: "Set a key"}}}}
 }
 func (e *navigationTestExecutor) WebSearchSettings(provider string) []SettingItem {
 	if provider != "brave" {
 		return nil
 	}
 	return []SettingItem{{Key: "search.options.brave.safe_search", Label: "Safe search", Value: "", DisplayValue: "Provider default", InputKind: "select", Choices: []string{"", "off", "moderate", "strict"}, Source: "default", Scope: "user workspace"}}
+}
+func (e *navigationTestExecutor) WebSearchAuthOptions(provider string) []WebSearchAuthOption {
+	if provider != "brave" {
+		return nil
+	}
+	return e.WebSearchProviders()[0].AuthOptions
+}
+func (e *navigationTestExecutor) LoginWebSearch(_ context.Context, option WebSearchAuthOption, _ func(execution.LoginNotice) error) error {
+	e.webSearchAuthOption = option
+	e.webSearchAuthCalled = true
+	return nil
 }
 func (e *navigationTestExecutor) SetSetting(_ context.Context, key, value string) (string, error) {
 	e.settingKey, e.settingValue = key, value
@@ -180,14 +193,48 @@ func TestSettingsWebSearchProviderOptionsNavigation(t *testing.T) {
 	m.overlay.selector.Select(0)
 	updated, _ = m.selectCurrent()
 	m = updated.(model)
-	if m.overlay.selectionKind != "web-search-provider-options" {
-		t.Fatalf("provider options menu kind = %q", m.overlay.selectionKind)
+	if m.overlay.selectionKind != "web-search-provider" {
+		t.Fatalf("provider menu kind = %q", m.overlay.selectionKind)
+	}
+	m.overlay.selector.Select(1)
+	updated, _ = m.selectCurrent()
+	m = updated.(model)
+	if m.overlay.selectionKind != "web-search-config-options" {
+		t.Fatalf("config options menu kind = %q", m.overlay.selectionKind)
 	}
 	m.overlay.selector.Select(0)
 	updated, command := m.selectCurrent()
 	m = updated.(model)
 	if command == nil || m.formKind != "search-option" || m.formKey != "search.options.brave.safe_search" {
 		t.Fatalf("provider config option did not open an editor: kind=%q key=%q command=%v", m.formKind, m.formKey, command != nil)
+	}
+}
+
+func TestSettingsWebSearchAuthenticationNavigation(t *testing.T) {
+	ctx := context.Background()
+	e := &navigationTestExecutor{}
+	m := newModel(ctx, e, execution.Request{}, true)
+	m.openWebSearchMenu(SettingItem{Key: "web-search", Value: "brave", DisplayValue: "Brave Search"})
+	m.overlay.selector.Select(1)
+	updated, _ := m.selectCurrent()
+	m = updated.(model)
+	m.overlay.selector.Select(0)
+	updated, _ = m.selectCurrent()
+	m = updated.(model)
+	if m.overlay.selectionKind != "web-search-provider" {
+		t.Fatalf("provider menu kind = %q", m.overlay.selectionKind)
+	}
+	m.overlay.selector.Select(0)
+	updated, _ = m.selectCurrent()
+	m = updated.(model)
+	if m.overlay.selectionKind != "web-search-auth-options" {
+		t.Fatalf("authentication menu kind = %q", m.overlay.selectionKind)
+	}
+	m.overlay.selector.Select(0)
+	updated, command := m.selectCurrent()
+	m = updated.(model)
+	if command == nil || m.login == nil || !m.login.searchOnly || m.login.name != "Brave Search API key" {
+		t.Fatalf("web search auth did not start an independent login flow: flow=%#v command=%v", m.login, command != nil)
 	}
 }
 

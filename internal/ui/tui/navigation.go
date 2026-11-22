@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/list"
+	"github.com/diasYuri/opera/internal/modules/execution"
 )
 
 // SessionSummary is the durable identity and preview shown by the session and
@@ -55,11 +56,19 @@ type SettingsManager interface {
 type WebSearchSettingsManager interface {
 	WebSearchProviders() []WebSearchProviderOption
 	WebSearchSettings(string) []SettingItem
+	WebSearchAuthOptions(string) []WebSearchAuthOption
+	LoginWebSearch(context.Context, WebSearchAuthOption, func(execution.LoginNotice) error) error
 }
 
 type WebSearchProviderOption struct {
 	ID, Name, Description string
 	Current               bool
+	AuthOptions           []WebSearchAuthOption
+}
+
+type WebSearchAuthOption struct {
+	SearchProviderID, CredentialProviderID string
+	MethodID, Kind, Name, Description      string
 }
 
 type ProviderOption struct {
@@ -181,6 +190,27 @@ func (c webSearchProviderChoice) FilterValue() string {
 	return c.ID + " " + c.Name + " " + c.WebSearchProviderOption.Description
 }
 
+type webSearchProviderAction struct {
+	provider WebSearchProviderOption
+	key      string
+	title    string
+	detail   string
+}
+
+func (c webSearchProviderAction) Title() string       { return safeText(c.title) }
+func (c webSearchProviderAction) Description() string { return safeText(c.detail) }
+func (c webSearchProviderAction) FilterValue() string {
+	return c.provider.ID + " " + c.key + " " + c.title + " " + c.detail
+}
+
+type webSearchAuthChoice struct{ WebSearchAuthOption }
+
+func (c webSearchAuthChoice) Title() string       { return safeText(c.Name) }
+func (c webSearchAuthChoice) Description() string { return safeText(c.WebSearchAuthOption.Description) }
+func (c webSearchAuthChoice) FilterValue() string {
+	return c.Name + " " + c.WebSearchAuthOption.Description
+}
+
 type webSearchOptionChoice struct{ settingChoice }
 
 type themeChoice struct {
@@ -240,6 +270,8 @@ var _ list.Item = checkpointChoice{}
 var _ list.Item = sessionActionChoice{}
 var _ list.Item = settingChoice{}
 var _ list.Item = webSearchProviderChoice{}
+var _ list.Item = webSearchProviderAction{}
+var _ list.Item = webSearchAuthChoice{}
 var _ list.Item = webSearchOptionChoice{}
 var _ list.Item = themeChoice{}
 var _ list.Item = providerChoice{}

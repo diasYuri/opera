@@ -19,10 +19,11 @@ func (c loginChoice) Description() string { return safeText(c.LoginProvider.Desc
 func (c loginChoice) FilterValue() string { return c.Name + " " + c.LoginProvider.Description }
 
 type loginFlow struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	events chan loginEvent
-	name   string
+	ctx        context.Context
+	cancel     context.CancelFunc
+	events     chan loginEvent
+	name       string
+	searchOnly bool
 }
 type loginEvent struct {
 	flow   *loginFlow
@@ -76,17 +77,34 @@ func (m *model) beginLogin(provider loginChoice) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	return m.startLoginFlow(provider.Name, true, func(ctx context.Context, notify func(execution.LoginNotice) error) error {
+		return auth.Login(ctx, provider.ID, notify)
+	})
+}
+
+func (m *model) beginWebSearchLogin(option WebSearchAuthOption) tea.Cmd {
+	manager, ok := m.service.(WebSearchSettingsManager)
+	if !ok {
+		m.status = "Web search authentication is unavailable in this chat"
+		return nil
+	}
+	return m.startLoginFlow(option.Name, false, func(ctx context.Context, notify func(execution.LoginNotice) error) error {
+		return manager.LoginWebSearch(ctx, option, notify)
+	})
+}
+
+func (m *model) startLoginFlow(name string, chooseModel bool, run func(context.Context, func(execution.LoginNotice) error) error) tea.Cmd {
 	ctx, cancel := context.WithCancel(m.ctx)
-	flow := &loginFlow{ctx: ctx, cancel: cancel, events: make(chan loginEvent, 1), name: provider.Name}
+	flow := &loginFlow{ctx: ctx, cancel: cancel, events: make(chan loginEvent, 1), name: name, searchOnly: !chooseModel}
 	m.login = flow
 	m.overlay.selecting = false
 	m.actionPending = true
 	m.composer.editor.Blur()
-	m.status = "Connecting to " + provider.Name + "…"
+	m.status = "Connecting to " + name + "…"
 	m.activity.Start()
 	work := func() tea.Msg {
 		defer close(flow.events)
-		err := auth.Login(ctx, provider.ID, func(notice execution.LoginNotice) error {
+		err := run(ctx, func(notice execution.LoginNotice) error {
 			select {
 			case flow.events <- loginEvent{flow: flow, notice: notice}:
 				return nil
@@ -174,6 +192,10 @@ func (m model) updateLogin(event loginEvent) (tea.Model, tea.Cmd) {
 	}
 	m.refreshContext()
 	m.code = 0
+	if event.flow.searchOnly {
+		m.status = "Web search authentication configured · " + event.flow.name
+		return m, m.composer.editor.Focus()
+	}
 	m.status = fmt.Sprintf("Connected to %s · choose a model", event.flow.name)
 	if chooser, ok := m.service.(ModelChooser); ok {
 		m.actionPending = true

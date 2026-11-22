@@ -19,7 +19,7 @@ import (
 	"github.com/diasYuri/opera/internal/core"
 	"github.com/diasYuri/opera/internal/modules/configuration"
 	"github.com/diasYuri/opera/internal/modules/execution"
-	"github.com/diasYuri/opera/internal/modules/providers/catalog"
+	providercatalog "github.com/diasYuri/opera/internal/modules/providers/catalog"
 	ui "github.com/diasYuri/opera/internal/ui/tui"
 	"github.com/diasYuri/y/pkg/ai"
 )
@@ -450,9 +450,111 @@ func (s *chatSession) WebSearchProviders() []ui.WebSearchProviderOption {
 	providers, current := core.WebSearchChoices(s.cfg, catalog)
 	options := make([]ui.WebSearchProviderOption, 0, len(providers))
 	for _, provider := range providers {
-		options = append(options, ui.WebSearchProviderOption{ID: provider.ID, Name: provider.Name, Description: provider.Description, Current: provider.ID == current})
+		authOptions := make([]ui.WebSearchAuthOption, 0, len(provider.AuthMethods))
+		for _, method := range provider.AuthMethods {
+			authOptions = append(authOptions, ui.WebSearchAuthOption{
+				SearchProviderID: provider.ID, CredentialProviderID: method.ProviderID,
+				MethodID: method.ID, Kind: method.Kind, Name: method.Name, Description: method.Description,
+			})
+		}
+		options = append(options, ui.WebSearchProviderOption{ID: provider.ID, Name: provider.Name, Description: provider.Description, Current: provider.ID == current, AuthOptions: authOptions})
 	}
 	return options
+}
+
+func (s *chatSession) WebSearchAuthOptions(providerID string) []ui.WebSearchAuthOption {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.webSearchAuthOptionsLocked(providerID)
+}
+
+func (s *chatSession) LoginWebSearch(ctx context.Context, option ui.WebSearchAuthOption, notify func(execution.LoginNotice) error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.runtime != nil && s.runtime.Service.Active() {
+		return errors.New("web search authentication can only change while the execution is idle")
+	}
+	available := false
+	for _, candidate := range s.webSearchAuthOptionsLocked(option.SearchProviderID) {
+		if candidate.MethodID == option.MethodID && candidate.CredentialProviderID == option.CredentialProviderID {
+			available = true
+			break
+		}
+	}
+	if !available {
+		return errors.New("web search authentication option is unavailable")
+	}
+	method, ok := s.providerLoginMethod(option.CredentialProviderID, option.MethodID)
+	if !ok {
+		if option.Kind != "api-key" {
+			return errors.New("web search authentication handler is unavailable")
+		}
+		method = providercatalog.LoginMethod{ID: option.MethodID, Name: option.Name, Description: option.Description, Kind: option.Kind, ProviderID: option.CredentialProviderID}
+	}
+	notifyFlow := func(notice execution.LoginNotice) error {
+		if notice.URL == "" {
+			return notify(notice)
+		}
+		if err := notify(notice); err != nil {
+			return err
+		}
+		if s.openBrowser != nil {
+			browserCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			err := s.openBrowser(browserCtx, notice.URL)
+			cancel()
+			if err != nil {
+				return notify(execution.LoginNotice{Message: "Open the authorization link above in your browser to continue."})
+			}
+		}
+		return nil
+	}
+	if err := s.runLoginMethod(ctx, method, notifyFlow); err != nil {
+		return err
+	}
+	if s.runtime != nil {
+		if err := s.runtime.Close(ctx); err != nil {
+			return err
+		}
+		s.runtime = nil
+	}
+	return nil
+}
+
+func (s *chatSession) webSearchAuthOptionsLocked(providerID string) []ui.WebSearchAuthOption {
+	catalog, err := s.providerCatalog()
+	if err != nil {
+		return nil
+	}
+	providers, _ := core.WebSearchChoices(s.cfg, catalog)
+	for _, provider := range providers {
+		if provider.ID != providerID {
+			continue
+		}
+		options := make([]ui.WebSearchAuthOption, 0, len(provider.AuthMethods))
+		for _, method := range provider.AuthMethods {
+			options = append(options, ui.WebSearchAuthOption{
+				SearchProviderID: provider.ID, CredentialProviderID: method.ProviderID,
+				MethodID: method.ID, Kind: method.Kind, Name: method.Name, Description: method.Description,
+			})
+		}
+		return options
+	}
+	return nil
+}
+
+func (s *chatSession) providerLoginMethod(providerID, methodID string) (providercatalog.LoginMethod, bool) {
+	providerCatalog, err := s.providerCatalog()
+	if err != nil {
+		return providercatalog.LoginMethod{}, false
+	}
+	for _, descriptor := range providerCatalog.Logins() {
+		for _, method := range descriptor.Methods {
+			if method.ProviderID == providerID && method.ID == methodID {
+				return method, true
+			}
+		}
+	}
+	return providercatalog.LoginMethod{}, false
 }
 
 func (s *chatSession) WebSearchSettings(providerID string) []ui.SettingItem {

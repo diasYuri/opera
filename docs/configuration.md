@@ -89,6 +89,13 @@ not specify the control, so an explicit per-search value takes precedence.
 These options are stored in private workspace settings; project configuration
 cannot set search selection or filters.
 
+Each provider menu also has `Authentication`. Codex uses ChatGPT sign-in; Claude
+offers Claude account sign-in or an Anthropic API key; Brave accepts a Brave
+Search API key. API keys are masked while entered and stored in the configured
+credential store, never in workspace or project settings. Accessible mode does
+not accept echoed secrets; use `opera auth set <provider>.<credential_ref>` from
+piped stdin instead.
+
 ```toml
 [search.options.openai-subscription]
 context_size = "low"

@@ -13,6 +13,7 @@ import (
 	"github.com/diasYuri/opera/internal/modules/configuration"
 	"github.com/diasYuri/opera/internal/modules/execution"
 	providercatalog "github.com/diasYuri/opera/internal/modules/providers/catalog"
+	ui "github.com/diasYuri/opera/internal/ui/tui"
 )
 
 func sessionConfig(t *testing.T) config.Resolved {
@@ -104,6 +105,68 @@ func TestChatLoginFailurePreservesSelectionAndFirstRunNeedsNoRuntime(t *testing.
 	s.methods = append(s.methods, loginMethod{LoginProvider: execution.LoginProvider{ID: "fixture", Name: "Fixture"}})
 	if len(s.LoginProviders()) != providerCount+1 {
 		t.Fatal("menu registry did not discover a newly registered provider")
+	}
+}
+
+func TestWebSearchAuthenticationOptionsFollowProviderCatalog(t *testing.T) {
+	cfg := sessionConfig(t)
+	s := newChatSession(App{}, cfg, core.Options{}, nil)
+	providers := s.WebSearchProviders()
+	options := make(map[string][]ui.WebSearchAuthOption, len(providers))
+	for _, provider := range providers {
+		options[provider.ID] = provider.AuthOptions
+	}
+	if len(options["openai-subscription"]) != 1 || options["openai-subscription"][0].MethodID != "chatgpt" {
+		t.Fatalf("Codex authentication methods = %#v", options["openai-subscription"])
+	}
+	if len(options["anthropic"]) != 2 {
+		t.Fatalf("Claude authentication methods = %#v", options["anthropic"])
+	}
+	var claudeOAuth, claudeAPIKey bool
+	for _, option := range options["anthropic"] {
+		claudeOAuth = claudeOAuth || option.MethodID == "claude"
+		claudeAPIKey = claudeAPIKey || option.MethodID == "api-key" && option.Kind == "api-key"
+	}
+	if !claudeOAuth || !claudeAPIKey {
+		t.Fatalf("Claude sign-in methods missing: %#v", options["anthropic"])
+	}
+	if len(options["brave"]) != 1 || options["brave"][0].CredentialProviderID != "brave-search" || options["brave"][0].Kind != "api-key" {
+		t.Fatalf("Brave authentication methods = %#v", options["brave"])
+	}
+}
+
+func TestWebSearchAPIKeyLoginStoresSecretWithoutChangingModel(t *testing.T) {
+	cfg := sessionConfig(t)
+	cfg.Values["provider"] = config.Value{Value: "anthropic", Source: "user-workspace"}
+	cfg.Values["model"] = config.Value{Value: "claude-sonnet-test", Source: "user-workspace"}
+	cfg.Values["credentials.store"] = config.Value{Value: "file", Source: "user-workspace"}
+	s := newChatSession(App{
+		OpenStore: credentials.Open,
+		Env:       func(string) (string, bool) { return "", false },
+	}, cfg, core.Options{}, nil)
+	options := s.WebSearchAuthOptions("brave")
+	if len(options) != 1 {
+		t.Fatalf("Brave API-key option = %#v", options)
+	}
+	notify := func(notice execution.LoginNotice) error {
+		if notice.Prompt != nil {
+			notice.Prompt.Response <- "fixture-brave-api-key"
+		}
+		return nil
+	}
+	if err := s.LoginWebSearch(context.Background(), options[0], notify); err != nil {
+		t.Fatal(err)
+	}
+	store, err := credentials.Open("file", cfg.Paths.Credentials)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret, err := store.Get("brave-search.default")
+	if err != nil || secret != "fixture-brave-api-key" {
+		t.Fatalf("API key was not saved to the credential store: present=%t, err=%v", secret != "", err)
+	}
+	if s.cfg.String("provider") != "anthropic" || s.cfg.String("model") != "claude-sonnet-test" {
+		t.Fatalf("search authentication changed the active model: %s/%s", s.cfg.String("provider"), s.cfg.String("model"))
 	}
 }
 

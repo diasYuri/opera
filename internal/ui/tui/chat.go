@@ -1333,6 +1333,20 @@ func (m *model) openWebSearchOptionsMenu() {
 }
 
 func (m *model) openWebSearchProviderOptions(provider WebSearchProviderOption) {
+	if _, ok := m.service.(WebSearchSettingsManager); !ok {
+		m.status = "Web search configuration is unavailable in this chat"
+		return
+	}
+	items := make([]list.Item, 0, 2)
+	if len(provider.AuthOptions) > 0 {
+		items = append(items, webSearchProviderAction{provider: provider, key: "authentication", title: "Authentication", detail: "Sign in or configure the API key for this search provider"})
+	}
+	items = append(items, webSearchProviderAction{provider: provider, key: "config", title: "Config options", detail: "Set default search controls for this provider"})
+	m.openSelector("Web search · Options · "+provider.Name, items, m.modelDelegate())
+	m.overlay.selectionKind = "web-search-provider"
+}
+
+func (m *model) openWebSearchConfigOptions(provider WebSearchProviderOption) {
 	manager, ok := m.service.(WebSearchSettingsManager)
 	if !ok {
 		m.status = "Web search configuration is unavailable in this chat"
@@ -1344,7 +1358,26 @@ func (m *model) openWebSearchProviderOptions(provider WebSearchProviderOption) {
 		items = append(items, webSearchOptionChoice{settingChoice: settingChoice{SettingItem: setting}})
 	}
 	m.openSelector("Web search · Config options · "+provider.Name, items, m.modelDelegate())
-	m.overlay.selectionKind = "web-search-provider-options"
+	m.overlay.selectionKind = "web-search-config-options"
+}
+
+func (m *model) openWebSearchAuthOptions(provider WebSearchProviderOption) {
+	manager, ok := m.service.(WebSearchSettingsManager)
+	if !ok {
+		m.status = "Web search authentication is unavailable in this chat"
+		return
+	}
+	options := manager.WebSearchAuthOptions(provider.ID)
+	items := make([]list.Item, 0, len(options))
+	for _, option := range options {
+		items = append(items, webSearchAuthChoice{WebSearchAuthOption: option})
+	}
+	if len(items) == 0 {
+		m.status = "No authentication options are available for this search provider"
+		return
+	}
+	m.openSelector("Web search · Authentication · "+provider.Name, items, m.modelDelegate())
+	m.overlay.selectionKind = "web-search-auth-options"
 }
 
 func (m *model) openMessagePicker() {
@@ -1821,6 +1854,20 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 		if kind == "web-search-options" {
 			m.openWebSearchProviderOptions(selected.WebSearchProviderOption)
 			return m, nil
+		}
+	case webSearchProviderAction:
+		if kind == "web-search-provider" {
+			switch selected.key {
+			case "authentication":
+				m.openWebSearchAuthOptions(selected.provider)
+			case "config":
+				m.openWebSearchConfigOptions(selected.provider)
+			}
+			return m, nil
+		}
+	case webSearchAuthChoice:
+		if kind == "web-search-auth-options" {
+			return m, m.beginWebSearchLogin(selected.WebSearchAuthOption)
 		}
 	case modelChoice:
 		if commander, ok := m.service.(Commander); ok {
