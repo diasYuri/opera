@@ -70,6 +70,9 @@ func (a App) Run(args []string) int {
 	if command == "help" {
 		return a.writeText(help + "\n" + execution.CommandHelp())
 	}
+	if command == "update" || command == "deps" {
+		return a.versionsCommand(command, opts, a.jsonRequested(opts))
+	}
 	if command == "config" && len(opts.args) == 2 && opts.args[1] == "schema" {
 		if a.jsonRequested(opts) {
 			return a.emit("config.schema", config.Schema())

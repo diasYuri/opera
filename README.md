@@ -26,6 +26,11 @@ The installer verifies the archive checksum, installs without Go or `sudo`, and
 adds `~/.local/bin` to your shell path when needed. See [installation](docs/installation.md)
 for version pinning and manual packages.
 
+Check for and install Opera releases with `opera update check` and
+`opera update apply`. In a Go project, `opera deps check` lists available module
+versions; `opera deps update` upgrades dependencies within their current major
+versions. Updates are explicit and require no model credentials.
+
 Try Opera without configuring a model, then connect your own provider:
 
 ```sh

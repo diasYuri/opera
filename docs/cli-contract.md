@@ -17,6 +17,23 @@ are informational. A toolchain mismatch is an error. A present executable is
 not a guarantee of its identity or compatibility; F2 must validate it before use.
 The unrelated Unix `sg` command is not accepted as ast-grep.
 
+## Version management
+
+- `update [check|apply]` checks the latest official Opera release; no subcommand
+  is equivalent to `check`. `apply` downloads the matching macOS/Linux package,
+  verifies SHA-256 and embedded package metadata, then atomically replaces the
+  current executable. The caller must have write access to its directory. A new
+  process uses the installed version. There is no automatic updater. Checking
+  requires GitHub network access and does not change local files.
+- `deps [check|update [all|patch|module[@version]...]]` works with Go modules.
+  `check` uses `go list -m -u -json all`; `update` uses `go get` and `go mod tidy`.
+  The default updates within current major module paths; `patch` limits updates
+  to patch versions; explicit selectors can pin an individual target. `go.mod`
+  and `go.sum` are restored if an update step fails. No project build or code is
+  executed. Major-version source migrations are not automatic.
+- Both commands work without loading Opera configuration or provider credentials.
+  They emit `versions.opera` and `versions.dependencies` JSONL events respectively.
+
 ## Text and JSONL
 
 Text is the default. JSONL uses one complete JSON object per line, no ANSI output,

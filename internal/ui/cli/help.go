@@ -17,6 +17,8 @@ Execution:
   sessions branch <run-id> [version]   Branch a completed current/archived checkpoint
   resume <run-id>                      Explicit checkpoint/approval recovery
   onboarding                          Choose provider, model and workspace policy
+  update [check|apply]                Check for or install the latest Opera release
+  deps [check|update]                  Check or update Go module dependencies
   reconcile <run-id> <key> <result>    Record an explicitly observed uncertain effect
 
 Configuration and inspection:

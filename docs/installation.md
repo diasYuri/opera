@@ -27,6 +27,32 @@ manual fallback.
 Opera has no daemon, remote worker service, automatic worktree or detached job;
 the CLI owns every execution and child.
 
+## Check and update versions
+
+`opera update check` queries the official GitHub releases and compares the latest
+published semantic version with the running binary. `opera update apply` repeats
+the check, downloads the matching macOS/Linux archive, verifies its SHA-256 entry
+from `SHA256SUMS` and the embedded version/platform metadata, then atomically
+replaces the current executable. It does not use `sudo`; the current user must be
+able to write the executable's directory. Start a new Opera process after the
+update. Windows supports checking but not in-place installation. Development
+builds can use the installer instead.
+
+The check needs network access to GitHub and never changes files. There is no
+background or automatic update. Pin or install a particular release with the
+`OPERA_VERSION` installer option.
+
+From a Go module, `opera deps check` queries the Go module proxy for available
+versions without changing `go.mod` or `go.sum`. Use `--workspace <directory>` to
+select another project directory. `opera deps update` upgrades dependencies to
+the latest versions available within their current major module paths;
+`opera deps update patch` limits upgrades to patch releases. Select individual
+dependencies with `opera deps update example.com/module[@version]`. The command
+uses `go get` followed by `go mod tidy`, and restores the original `go.mod` and
+`go.sum` if either step fails. It downloads module data but does not build or run
+project code. Major-version migrations that require import-path or source changes
+remain an explicit code change.
+
 ## Build from source
 
 Use Go **1.27.4**. From the Opera checkout:

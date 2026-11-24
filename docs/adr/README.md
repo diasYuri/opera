@@ -18,3 +18,4 @@ mean its future execution capability is already implemented.
 11. [Distribuição de bundles externos (proposta)](011-external-bundle-distribution.md)
 12. [Bundled Opera skill](012-bundled-opera-skill.md)
 13. [Backstage da sessão e compactação por camadas](013-session-context-compaction.md)
+14. [Verificação e atualização explícita de versões](014-version-management.md)
