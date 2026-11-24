@@ -1,19 +1,57 @@
 # Opera
 
-Local coding harness built on the public [Y SDK](https://github.com/diasYuri/y).
-Module: `github.com/diasYuri/opera`. Binary: `opera`.
+<p align="center">
+  <strong>Your coding agent, in your terminal — under your control.</strong><br>
+  Inspect. Plan. Build. Review.
+</p>
 
-F5 adds durable usage/cost provenance, structured results, accessible controls
-and local multiplatform packages. MCP stdio/HTTP, persistent memory, WASM
-components and runtime inspection use the same execution service.
-Sessions, branches, compaction and synchronous local workers share one backend.
-The interactive coding workspace includes scoped instructions and attachments,
-model/thinking selection, filesystem edits, shell, Git, text/AST search and scoped LSP.
-The shared foreground execution includes streaming, read/write tools,
-operation-bound approvals, SQLite checkpoints and explicit resume. Chat and run
-share the same public Y harness. Help, config and doctor work without an account.
+Opera is a local-first coding workspace built on the public
+[Y SDK](https://github.com/diasYuri/y). Choose your model, work in your own
+workspace, review proposed changes, and resume conversations from durable
+checkpoints.
 
-## Build and use
+<p align="center">
+  <strong>Beta targets:</strong> macOS (Intel and Apple silicon) · Linux (amd64 and arm64)
+</p>
+
+## Get started
+
+After the first beta release, install with one command:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/diasYuri/opera/main/install.sh | sh
+```
+
+The installer verifies the archive checksum, installs without Go or `sudo`, and
+adds `~/.local/bin` to your shell path when needed. See [installation](docs/installation.md)
+for version pinning and manual packages.
+
+Try Opera without configuring a model, then connect your own provider:
+
+```sh
+opera demo chat
+opera onboarding
+opera chat
+```
+
+## Why Opera
+
+- **Reviewable changes:** the default `ask` policy prompts before mutations and
+  binds approvals to the operation and file state.
+- **Long-running conversations:** Backstage consolidates session context and
+  compacts history as the model's context window fills. Continue or branch from
+  durable checkpoints.
+- **Your provider, your credentials:** use supported OAuth sign-in or configure
+  an API key through Opera's credential flow.
+- **Local collaborators:** delegate bounded tasks to child agents sharing the
+  workspace policy and write queue.
+- **Terminal-first:** keyboard-driven chat, an accessible text mode, and offline
+  demos for trying the workflow without an account.
+
+Opera is a local coding harness. The model provider supplies inference; Opera
+keeps workspace tools, approvals, checkpoints and usage records in the CLI.
+
+## Build from source
 
 Use **Go 1.27.4**. The explicit toolchain selection downloads the required version
 into Go's toolchain cache without replacing your system installation.
@@ -72,8 +110,9 @@ through Codex and Claude sign-in, with Brave Search as an explicit alternative.
 the boundaries for subsequent phases. [F0 validation](docs/f0-validation.md)
 records what was actually checked locally and what requires native CI.
 
-All execution will remain attached to the CLI process. Daemons, remote workers,
-automatic worktrees and public publication of Opera are outside this delivery.
+All execution remains attached to the CLI process. Beta releases are published
+from explicit `v*-beta*` tags after the native package checks pass; there is no
+daemon, remote worker service or automatic worktree.
 
 ## Foreground execution
 
@@ -222,7 +261,8 @@ See [usage/prices/structured output](docs/usage.md), [operations and recovery](d
 [executable examples](examples/README.md). Local archives in `dist` contain
 licenses, third-party notices, docs, examples, version metadata and checksums.
 [F5 validation](docs/f5-validation.md) distinguishes verified local results from
-native CI gates. No Opera release or package registry publication is performed.
+native CI gates. Beta tags publish GitHub pre-releases for macOS and Linux after
+all CI and native package checks pass; no package registry publication is used.
 
 ### ChatGPT subscription (OAuth)
 
