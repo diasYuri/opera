@@ -56,7 +56,7 @@ provider-scoped key, then `<provider>.<reference>.oauth`, then the legacy global
 and persisted; an omitted refresh-token rotation preserves the existing token.
 
 Custom provider credentials are configured separately in the private
-`~/.agents/opera/providers.json`; see [custom providers](custom-providers.md).
+`~/.opera/providers.json`; see [custom providers](custom-providers.md).
 
 Token endpoint/client configuration is provider-specific. OAuth registration and
 provider account entitlements are external requirements; storing a token does not

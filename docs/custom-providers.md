@@ -1,6 +1,6 @@
 # Custom providers
 
-Opera reads custom provider definitions from `~/.agents/opera/providers.json`.
+Opera reads custom provider definitions from `~/.opera/providers.json`.
 The file is optional; built-in providers remain available. Its top-level object
 contains a `providers` array. Provider names are stable lowercase identifiers
 and are selected as `custom:<name>`. Keep `name` stable because Opera records
@@ -48,11 +48,11 @@ key to stdout. Helpers run as the current user and are trusted code.
 Protect the directory and file before storing keys:
 
 ```sh
-mkdir -p ~/.agents/opera
-chmod 700 ~/.agents/opera
-chmod 600 ~/.agents/opera/providers.json
+mkdir -p ~/.opera
+chmod 700 ~/.opera
+chmod 600 ~/.opera/providers.json
 # If settings.json already exists:
-chmod 600 ~/.agents/opera/settings.json
+chmod 600 ~/.opera/settings.json
 ```
 
 On Windows, use an ACL granting access only to the current user. `config show`

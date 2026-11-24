@@ -8,8 +8,8 @@ an unavailable workspace. Headless commands never open an interactive form; `onb
 
 ## Locations
 
-Core settings are stored in `~/.agents/opera/settings.json`; custom providers are
-stored in `~/.agents/opera/providers.json`. `opera config paths` reports both
+Core settings are stored in `~/.opera/settings.json`; custom providers are
+stored in `~/.opera/providers.json`. `opera config paths` reports both
 paths. `OPERA_CONFIG_DIR` overrides the directory. Both files must be regular
 files in an application directory private to the current user (0700 directory,
 0600 file on Unix; current-user-only ACL on Windows). `providers.json` may hold
@@ -33,7 +33,7 @@ There is no parent-directory config search. `--user-config` and
 `--project-config` select explicit files and require them to exist. Missing
 default files are optional. Settings, providers and project files are limited to 1 MiB.
 Workspace-specific interactive preferences are stored under
-`~/.agents/opera/workspaces/`.
+`~/.opera/workspaces/`.
 
 ## Precedence, types and trust
 
@@ -41,7 +41,7 @@ Apply defaults, global user `settings.json`, private per-workspace settings,
 project TOML, environment, then flags. `settings.json` uses JSON with the same
 core keys shown by `config schema`, nested under objects such as `agents`,
 `limits` and `ui`. Onboarding writes workspace-specific choices under
-`~/.agents/opera/workspaces/<workspace-hash>.json` with private permissions; its
+`~/.opera/workspaces/<workspace-hash>.json` with private permissions; its
 provenance is `user-workspace`. It never writes trust into version-controlled
 project configuration. Empty strings
 and `false` are explicit values. Each key retains `default`, `user`, `project`,

@@ -21,9 +21,9 @@ func TestPlatformPaths(t *testing.T) {
 			t.Fatalf("invalid %s paths: %#v", goos, paths)
 		}
 		bases := map[string][3]string{
-			"linux":   {filepath.Join(home, ".agents", "opera"), filepath.Join(home, ".local", "share", "opera"), filepath.Join(home, ".cache", "opera")},
-			"darwin":  {filepath.Join(home, ".agents", "opera"), filepath.Join(home, "Library", "Application Support", "opera"), filepath.Join(home, "Library", "Caches", "opera")},
-			"windows": {filepath.Join(home, ".agents", "opera"), filepath.Join(home, "AppData", "Local", "opera"), filepath.Join(home, "AppData", "Local", "Cache", "opera")},
+			"linux":   {filepath.Join(home, ".opera"), filepath.Join(home, ".local", "share", "opera"), filepath.Join(home, ".cache", "opera")},
+			"darwin":  {filepath.Join(home, ".opera"), filepath.Join(home, "Library", "Application Support", "opera"), filepath.Join(home, "Library", "Caches", "opera")},
+			"windows": {filepath.Join(home, ".opera"), filepath.Join(home, "AppData", "Local", "opera"), filepath.Join(home, "AppData", "Local", "Cache", "opera")},
 		}
 		want := bases[goos]
 		if paths.ConfigDir != want[0] || paths.UserConfig != filepath.Join(want[0], "settings.json") || paths.ProvidersConfig != filepath.Join(want[0], "providers.json") || paths.Data != want[1] || paths.Cache != want[2] {

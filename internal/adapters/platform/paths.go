@@ -45,7 +45,7 @@ func Resolve(workspace, home, goos string, env func(string) string) (Paths, erro
 		data = fallback(env("XDG_DATA_HOME"), filepath.Join(home, ".local", "share"))
 		cache = fallback(env("XDG_CACHE_HOME"), filepath.Join(home, ".cache"))
 	}
-	configDir := fallback(env("OPERA_CONFIG_DIR"), filepath.Join(home, ".agents", "opera"))
+	configDir := fallback(env("OPERA_CONFIG_DIR"), filepath.Join(home, ".opera"))
 	data = fallback(env("OPERA_DATA_DIR"), filepath.Join(data, "opera"))
 	cache = fallback(env("OPERA_CACHE_DIR"), filepath.Join(cache, "opera"))
 	for _, dir := range []string{configDir, data, cache} {
