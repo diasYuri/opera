@@ -45,6 +45,10 @@ func packages() error {
 	if err != nil {
 		return err
 	}
+	source := os.Getenv("OPERA_SOURCE")
+	if source == "" {
+		source = "local source; unpublished"
+	}
 	license, err := os.ReadFile("LICENSE")
 	if err != nil {
 		return err
@@ -69,7 +73,7 @@ func packages() error {
 			if err != nil {
 				return err
 			}
-			metadata, err := json.MarshalIndent(artifactMetadata{Version: version, GOOS: targetOS, GOARCH: arch, Go: toolchain, SDK: "v1.4.0", Source: "local source; unpublished", CGO: "0"}, "", "  ")
+			metadata, err := json.MarshalIndent(artifactMetadata{Version: version, GOOS: targetOS, GOARCH: arch, Go: toolchain, SDK: "v1.4.0", Source: source, CGO: "0"}, "", "  ")
 			if err != nil {
 				return err
 			}

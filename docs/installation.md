@@ -1,7 +1,31 @@
 # Local installation and packages
 
-Opera ships as local artifacts only. It has no daemon, remote worker service,
-automatic worktree or background job. The CLI owns every execution and child.
+For published beta releases, macOS and Linux have a one-command installer. The
+installer selects the newest published release for the current OS/architecture,
+checks the archive against `SHA256SUMS`, and installs to `~/.local/bin` without
+`sudo`. It adds that directory to the detected shell's startup file when needed.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/diasYuri/opera/main/install.sh | sh
+```
+
+To install a specific beta, pass its version to the installer:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/diasYuri/opera/main/install.sh | OPERA_VERSION=0.1.0-beta.1 sh
+```
+
+The installer requires `curl`, `tar`, and a SHA-256 utility (`sha256sum` or
+`shasum`). Set `OPERA_INSTALL_DIR` to choose another absolute install directory.
+After installing the executable, it creates `~/.opera/settings.json` and
+`~/.opera/providers.json` with default empty configuration, preserving any files
+already present. Set `OPERA_CONFIG_DIR` to initialize another absolute
+configuration directory.
+The command works after a `v*-beta*` tag passes CI and publishes a GitHub
+pre-release. The six native local archives remain available to maintainers as a
+manual fallback.
+Opera has no daemon, remote worker service, automatic worktree or detached job;
+the CLI owns every execution and child.
 
 ## Build from source
 

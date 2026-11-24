@@ -25,8 +25,9 @@ without invoking external executables.
 
 GitHub Actions checkout/setup-go are pinned to full commit SHAs in the workflow.
 Build/test tooling otherwise uses Go's standard tools. The development matrix
-generates raw local binaries; archive/release packaging is F5, so no separate
-packager is introduced or left unpinned in F0. Do not publish these artifacts.
+generates raw local binaries; release archives use the in-repository packager.
+Beta releases are published only from version tags after CI and native package
+smokes succeed; local package commands do not publish artifacts.
 
 Development, CI and module minimum use the same exact Go patch. The roadmap
 allows updating to a newer stable 1.27 patch when selected explicitly and updated

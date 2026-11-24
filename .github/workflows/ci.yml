@@ -24,6 +24,9 @@ jobs:
           check-latest: false
       - name: Format, architecture, vet, tests and CGO-free build
         run: go run ./scripts check
+      - name: Validate the macOS/Linux installer shell syntax
+        shell: bash
+        run: sh -n install.sh
       - name: Lint (pinned v2.15.0, built with the selected Go)
         run: go run ./scripts lint
       - name: Check tidy module graph
@@ -66,7 +69,31 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm, macos-15-intel, macos-15, windows-2025, windows-11-arm]
+        include:
+          - runner: ubuntu-24.04
+            os: linux
+            arch: amd64
+            archive: tar.gz
+          - runner: ubuntu-24.04-arm
+            os: linux
+            arch: arm64
+            archive: tar.gz
+          - runner: macos-15-intel
+            os: darwin
+            arch: amd64
+            archive: tar.gz
+          - runner: macos-15
+            os: darwin
+            arch: arm64
+            archive: tar.gz
+          - runner: windows-2025
+            os: windows
+            arch: amd64
+            archive: zip
+          - runner: windows-11-arm
+            os: windows
+            arch: arm64
+            archive: zip
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -74,9 +101,23 @@ jobs:
         with:
           go-version-file: .go-version
       - name: Build local packages with licenses and checksums
-        run: go run ./scripts package
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v*-beta* ]]; then
+            OPERA_VERSION="${GITHUB_REF_NAME#v}" \
+              OPERA_SOURCE="${GITHUB_REPOSITORY}@${GITHUB_SHA}" \
+              go run ./scripts package
+          else
+            go run ./scripts package
+          fi
       - name: Extract and run the native packaged binary offline
-        run: go run ./scripts package-smoke
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v*-beta* ]]; then
+            OPERA_VERSION="${GITHUB_REF_NAME#v}" go run ./scripts package-smoke
+          else
+            go run ./scripts package-smoke
+          fi
       - name: Native PTY or Windows ConPTY and keyboard checks
         run: go test -count=1 ./internal/ui
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -87,3 +128,45 @@ jobs:
             dist/*.zip
             dist/SHA256SUMS
           retention-days: 7
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: matrix.os != 'windows' && startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-beta')
+        with:
+          name: opera-release-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/opera_*_${{ matrix.os }}_${{ matrix.arch }}.${{ matrix.archive }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-beta:
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-beta')
+    needs: [check, cross-build, race, native-packages]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download native macOS/Linux archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          download_dir=$(mktemp -d)
+          trap 'rm -rf "$download_dir"' EXIT
+          mkdir -p dist
+          for target in darwin-amd64 darwin-arm64 linux-amd64 linux-arm64; do
+            mkdir -p "$download_dir/$target"
+            gh run download "$GITHUB_RUN_ID" --name "opera-release-$target" --dir "$download_dir/$target"
+            cp "$download_dir/$target"/opera_*.tar.gz dist/
+          done
+      - name: Generate release checksums
+        working-directory: dist
+        run: |
+          sha256sum opera_*_darwin_*.tar.gz opera_*_linux_*.tar.gz > SHA256SUMS
+          test "$(wc -l < SHA256SUMS | tr -d ' ')" = 4
+      - name: Publish beta release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --verify-tag --prerelease --generate-notes \
+            --notes "Install on macOS/Linux: curl -fsSL https://raw.githubusercontent.com/diasYuri/opera/main/install.sh | sh"
