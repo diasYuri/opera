@@ -16,7 +16,7 @@ checkpoints.
 
 ## Get started
 
-After the first beta release, install with one command:
+Install the beta on macOS or Linux with one command:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/diasYuri/opera/main/install.sh | sh

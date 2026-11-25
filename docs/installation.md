@@ -21,9 +21,9 @@ After installing the executable, it creates `~/.opera/settings.json` and
 `~/.opera/providers.json` with default empty configuration, preserving any files
 already present. Set `OPERA_CONFIG_DIR` to initialize another absolute
 configuration directory.
-The command works after a `v*-beta*` tag passes CI and publishes a GitHub
-pre-release. The six native local archives remain available to maintainers as a
-manual fallback.
+A `v*-beta*` tag publishes a GitHub prerelease after the macOS/Linux checks,
+race tests and native package checks pass. The beta pipeline also cross-builds
+all supported targets. Windows native checks run on branches and pull requests.
 Opera has no daemon, remote worker service, automatic worktree or detached job;
 the CLI owns every execution and child.
 

@@ -72,7 +72,7 @@ func (c *Client) Latest(ctx context.Context) (Release, error) {
 		return Release{}, fmt.Errorf("read Opera releases: %w", err)
 	}
 	if int64(len(releaseData)) > maxReleaseResponse {
-		return Release{}, errors.New("Opera release list exceeded its size limit")
+		return Release{}, errors.New("release list exceeded its size limit")
 	}
 	var releases []struct {
 		TagName string `json:"tag_name"`
@@ -124,7 +124,7 @@ func (c *Client) Binary(ctx context.Context, release Release) ([]byte, error) {
 		return nil, err
 	}
 	if metadata.Version != release.Version || metadata.GOOS != runtime.GOOS || metadata.GOARCH != runtime.GOARCH {
-		return nil, errors.New("Opera archive metadata does not match the requested release and platform")
+		return nil, errors.New("release archive metadata does not match the requested release and platform")
 	}
 	return binary, nil
 }
@@ -202,32 +202,32 @@ func extractPackage(data []byte, root string) ([]byte, packageMetadata, error) {
 		}
 		name := path.Clean(header.Name)
 		if !fsValidTarPath(header.Name) || !strings.HasPrefix(name, root+"/") || seen[name] {
-			return nil, packageMetadata{}, errors.New("Opera archive contains an unexpected or duplicate path")
+			return nil, packageMetadata{}, errors.New("release archive contains an unexpected or duplicate path")
 		}
 		seen[name] = true
-		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
-			return nil, packageMetadata{}, errors.New("Opera archive contains a non-regular file")
+		if header.Typeflag != tar.TypeReg {
+			return nil, packageMetadata{}, errors.New("release archive contains a non-regular file")
 		}
 		if header.Size < 0 || header.Size > maxExpandedBytes || total > maxExpandedBytes-header.Size {
-			return nil, packageMetadata{}, errors.New("Opera archive exceeds its expanded size limit")
+			return nil, packageMetadata{}, errors.New("release archive exceeds its expanded size limit")
 		}
 		total += header.Size
 		switch name {
 		case root + "/opera":
 			if header.Size > maxBinaryBytes {
-				return nil, packageMetadata{}, errors.New("Opera executable exceeds its size limit")
+				return nil, packageMetadata{}, errors.New("release executable exceeds its size limit")
 			}
 			binary, err = io.ReadAll(io.LimitReader(reader, maxBinaryBytes+1))
 			if err != nil || int64(len(binary)) != header.Size {
-				return nil, packageMetadata{}, errors.New("Opera executable in the archive is incomplete")
+				return nil, packageMetadata{}, errors.New("release executable in the archive is incomplete")
 			}
 		case root + "/version.json":
 			if header.Size > 64<<10 {
-				return nil, packageMetadata{}, errors.New("Opera version metadata exceeds its size limit")
+				return nil, packageMetadata{}, errors.New("release version metadata exceeds its size limit")
 			}
 			contents, readErr := io.ReadAll(io.LimitReader(reader, (64<<10)+1))
 			if readErr != nil || int64(len(contents)) != header.Size {
-				return nil, packageMetadata{}, errors.New("Opera version metadata is incomplete")
+				return nil, packageMetadata{}, errors.New("release version metadata is incomplete")
 			}
 			if err := json.Unmarshal(contents, &metadata); err != nil {
 				return nil, packageMetadata{}, fmt.Errorf("decode Opera version metadata: %w", err)
@@ -239,7 +239,7 @@ func extractPackage(data []byte, root string) ([]byte, packageMetadata, error) {
 		}
 	}
 	if len(binary) == 0 || metadata.Version == "" {
-		return nil, packageMetadata{}, errors.New("Opera archive is missing its executable or version metadata")
+		return nil, packageMetadata{}, errors.New("release archive is missing its executable or version metadata")
 	}
 	return binary, metadata, nil
 }

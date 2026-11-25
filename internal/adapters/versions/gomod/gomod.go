@@ -35,7 +35,7 @@ type Report struct {
 
 var (
 	ErrNoModule  = errors.New("no Go module found")
-	ErrGoMissing = errors.New("Go executable not found")
+	ErrGoMissing = errors.New("cannot find the Go executable")
 )
 
 func Check(ctx context.Context, directory string) (Report, error) {
@@ -67,7 +67,7 @@ func Check(ctx context.Context, directory string) (Report, error) {
 		}
 	}
 	if len(report.Modules) == 0 {
-		return Report{}, errors.New("Go returned an empty module list")
+		return Report{}, errors.New("module list returned by Go is empty")
 	}
 	return report, nil
 }
