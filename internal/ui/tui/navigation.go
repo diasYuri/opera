@@ -29,6 +29,7 @@ type SessionSummary struct {
 
 type HistoryMessage struct {
 	ID, Role, Text string
+	Intermediate   bool
 }
 
 type SessionView struct {

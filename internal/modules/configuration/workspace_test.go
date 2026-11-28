@@ -44,3 +44,23 @@ func TestWorkspaceWebSearchOptionsPersistOutsideTheProject(t *testing.T) {
 		t.Fatalf("workspace search preferences did not roundtrip: %#v", defaults)
 	}
 }
+
+func TestActivityDisplayPreferenceIsValidatedAndScoped(t *testing.T) {
+	root := t.TempDir()
+	paths := platform.Paths{Workspace: root, ConfigDir: filepath.Join(root, "config")}
+	if err := config.SaveWorkspacePreference(paths, "ui.activity", "auto"); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveWorkspacePreference(paths, "ui.activity", "verbose"); err == nil {
+		t.Fatal("accepted an unknown activity display")
+	}
+	cfg, err := config.Load(config.Options{Paths: paths})
+	if err != nil || cfg.String("ui.activity") != "auto" || cfg.Values["ui.activity"].Source != "user-workspace" {
+		t.Fatalf("saved activity display = %q, err = %v", cfg.String("ui.activity"), err)
+	}
+	paths.Workspace = filepath.Join(root, "other")
+	other, err := config.Load(config.Options{Paths: paths})
+	if err != nil || other.String("ui.activity") != "full" {
+		t.Fatalf("default activity display = %q, err = %v", other.String("ui.activity"), err)
+	}
+}

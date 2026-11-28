@@ -3,8 +3,10 @@ package execution
 
 import (
 	"encoding/json"
-	"github.com/diasYuri/y/pkg/ai"
+	"strings"
 	"time"
+
+	"github.com/diasYuri/y/pkg/ai"
 )
 
 type Event struct {
@@ -19,6 +21,28 @@ type Event struct {
 	Tool          string          `json:"tool,omitempty"`
 	Data          json.RawMessage `json:"data,omitempty"`
 }
+
+// CompletedAssistantMessage classifies a completed model message using the
+// tool calls declared in the SDK event, including calls awaiting approval.
+func (e Event) CompletedAssistantMessage() (text string, intermediate, ok bool) {
+	if e.Type != "message_completed" {
+		return "", false, false
+	}
+	var payload struct {
+		Message ai.Message `json:"message"`
+	}
+	if json.Unmarshal(e.Data, &payload) != nil || payload.Message.Role != ai.RoleAssistant {
+		return "", false, false
+	}
+	var body strings.Builder
+	for _, block := range payload.Message.Content {
+		if block.Type == ai.ContentText {
+			body.WriteString(block.Text)
+		}
+	}
+	return body.String(), len(payload.Message.ToolCalls) > 0, true
+}
+
 type Approval struct {
 	TaskID      string          `json:"task_id,omitempty"`
 	ID          string          `json:"id"`

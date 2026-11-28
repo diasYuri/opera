@@ -25,7 +25,7 @@ func TestTerminalLoginSubmenuAndCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	markers := []string{"/login connect", "Connect a provider", "Finish sign-in in your browser", "Login cancelled"}
+	markers := []string{"/login connect", "Connect a provider", "Finish sign-in in your browser", "Login cancelled", "\x1b[?1049l"}
 	stages := make([]chan struct{}, len(markers))
 	for i := range stages {
 		stages[i] = make(chan struct{})
@@ -92,6 +92,7 @@ func TestTerminalLoginSubmenuAndCancellation(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("session did not exit after cancelled login")
 	}
+	wait(4)
 	mu.Lock()
 	defer mu.Unlock()
 	if !strings.Contains(captured.String(), "\x1b[?1049h") || !strings.Contains(captured.String(), "\x1b[?1049l") {

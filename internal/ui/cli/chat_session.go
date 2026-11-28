@@ -415,6 +415,7 @@ func (s *chatSession) Settings() []ui.SettingItem {
 		{Key: "model", Value: value("model"), Source: settingSource(s.cfg, "model"), Scope: "workspace", Description: "Model used for new executions"},
 		{Key: "web-search", Label: "Web search", Value: value("search.provider"), DisplayValue: webSearchSelectionLabel(value("search.provider")), Source: settingSource(s.cfg, "search.provider"), Scope: "user workspace", Description: "Choose the web search backend and configure its defaults"},
 		{Key: "thinking", Value: thinking, Source: settingSource(s.cfg, "thinking"), Scope: "workspace", Description: "Reasoning level; supported by the selected model"},
+		{Key: "ui.activity", Label: "Activity display", Value: value("ui.activity"), Source: settingSource(s.cfg, "ui.activity"), Scope: "user workspace", Description: "How thinking, comments and tools appear in chat"},
 		{Key: "ui.theme", Value: value("ui.theme"), Source: settingSource(s.cfg, "ui.theme"), Scope: "user workspace", Description: "Color theme for the interactive terminal"},
 		{Key: "policy", Value: value("policy"), Source: settingSource(s.cfg, "policy"), Scope: "workspace", Description: "Tool permission policy; trusted allows effects without per-operation approval"},
 		{Key: "context", Value: contextValue, Source: "current session", Scope: "session", Description: "UTF-8 files attached to requests in this chat"},
@@ -606,16 +607,16 @@ func (s *chatSession) SetSetting(ctx context.Context, key, value string) (string
 		return s.setWebSearchPreference(ctx, key, value)
 	}
 	switch key {
-	case "ui.theme":
+	case "ui.theme", "ui.activity":
 		s.mu.Lock()
-		paths := s.cfg.Paths
-		s.mu.Unlock()
-		if err := config.SaveWorkspacePreference(paths, key, value); err != nil {
+		defer s.mu.Unlock()
+		if err := config.SaveWorkspacePreference(s.cfg.Paths, key, value); err != nil {
 			return "", err
 		}
-		s.mu.Lock()
 		s.cfg.Values[key] = config.Value{Value: value, Source: "user-workspace"}
-		s.mu.Unlock()
+		if key == "ui.activity" {
+			return "Activity display set to " + value + " for this workspace.", nil
+		}
 		return "Interface theme updated for this workspace.", nil
 	case "thinking":
 		s.mu.Lock()
@@ -898,7 +899,7 @@ func (s *chatSession) ReadSession(ctx context.Context, id string, version uint64
 		if message.Role == ai.RoleUser {
 			role = "You"
 		}
-		messages = append(messages, ui.HistoryMessage{ID: fmt.Sprintf("history:%s:%d", id, index), Role: role, Text: contextfiles.RedactText(text.String())})
+		messages = append(messages, ui.HistoryMessage{ID: fmt.Sprintf("history:%s:%d", id, index), Role: role, Text: contextfiles.RedactText(text.String()), Intermediate: message.Role == ai.RoleAssistant && len(message.ToolCalls) > 0})
 	}
 	return ui.SessionView{Summary: entry, Messages: messages}, nil
 }
@@ -1169,7 +1170,7 @@ func (a App) interactiveChat(ctx context.Context, cfg config.Resolved, opts core
 		}
 	}()
 	if cfg.Bool("ui.accessible") {
-		return a.accessibleChat(ctx, session)
+		return a.accessibleChat(ctx, cfg.String("ui.activity"), session)
 	}
 	code, err := ui.Chat(ctx, session, a.In, a.Out, request, cfg.Bool("ui.no_motion"))
 	if err != nil {

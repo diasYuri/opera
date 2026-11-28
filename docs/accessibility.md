@@ -19,6 +19,8 @@ Temporary viewers take keyboard focus; Esc returns it to the composer.
 | Scroll message history | PageUp / PageDown or mouse wheel over history |
 | Latest messages | Ctrl+End |
 | Select a model | `/model`, arrows, Enter; Esc closes |
+| Set activity display | `/activity`, arrows, Enter; Esc closes |
+| Inspect tool details | Ctrl+O |
 | Inspect/help | `/help`, `/details`, `/context`, `/usage`, `/tasks`, `/agents` |
 | Error diagnostics / run metadata | `/details` after a failed or completed run |
 | Scroll/close viewer | Arrows/Page keys; Esc |
@@ -48,6 +50,10 @@ animations or periodic redraw. Input remains responsive during execution for
 follow-ups, `/steer`, `/usage`, tasks/agents and cancel. It has the same durable
 approvals and backend. Use `/multiline`, enter lines, then `/send`; `/cancel-input`
 discards the buffer. `/model <provider> <model>` replaces the visual selector.
+`/activity full|auto|hidden` selects the activity display, and `/activity`
+reports the current choice. Auto prints comments and responses as they complete.
+Hidden prints confirmed responses. A change during a run applies to the next
+execution.
 Use `/quit` or EOF to exit. Active Ctrl+C cancels and keeps the session open;
 idle Ctrl+C exits. Non-TTY approval returns 3 without waiting for input.
 

@@ -29,6 +29,7 @@ var Commands = []Command{
 	{"/details", "/details", "Review an approval, run metadata or the latest error"},
 	{"/model", "/model <provider> <model>", "Inspect or select provider/model at idle"},
 	{"/thinking", "/thinking off|minimal|low|medium|high|xhigh|max", "Select supported reasoning level"},
+	{"/activity", "/activity [full|auto|hidden]", "Choose how model and tool activity appears"},
 	{"/context", "/context [path]", "List sources or add a UTF-8 file attachment"},
 	{"/image", "/image <workspace-path> <message>", "Send a workspace image with this message"},
 	{"/settings", "/settings", "Edit model, web search, thinking, context and workspace policy"},
