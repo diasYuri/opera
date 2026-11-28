@@ -23,35 +23,43 @@ func TestConPTYChild(t *testing.T) {
 	if os.Getenv("OPERA_CONPTY_CHILD") != "1" {
 		return
 	}
-	before, err := term.GetState(int(os.Stdin.Fd()))
+	// The test runner can redirect its standard streams. Open the console
+	// attached to this child explicitly so Chat exercises real console modes.
+	input, err := os.OpenFile("CONIN$", os.O_RDWR, 0)
+	if err != nil {
+		os.Exit(24)
+	}
+	output, err := os.OpenFile("CONOUT$", os.O_RDWR, 0)
+	if err != nil {
+		os.Exit(25)
+	}
+	before, err := term.GetState(int(input.Fd()))
 	if err != nil {
 		os.Exit(21)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	_, err = Chat(ctx, terminalExecutor{}, os.Stdin, os.Stdout, execution.Request{Prompt: "fixture"}, true)
+	_, err = Chat(ctx, terminalExecutor{}, input, output, execution.Request{Prompt: "fixture"}, true)
 	if err != nil {
+		_, _ = fmt.Fprintln(output, err)
 		os.Exit(22)
 	}
-	after, err := term.GetState(int(os.Stdin.Fd()))
+	after, err := term.GetState(int(input.Fd()))
 	if err != nil || !reflect.DeepEqual(before, after) {
 		os.Exit(23)
 	}
-	_, _ = fmt.Fprintln(os.Stdout, "CONPTY_RESTORED")
+	_, _ = fmt.Fprintln(output, "CONPTY_RESTORED")
+	_ = output.Close()
+	_ = input.Close()
 	os.Exit(0)
 }
 func TestWindowsConPTYRestoresConsoleAndAlternateScreen(t *testing.T) {
 	t.Setenv("OPERA_CONPTY_CHILD", "1")
 	t.Setenv("NO_COLOR", "")
-	inputRead, inputWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
+	t.Setenv("TERM", "xterm-256color")
+	inputRead, inputWrite := conPTYPipe(t)
 	defer func() { _ = inputRead.Close(); _ = inputWrite.Close() }()
-	outputRead, outputWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
+	outputRead, outputWrite := conPTYPipe(t)
 	defer func() { _ = outputRead.Close(); _ = outputWrite.Close() }()
 	var console windows.Handle
 	if err := windows.CreatePseudoConsole(windows.Coord{X: 80, Y: 24}, windows.Handle(inputRead.Fd()), windows.Handle(outputWrite.Fd()), 0, &console); err != nil {
@@ -94,7 +102,8 @@ func TestWindowsConPTYRestoresConsoleAndAlternateScreen(t *testing.T) {
 	var mu sync.Mutex
 	var captured strings.Builder
 	visible := make(chan struct{})
-	var once sync.Once
+	restored := make(chan struct{})
+	var responseOnce, restoreOnce sync.Once
 	go func() {
 		buffer := make([]byte, 4096)
 		for {
@@ -103,7 +112,10 @@ func TestWindowsConPTYRestoresConsoleAndAlternateScreen(t *testing.T) {
 				mu.Lock()
 				captured.Write(buffer[:n])
 				if strings.Contains(captured.String(), "PTY_RESPONSE_MARKER") {
-					once.Do(func() { close(visible) })
+					responseOnce.Do(func() { close(visible) })
+				}
+				if strings.Contains(captured.String(), "CONPTY_RESTORED") {
+					restoreOnce.Do(func() { close(restored) })
 				}
 				mu.Unlock()
 			}
@@ -115,7 +127,11 @@ func TestWindowsConPTYRestoresConsoleAndAlternateScreen(t *testing.T) {
 	select {
 	case <-visible:
 	case <-time.After(15 * time.Second):
-		t.Fatal("ConPTY never displayed the response")
+		var code uint32
+		exitErr := windows.GetExitCodeProcess(process.Process, &code)
+		mu.Lock()
+		defer mu.Unlock()
+		t.Fatalf("ConPTY never displayed the response (child exit code %d, status error %v): %q", code, exitErr, captured.String())
 	}
 	if err := windows.ResizePseudoConsole(console, windows.Coord{X: 100, Y: 28}); err != nil {
 		t.Fatal(err)
@@ -131,9 +147,24 @@ func TestWindowsConPTYRestoresConsoleAndAlternateScreen(t *testing.T) {
 	if err := windows.GetExitCodeProcess(process.Process, &code); err != nil || code != 0 {
 		t.Fatal("console not restored", code, err)
 	}
+	select {
+	case <-restored:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ConPTY did not capture the restored-console marker")
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	if !strings.Contains(captured.String(), "\x1b[?1049h") || !strings.Contains(captured.String(), "\x1b[?1049l") {
 		t.Fatal("alternate screen was not entered and restored")
 	}
+}
+
+func conPTYPipe(t *testing.T) (*os.File, *os.File) {
+	t.Helper()
+	// Use synchronous, non-inheritable handles for ConPTY's transport.
+	var read, write windows.Handle
+	if err := windows.CreatePipe(&read, &write, nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	return os.NewFile(uintptr(read), "conpty-read"), os.NewFile(uintptr(write), "conpty-write")
 }

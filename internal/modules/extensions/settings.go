@@ -186,10 +186,7 @@ func Save(cfg config.Resolved, s Settings) error {
 		return err
 	}
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-	if err := platform.Check(dir, true); err != nil {
+	if err := platform.EnsurePrivateDir(dir); err != nil {
 		return err
 	}
 	raw, err := toml.Marshal(s)

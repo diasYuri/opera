@@ -93,17 +93,11 @@ func saveWorkspaceSettings(paths platform.Paths, updates map[string]any) error {
 		return fmt.Errorf("workspace settings path is unavailable")
 	}
 	if filepath.IsAbs(paths.ConfigDir) {
-		if err := os.MkdirAll(paths.ConfigDir, 0700); err != nil {
-			return err
-		}
-		if err := platform.Check(paths.ConfigDir, true); err != nil {
+		if err := platform.EnsurePrivateDir(paths.ConfigDir); err != nil {
 			return err
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	if err := platform.Protect(filepath.Dir(path), true); err != nil {
+	if err := platform.EnsurePrivateDir(filepath.Dir(path)); err != nil {
 		return err
 	}
 	if err := platform.Check(path, false); err != nil && !os.IsNotExist(err) {

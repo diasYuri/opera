@@ -48,10 +48,10 @@ func (s FileStore) prepare(create bool) error {
 			return fmt.Errorf("create credential directory: %w", err)
 		}
 	}
-	if err := checkPrivate(filepath.Dir(s.Directory), true); err != nil {
+	if err := checkPrivate(s.Directory, true); err != nil {
 		return err
 	}
-	return checkPrivate(s.Directory, true)
+	return checkPrivate(filepath.Dir(s.Directory), true)
 }
 
 func (s FileStore) Set(name, secret string) error {
