@@ -386,6 +386,9 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.refreshConversation()
 		}
 		m.status = msg.message
+		if msg.key == "ui.activity" && m.stream != nil {
+			m.status = "Running"
+		}
 		m.lastError = ""
 		m.resize()
 		if msg.key == "context.add" || msg.key == "context.remove" {
@@ -503,6 +506,7 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 		m.streamBuffer = &strings.Builder{}
 		m.lastSequence = 0
 		m.activity.Start()
+		m.conversation.activity = ""
 		m.lastError = ""
 		m.status = "Running"
 		m.runGeneration++
@@ -587,6 +591,8 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 				m.previous = m.stream.ID
 				m.retryPrevious = true
 				m.stream = nil
+				m.activity.Stop()
+				m.conversation.activity = ""
 				m.subagentGeneration++
 				m.subagents = nil
 				m.code = 130
@@ -596,15 +602,21 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.update.Event != nil {
 			event := msg.update.Event
-			m.openUserQuestion(event)
-			if m.stream != nil && event.RunID != "" && event.RunID != m.stream.ID {
-				m.updateConversationEvent(event)
+			if m.stream == nil {
+				return m, nil
+			}
+			if event.RunID != "" && event.RunID != m.stream.ID {
+				if event.ParentRunID == m.stream.ID {
+					m.openUserQuestion(event)
+					m.updateConversationEvent(event)
+				}
 				return m, next(m.stream)
 			}
 			if event.Sequence > 0 && event.Sequence <= m.lastSequence {
 				return m, next(m.stream)
 			}
 			m.lastSequence = event.Sequence
+			m.openUserQuestion(event)
 			m.updateConversationEvent(event)
 			commands := []tea.Cmd{next(m.stream)}
 			if event.RunID == m.stream.ID && m.isTaskToolCompletion(event) {
@@ -627,6 +639,7 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.subagentGeneration++
 			m.subagents = nil
 			m.activity.Stop()
+			m.conversation.activity = ""
 			if result.State != "" {
 				m.previous = result.ID
 				m.retryPrevious = result.Approval == nil && (result.State == "failed" && result.ExitCode == 1 || (result.State == "cancelled" || result.State == "canceled") && result.ExitCode == 130)
@@ -661,7 +674,7 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 					if id == "" {
 						id = fmt.Sprintf("assistant:%s:%d", result.ID, result.Checkpoint)
 					}
-					entry := m.entry(id, conversationEntry{id: id, kind: conversationAssistant, state: "Opera"})
+					entry := m.entry(id, conversationEntry{id: id, kind: conversationAssistant, state: "Opera", intermediate: result.ExitCode != 0 || result.Approval != nil})
 					entry.text += missingText
 					entry.rendered = ""
 					entry.renderedWidth = 0
@@ -670,6 +683,9 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 				if msg.update.Error != nil {
 					m.appendEntry(conversationEntry{id: fmt.Sprintf("error:%s:%d", result.ID, result.Checkpoint), kind: conversationError, text: msg.update.Error.Error()})
 				}
+			}
+			if index, exists := m.conversation.entryIndexes[m.currentAssistantID]; exists && result.ExitCode == 0 && result.Approval == nil {
+				m.conversation.entries[index].awaitingClassification = false
 			}
 			if msg.update.Error != nil {
 				m.lastError = msg.update.Error.Error()
@@ -804,10 +820,10 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Commit the highlighted choice directly on Enter. The selected
 				// value is already updated by the select field as the user navigates.
-				if m.formKind == "thinking" && keyMatches(msg, keys.submit) {
+				if (m.formKind == "thinking" || m.formKind == "activity-display") && keyMatches(msg, keys.submit) {
 					if field := form.GetFocusedField(); field != nil {
 						if value, ok := field.GetValue().(string); ok {
-							return m.finishThinkingForm(value)
+							return m.finishSelectSetting(value)
 						}
 					}
 				}
@@ -876,6 +892,20 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.togglePlanMode()
 			return m, nil
 		case keyMatches(msg, keys.details):
+			switch m.conversation.display {
+			case "auto":
+				m.inspectActivity()
+				return m, nil
+			case "hidden":
+				for i := len(m.conversation.entries) - 1; i >= 0; i-- {
+					entry := m.conversation.entries[i]
+					if entry.kind == conversationTool {
+						m.openPanel(toolActivity(entry.state, entry.toolName), toolBody(entry, m.contentWidth(), true))
+						break
+					}
+				}
+				return m, nil
+			}
 			m.toolDetailsExpanded = !m.toolDetailsExpanded
 			m.refreshConversation()
 			return m, nil
@@ -935,6 +965,9 @@ func (m model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 			m.sizeEditor()
 			m.composer.remember(text)
 			commandName, _, _ := strings.Cut(text, " ")
+			if commandName == "/activity" {
+				return m, m.activityCommand(text)
+			}
 			if strings.HasPrefix(text, "!") {
 				command := strings.TrimSpace(strings.TrimPrefix(text, "!"))
 				if command == "" {
@@ -1415,7 +1448,7 @@ func (m *model) loadSessionView(view SessionView) {
 		if message.Role == "You" {
 			kind, state = conversationUser, "You"
 		}
-		m.appendEntry(conversationEntry{id: message.ID, kind: kind, state: state, text: message.Text})
+		m.appendEntry(conversationEntry{id: message.ID, kind: kind, state: state, text: message.Text, intermediate: message.Intermediate})
 	}
 	if len(view.Messages) == 0 {
 		m.appendEntry(conversationEntry{id: "history-empty:" + view.Summary.ID, kind: conversationSystem, text: "No readable user or assistant messages are stored at this checkpoint."})
@@ -1520,7 +1553,7 @@ func (m *model) openForm(title string, form *huh.Form, kind, keyName, value stri
 	switch kind {
 	case "thinking":
 		m.formHeight = min(m.formHeight, 10)
-	case "policy-select":
+	case "policy-select", "activity-display":
 		m.formHeight = min(m.formHeight, 8)
 	case "context-add":
 		m.formHeight = min(m.formHeight, 6)
@@ -1548,6 +1581,8 @@ func (m *model) openSetting(setting SettingItem) tea.Cmd {
 		return m.openWebSearchOption(setting)
 	}
 	switch setting.Key {
+	case "ui.activity":
+		return m.openActivitySetting()
 	case "provider", "model":
 		return m.openModelPicker()
 	case "search.provider":
@@ -1722,8 +1757,8 @@ func (m model) finishForm() (tea.Model, tea.Cmd) {
 		if decision == "allow" || decision == "deny" {
 			return m, m.resolveApproval(decision == "allow")
 		}
-	case "thinking":
-		return m.finishThinkingForm(form.GetString("value"))
+	case "thinking", "activity-display":
+		return m, m.applySetting(keyName, form.GetString("value"))
 	case "policy-select":
 		selected := form.GetString("value")
 		if selected == value {
@@ -1749,7 +1784,7 @@ func (m model) finishForm() (tea.Model, tea.Cmd) {
 	return m, m.composer.editor.Focus()
 }
 
-func (m model) finishThinkingForm(value string) (tea.Model, tea.Cmd) {
+func (m model) finishSelectSetting(value string) (tea.Model, tea.Cmd) {
 	keyName := m.formKey
 	m.approvalForm = nil
 	m.overlay.dismissPanel()
@@ -1937,6 +1972,9 @@ func (m model) selectCurrent() (tea.Model, tea.Cmd) {
 	case messageChoice:
 		m.jumpToEntry(selected.index)
 		return m, m.composer.editor.Focus()
+	case activityGroupChoice:
+		m.openActivityGroup(selected.block)
+		return m, nil
 	case settingChoice:
 		if strings.HasPrefix(selected.Key, "context.remove:") {
 			return m, m.applySetting("context.remove", strings.TrimPrefix(selected.Key, "context.remove:"))
@@ -1957,8 +1995,15 @@ func (m *model) jumpToEntry(index int) {
 	}
 	offset := 0
 	width := max(1, m.conversationWidth())
-	for i := 0; i < index; i++ {
-		wrapped := ansi.Hardwrap(m.renderEntry(m.conversation.entries[i]), width, true)
+	for block := range m.conversation.blocks {
+		if block.start >= index {
+			break
+		}
+		rendered := m.renderConversationBlock(block)
+		if rendered == "" {
+			continue
+		}
+		wrapped := ansi.Hardwrap(rendered, width, true)
 		offset += strings.Count(wrapped, "\n") + 1
 	}
 	m.conversation.SetYOffset(offset)

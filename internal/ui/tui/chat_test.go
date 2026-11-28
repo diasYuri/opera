@@ -149,7 +149,11 @@ func (e *navigationTestExecutor) BranchSession(_ context.Context, id string, ver
 	return "branch-1", nil
 }
 func (e *navigationTestExecutor) Settings() []SettingItem {
-	return []SettingItem{{Key: "thinking", Value: "medium", Source: "workspace", Scope: "workspace", Description: "Reasoning level"}}
+	items := []SettingItem{{Key: "thinking", Value: "medium", Source: "workspace", Scope: "workspace", Description: "Reasoning level"}}
+	if e.settingKey == "ui.activity" {
+		items = append(items, SettingItem{Key: e.settingKey, Value: e.settingValue})
+	}
+	return items
 }
 func (e *navigationTestExecutor) WebSearchProviders() []WebSearchProviderOption {
 	return []WebSearchProviderOption{{ID: "brave", Name: "Brave Search", Description: "Requires an API key", Current: true, AuthOptions: []WebSearchAuthOption{{SearchProviderID: "brave", CredentialProviderID: "brave-search", MethodID: "api-key", Kind: "api-key", Name: "Brave Search API key", Description: "Set a key"}}}}

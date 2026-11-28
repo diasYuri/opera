@@ -16,7 +16,7 @@ import (
 
 // Accessible chat is append-only and keeps input/control responsive while the
 // same application execution streams. It never enters raw mode or redraws.
-func (a App) accessibleChat(ctx context.Context, r interface {
+func (a App) accessibleChat(ctx context.Context, activityDisplay string, r interface {
 	ui.Executor
 	ui.Commander
 }) int {
@@ -66,8 +66,12 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 	closedInput, quitting, followUp := false, false, false
 	multiline := false
 	var buffer []string
+	var assistantDraft strings.Builder
+	runDisplay := activityDisplay
 	write := func(text string) bool { _, err := fmt.Fprint(a.Out, ansi.Strip(text)); return err == nil }
 	start := func(req execution.Request) {
+		runDisplay = activityDisplay
+		assistantDraft.Reset()
 		currentExecution = r.Start(ctx, req)
 		updates = currentExecution.Updates
 		pending = nil
@@ -322,6 +326,26 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 			if strings.TrimSpace(text) == "" {
 				continue
 			}
+			if fields := strings.Fields(text); fields[0] == "/activity" {
+				message := "Use /activity [full|auto|hidden]. Current display is " + activityDisplay + "."
+				if len(fields) == 2 {
+					if settings, ok := r.(ui.SettingsManager); ok {
+						value, err := settings.SetSetting(ctx, "ui.activity", fields[1])
+						if err != nil {
+							message = err.Error()
+						} else {
+							activityDisplay, message = fields[1], value
+							if currentExecution != nil {
+								message += " The next execution will use this display."
+							}
+						}
+					}
+				}
+				if !write(message + "\nYou> ") {
+					return 1
+				}
+				continue
+			}
 			if pending != nil {
 				req := execution.Request{ID: pending.ID}
 				switch text {
@@ -569,8 +593,33 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				}
 				continue
 			}
-			if update.Event != nil && update.Event.Text != "" {
-				if !write(update.Event.Text) {
+			if event := update.Event; event != nil {
+				text := event.Text
+				if runDisplay != "full" {
+					text = ""
+					if event.ParentRunID == "" {
+						switch event.Type {
+						case "message_delta", "text_delta":
+							assistantDraft.WriteString(event.Text)
+						case "message_completed":
+							if completeText, intermediate, ok := event.CompletedAssistantMessage(); ok {
+								if !intermediate || runDisplay == "auto" {
+									text = assistantDraft.String()
+									if text == "" {
+										text = completeText
+									}
+									if intermediate && text != "" {
+										text += "\n\n"
+									}
+								}
+								assistantDraft.Reset()
+							}
+						case "tool_started", "message_started":
+							assistantDraft.Reset()
+						}
+					}
+				}
+				if text != "" && !write(text) {
 					currentExecution.Cancel()
 					return 1
 				}
@@ -579,6 +628,9 @@ func (a App) accessibleChat(ctx context.Context, r interface {
 				continue
 			}
 			result := *update.Result
+			if result.ExitCode == 0 && result.Approval == nil && !write(assistantDraft.String()) {
+				return 1
+			}
 			updates = nil
 			currentExecution = nil
 			if result.State != "" {

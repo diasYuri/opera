@@ -46,9 +46,6 @@ func SaveWorkspaceCredentialStore(paths platform.Paths, kind string) error {
 // writable here; credential and infrastructure settings stay on their own
 // configuration paths.
 func SaveWorkspacePreference(paths platform.Paths, key, raw string) error {
-	if key != "thinking" && key != "policy" && key != "ui.theme" && !isWebSearchPreference(key) {
-		return fmt.Errorf("workspace preference is not editable here")
-	}
 	value, err := ParseWorkspacePreference(key, raw)
 	if err != nil {
 		return err
@@ -66,7 +63,7 @@ func SaveWorkspacePreference(paths platform.Paths, key, raw string) error {
 }
 
 func ParseWorkspacePreference(key, raw string) (any, error) {
-	if key != "thinking" && key != "policy" && key != "ui.theme" && !isWebSearchPreference(key) {
+	if key != "thinking" && key != "policy" && key != "ui.theme" && key != "ui.activity" && !isWebSearchPreference(key) {
 		return nil, fmt.Errorf("workspace preference is not editable here")
 	}
 	return parsePreferenceValue(key, raw)

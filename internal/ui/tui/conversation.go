@@ -19,9 +19,13 @@ type conversationModel struct {
 	entryIndexes map[string]int
 	nextMessage  uint64
 	committed    map[string]bool
+	display      string
+	activity     string
 }
 
-func newConversationModel() conversationModel { return conversationModel{Model: viewport.New()} }
+func newConversationModel() conversationModel {
+	return conversationModel{Model: viewport.New(), display: "full"}
+}
 
 type conversationKind string
 
@@ -60,6 +64,7 @@ type conversationEntry struct {
 	renderedDark, renderedNoColor                bool
 	kind                                         conversationKind
 	failed                                       bool
+	intermediate, awaitingClassification         bool
 }
 
 type eventPayload struct {
@@ -124,7 +129,11 @@ func (c *conversationModel) nextIdentity(prefix string) string {
 	return fmt.Sprintf("%s:%d", prefix, c.nextMessage)
 }
 
-func (c *conversationModel) resetLedger() { c.entries = nil; c.entryIndexes = make(map[string]int) }
+func (c *conversationModel) resetLedger() {
+	c.entries = nil
+	c.entryIndexes = make(map[string]int)
+	c.activity = ""
+}
 
 func (c *conversationModel) commitCheckpoint(identity string) bool {
 	if c.committed == nil {
@@ -172,7 +181,7 @@ func (m *model) refreshConversation() {
 	_, noColor := os.LookupEnv("NO_COLOR")
 	for i := range m.conversation.entries {
 		entry := &m.conversation.entries[i]
-		if entry.kind == conversationAssistant && (entry.rendered == "" || entry.renderedWidth != m.conversationWidth() || entry.renderedDark != m.dark || entry.renderedNoColor != noColor) {
+		if entry.kind == conversationAssistant && m.conversation.shows(*entry) && (entry.rendered == "" || entry.renderedWidth != m.conversationWidth() || entry.renderedDark != m.dark || entry.renderedNoColor != noColor) {
 			entry.rendered = m.renderMarkdown(entry.text)
 			entry.renderedWidth = m.conversationWidth()
 			entry.renderedDark = m.dark
@@ -180,13 +189,14 @@ func (m *model) refreshConversation() {
 		}
 	}
 	content := m.renderConversation()
-	if content != m.conversation.GetContent() {
+	changed := content != m.conversation.GetContent()
+	if changed {
 		m.conversation.SetContent(content)
 	}
 	if wasAtBottom {
 		m.conversation.GotoBottom()
 		m.newConversationItems = false
-	} else {
+	} else if changed {
 		m.newConversationItems = true
 	}
 }
@@ -203,6 +213,11 @@ func (m *model) updateConversationEvent(event *execution.Event) {
 		return
 	}
 	switch event.Type {
+	case "message_started":
+		if _, exists := m.conversation.entryIndexes[m.currentAssistantID]; exists {
+			m.advanceAssistantSegment(event)
+		}
+		m.conversation.activity = "Thinking…"
 	case "message_delta", "text_delta":
 		if event.Text != "" {
 			if m.streamBuffer == nil {
@@ -216,14 +231,36 @@ func (m *model) updateConversationEvent(event *execution.Event) {
 				id = "assistant:" + event.RunID
 				m.currentAssistantID = id
 			}
-			entry := m.entry(id, conversationEntry{id: id, kind: conversationAssistant, state: "Opera"})
+			entry := m.entry(id, conversationEntry{id: id, kind: conversationAssistant, state: "Opera", awaitingClassification: true})
 			entry.text += event.Text
 			entry.rendered = ""
 			entry.renderedWidth = 0
 			m.appendEntry(entry)
+			m.conversation.activity = activityPreview(entry.text)
+		}
+	case "message_completed":
+		if text, intermediate, ok := event.CompletedAssistantMessage(); ok {
+			id := m.currentAssistantID
+			if id == "" {
+				id = "assistant:" + event.RunID
+				m.currentAssistantID = id
+			}
+			entry := m.entry(id, conversationEntry{id: id, kind: conversationAssistant, state: "Opera", text: text})
+			entry.intermediate, entry.awaitingClassification = intermediate, false
+			if entry.text != "" {
+				m.appendEntry(entry)
+			}
+			m.conversation.activity = "Finishing response…"
+			if intermediate {
+				m.conversation.activity = activityPreview(entry.text)
+				if m.conversation.activity == "" {
+					m.conversation.activity = "Preparing tools…"
+				}
+			}
 		}
 	case "thinking_delta":
 		if payload.ThinkingDelta != "" {
+			m.conversation.activity = "Thinking…"
 			id := m.currentAssistantID + ":thinking"
 			if id == ":thinking" {
 				id = "thinking:" + event.RunID
@@ -236,6 +273,7 @@ func (m *model) updateConversationEvent(event *execution.Event) {
 			m.appendEntry(conversationEntry{id: id, kind: conversationThinking, text: text, state: "Thinking"})
 		}
 	case "tool_started":
+		m.markAssistantCommentary()
 		id := payload.ToolCall.ID
 		if id == "" {
 			id = fmt.Sprintf("%s:%d", event.RunID, event.Sequence)
@@ -264,15 +302,8 @@ func (m *model) updateConversationEvent(event *execution.Event) {
 			m.appendVisualEvent("skill:"+id, visualSkill, name, body, "Active")
 		}
 		m.appendEntry(conversationEntry{id: "tool:" + id, kind: conversationTool, toolID: id, toolName: payload.ToolCall.Name, arguments: string(payload.ToolCall.Arguments), state: "Running"})
-		m.assistantSegment++
-		runID := event.RunID
-		if runID == "" && m.stream != nil {
-			runID = m.stream.ID
-		}
-		m.currentAssistantID = fmt.Sprintf("assistant:%s:%d:%d", runID, m.runGeneration, m.assistantSegment)
-		if payload.ToolCall.Name != "" {
-			m.status = "Tool: " + payload.ToolCall.Name
-		}
+		m.advanceAssistantSegment(event)
+		m.conversation.activity = toolActivity("Running", payload.ToolCall.Name)
 	case "tool_progress":
 		id := payload.ToolProgress.ToolCallID
 		if id == "" {
@@ -295,6 +326,7 @@ func (m *model) updateConversationEvent(event *execution.Event) {
 			entry.state = "Completed"
 		} else {
 			entry.state = "Running"
+			m.conversation.activity = toolActivity("Running", entry.toolName)
 		}
 		m.appendEntry(entry)
 	case "tool_completed":
@@ -321,6 +353,7 @@ func (m *model) updateConversationEvent(event *execution.Event) {
 		if entry.failed {
 			entry.state = "Failed"
 		}
+		m.conversation.activity = toolActivity(entry.state, entry.toolName)
 		m.appendEntry(entry)
 	case "retry_scheduled":
 		text := "A retry is scheduled"
@@ -330,6 +363,22 @@ func (m *model) updateConversationEvent(event *execution.Event) {
 		m.appendEntry(conversationEntry{id: fmt.Sprintf("system:%s:%d", event.RunID, event.Sequence), kind: conversationSystem, text: text})
 	}
 	m.refreshConversation()
+}
+
+func (m *model) advanceAssistantSegment(event *execution.Event) {
+	m.assistantSegment++
+	runID := event.RunID
+	if runID == "" && m.stream != nil {
+		runID = m.stream.ID
+	}
+	m.currentAssistantID = fmt.Sprintf("assistant:%s:%d:%d", runID, m.runGeneration, m.assistantSegment)
+}
+
+func (m *model) markAssistantCommentary() {
+	if index, exists := m.conversation.entryIndexes[m.currentAssistantID]; exists {
+		entry := &m.conversation.entries[index]
+		entry.intermediate, entry.awaitingClassification = true, false
+	}
 }
 
 // updateTypedVisualEvent handles state-machine notices before normal speech and
@@ -403,8 +452,10 @@ func (m *model) entry(id string, fallback conversationEntry) conversationEntry {
 
 func (m model) renderConversation() string {
 	var blocks []string
-	for _, entry := range m.conversation.entries {
-		blocks = append(blocks, m.renderEntry(entry))
+	for block := range m.conversation.blocks {
+		if rendered := m.renderConversationBlock(block); rendered != "" {
+			blocks = append(blocks, rendered)
+		}
 	}
 	return strings.Join(blocks, "\n")
 }

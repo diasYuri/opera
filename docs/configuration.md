@@ -128,6 +128,27 @@ Forest, Sunset and Mono. The choice is stored in private per-workspace user
 settings and does not change the terminal background. `NO_COLOR` still disables
 all color output.
 
+### Chat activity
+
+Use `/activity` or `/settings` → **Activity display** to choose how the
+interactive chat presents model and tool activity. `/activity auto` applies a
+mode directly. The choice is saved in private per-workspace user settings.
+
+| `ui.activity` | Chat display |
+| --- | --- |
+| `full` (default) | Thinking, comments, tools and responses in the history. Ctrl+O expands tool details. |
+| `auto` | Comments and responses stay in the conversation. Thinking and consecutive tools appear in compact groups such as `Thought` and `Ran 2 tools`. A single animated line above the composer shows current activity. |
+| `hidden` | Responses and essential notices, including errors and approval requests. A generic status indicates a running execution. |
+
+Auto and Hidden classify each response when the SDK completes its message. In
+Auto, Ctrl+O opens the activity inspector so you can select a thinking or tool
+group. In Hidden, Ctrl+O opens the latest tool's details on demand.
+`--no-motion` keeps the live status readable without animation.
+
+Set the same preference in user settings, with `OPERA_UI_ACTIVITY=auto`, or
+with `opera chat --set ui.activity=auto`. This setting controls presentation
+only. The `thinking` setting controls the model's reasoning level.
+
 ## Resource budgets
 
 | Key | Default | Accepted range / meaning |

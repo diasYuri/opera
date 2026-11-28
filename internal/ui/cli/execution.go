@@ -130,7 +130,7 @@ func (a App) execution(command string, opts options, cfg config.Resolved, jsonl 
 		return a.fail(2, errors.New("JSONL chat input is unsupported; use opera run <prompt> --format=jsonl"), true)
 	}
 	if command == "chat" {
-		return a.accessibleChat(ctx, runtime)
+		return a.accessibleChat(ctx, cfg.String("ui.activity"), runtime)
 	}
 	signalCtx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()

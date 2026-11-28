@@ -32,6 +32,7 @@ func Schema() []Field {
 		{Key: "credentials.store", Kind: "string", Default: "keyring", Choices: []string{"keyring", "file"}},
 		{Key: "output.format", Kind: "string", Default: "text", Choices: []string{"text", "jsonl"}},
 		{Key: "ui.no_motion", Kind: "bool", Default: false},
+		{Key: "ui.activity", Kind: "string", Default: "full", Choices: []string{"full", "auto", "hidden"}},
 		{Key: "ui.accessible", Kind: "bool", Default: false},
 		{Key: "ui.theme", Kind: "string", Default: "system", Choices: []string{"system", "dark", "light", "midnight", "ocean", "forest", "sunset", "mono"}},
 		{Key: "agents.max_concurrent", Kind: "int", Default: 4, Min: 1, Max: 32},

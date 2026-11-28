@@ -50,9 +50,14 @@ func (m *model) refreshContext() {
 	if settings, ok := m.service.(SettingsManager); ok {
 		m.reasoningLevel = ""
 		for _, setting := range settings.Settings() {
-			if setting.Key == "thinking" {
+			switch setting.Key {
+			case "thinking":
 				m.reasoningLevel = setting.Value
-				break
+			case "ui.activity":
+				switch setting.Value {
+				case "full", "auto", "hidden":
+					m.conversation.display = setting.Value
+				}
 			}
 		}
 	}
@@ -235,10 +240,18 @@ func (m model) statusLine() string {
 	}
 	if m.stream != nil {
 		style = t.accent
+		showActivity := m.status == "Running" && m.question == nil && m.lastError == ""
+		if showActivity && m.conversation.display == "auto" && m.conversation.activity != "" {
+			status = m.conversation.activity
+			style = t.muted
+		}
 		if !m.noMotion {
 			// An indeterminate activity trace, never a fabricated completion percentage.
-			position := m.activity.Position()
-			status = m.spinner.View() + " " + status + "  " + strings.Repeat("─", position) + "━" + strings.Repeat("─", 5-position)
+			status = m.spinner.View() + " " + status
+			if m.conversation.display == "full" {
+				position := m.activity.Position()
+				status += "  " + strings.Repeat("─", position) + "━" + strings.Repeat("─", 5-position)
+			}
 		}
 	}
 	if m.login != nil {
@@ -261,6 +274,7 @@ func (m model) helpLine() string {
 	pageDown := keyLabel(keys.pageDown, "PgDn")
 	bottom := keyLabel(keys.bottom, "Ctrl+End")
 	details := keyLabel(keys.details, "Ctrl+O")
+	activity := "/activity " + m.conversation.display
 	if m.approval != nil {
 		return "↑↓ choose · Enter allow/deny · /approve · /deny · /details review"
 	}
@@ -277,16 +291,17 @@ func (m model) helpLine() string {
 		return enter + " send a new request · /details error"
 	}
 	if m.stream != nil {
-		if m.width < 64 {
-			return enter + " queue · Esc cancel · " + details + " details"
+		line := enter + " queue · Esc cancel · " + activity
+		if m.width >= 76 {
+			line += " · " + details + " details · /steer guide"
 		}
-		return enter + " queue · /steer guide · Esc cancel · " + details + " tool details"
+		return line
 	}
 	if m.retryPrevious {
 		return enter + " retry · /retry resume · /details"
 	}
 	if m.modelName == "" {
-		return "/login connect · /model choose · /resume sessions · /help"
+		return "/login connect · /model choose · " + activity + " · /resume sessions · /help"
 	}
 	if m.width < 48 {
 		return enter + " send · Shift+Enter newline"
@@ -295,13 +310,13 @@ func (m model) helpLine() string {
 		return pageUp + "/" + pageDown + " scroll · " + bottom + " latest messages · /messages find"
 	}
 	if m.conversation.TotalLineCount() > 0 && m.width >= 48 {
-		return pageUp + "/" + pageDown + " scroll · " + bottom + " latest · " + details + " tool details · /messages find"
+		return activity + " · " + pageUp + "/" + pageDown + " scroll · " + bottom + " latest · " + details + " details · /messages find"
 	}
 	historyHint := "↑↓ history"
 	if strings.ContainsRune(m.composer.editor.Value(), '\n') {
 		historyHint = "↑↓ edit text"
 	}
-	return enter + " send · Shift+Enter newline · " + historyHint + " · " + complete + " complete · /help shortcuts"
+	return enter + " send · " + activity + " · Shift+Enter newline · " + historyHint + " · " + complete + " complete · /help shortcuts"
 }
 
 func (m model) completionView() string {

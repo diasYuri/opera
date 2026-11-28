@@ -34,7 +34,8 @@ func TestTerminalRestoredWithAlternateScreen(t *testing.T) {
 	var mu sync.Mutex
 	var captured strings.Builder
 	visible := make(chan struct{})
-	var once sync.Once
+	restored := make(chan struct{})
+	var responseOnce, restoreOnce sync.Once
 	go func() {
 		buffer := make([]byte, 4096)
 		for {
@@ -43,7 +44,10 @@ func TestTerminalRestoredWithAlternateScreen(t *testing.T) {
 				mu.Lock()
 				_, _ = captured.Write(buffer[:n])
 				if strings.Contains(captured.String(), "PTY_RESPONSE_MARKER") {
-					once.Do(func() { close(visible) })
+					responseOnce.Do(func() { close(visible) })
+				}
+				if strings.Contains(captured.String(), "\x1b[?1049l") {
+					restoreOnce.Do(func() { close(restored) })
 				}
 				mu.Unlock()
 			}
@@ -80,6 +84,11 @@ func TestTerminalRestoredWithAlternateScreen(t *testing.T) {
 	}
 	if !reflect.DeepEqual(before, after) {
 		t.Fatal("terminal mode was not restored")
+	}
+	select {
+	case <-restored:
+	case <-ctx.Done():
+		t.Fatal("terminal did not emit the alternate-screen exit sequence")
 	}
 	mu.Lock()
 	defer mu.Unlock()
